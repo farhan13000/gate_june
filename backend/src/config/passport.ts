@@ -19,7 +19,7 @@ const configurePassport = (): void => {
       {
         clientID,
         clientSecret,
-        callbackURL: "http://localhost:8080/api/auth/google/callback",
+        callbackURL: `${clientURL}/api/auth/google/callback`,
         scope: ["profile", "email"],
       },
       async (
