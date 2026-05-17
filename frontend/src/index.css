@@ -1,0 +1,220 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* GATE DA — AtCoder-inspired Color System */
+    --background: 0 0% 93%;
+    /* #ededed light gray */
+    --foreground: 0 0% 13%;
+    /* #212121 */
+
+    --card: 0 0% 100%;
+    /* #ffffff */
+    --card-foreground: 0 0% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 13%;
+
+    --primary: 210 85% 45%;
+    /* #1269c4 AtCoder blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 88%;
+    /* #e0e0e0 */
+    --secondary-foreground: 0 0% 13%;
+
+    --muted: 0 0% 88%;
+    --muted-foreground: 0 0% 42%;
+    /* #6b6b6b */
+
+    --accent: 0 0% 88%;
+    --accent-foreground: 0 0% 13%;
+
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 78%;
+    /* #c7c7c7 */
+    --border-subtle: 0 0% 86%;
+    /* #dbdbdb */
+    --border-faint: 0 0% 92%;
+    /* #ebebeb */
+    --input: 0 0% 78%;
+    --ring: 210 85% 45%;
+
+    --radius: 0.25rem;
+
+    /* Typography */
+    --font-serif: 'Libre Baskerville', Georgia, serif;
+    --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+    /* Blue Variants */
+    --red-primary: 210 85% 45%;
+    --red-hover: 210 85% 37%;
+
+    /* Navbar dark */
+    --navbar-bg: 0 0% 20%;
+    /* #333333 */
+    --navbar-fg: 0 0% 90%;
+
+    /* Text variants */
+    --text-primary: 0 0% 13%;
+    --text-secondary: 0 0% 42%;
+    --text-muted: 0 0% 62%;
+
+    --sidebar-background: 0 0% 88%;
+    --sidebar-foreground: 0 0% 13%;
+    --sidebar-primary: 210 85% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 93%;
+    --sidebar-accent-foreground: 0 0% 13%;
+    --sidebar-border: 0 0% 78%;
+    --sidebar-ring: 210 85% 45%;
+  }
+
+  .dark {
+    --background: 0 0% 11%;
+    /* #1c1c1c */
+    --foreground: 0 0% 90%;
+    /* #e5e5e5 */
+
+    --card: 0 0% 16%;
+    /* #2a2a2a */
+    --card-foreground: 0 0% 90%;
+
+    --popover: 0 0% 16%;
+    --popover-foreground: 0 0% 90%;
+
+    --primary: 0 79% 59%;
+    /* #ef4444 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 23%;
+    /* #3a3a3a */
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 0 0% 23%;
+    --muted-foreground: 0 0% 63%;
+
+    --accent: 0 0% 23%;
+    --accent-foreground: 0 0% 90%;
+
+    --destructive: 0 79% 59%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 23%;
+    --border-subtle: 0 0% 20%;
+    --border-faint: 0 0% 18%;
+    --input: 0 0% 23%;
+    --ring: 0 79% 59%;
+
+    --sidebar-background: 0 0% 13%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 0 79% 59%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 16%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 23%;
+    --sidebar-ring: 0 79% 59%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-serif);
+    line-height: 1.3;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer components {
+  .academic-card {
+    @apply bg-card border border-border rounded-sm;
+  }
+
+  .section-divider {
+    @apply border-t border-border my-6;
+  }
+
+  .problem-row {
+    @apply border-b border-border/60 transition-colors duration-150;
+  }
+
+  .problem-row:hover {
+    background-color: hsl(210 60% 96%);
+  }
+
+  .dark .problem-row:hover {
+    background-color: hsl(0 0% 18%);
+  }
+
+  .theorem-box {
+    @apply border border-border bg-secondary/50 p-4 rounded-sm;
+  }
+
+  .definition-box {
+    @apply bg-secondary/40 border-l-2 border-primary pl-4 py-2;
+  }
+
+  .tag-pill {
+    @apply text-xs px-2 py-0.5 border border-border bg-secondary text-secondary-foreground rounded-sm font-sans;
+  }
+
+  .difficulty-easy {
+    @apply text-muted-foreground text-sm;
+  }
+
+  .difficulty-medium {
+    @apply text-muted-foreground text-sm font-medium;
+  }
+
+  .difficulty-hard {
+    @apply text-primary text-sm font-medium;
+  }
+
+  .nav-link {
+    @apply text-sm text-foreground/70 hover:text-foreground transition-colors duration-150;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground px-4 py-2 text-sm font-medium rounded-sm hover:bg-red-hover transition-colors duration-150 border border-primary;
+  }
+
+  .btn-outline {
+    @apply bg-transparent text-foreground px-4 py-2 text-sm font-medium rounded-sm hover:bg-secondary transition-colors duration-150 border border-border;
+  }
+
+  .sidebar-toc-link {
+    @apply text-sm text-muted-foreground hover:text-foreground transition-colors duration-150 py-1 block;
+  }
+
+  .sidebar-toc-link.active {
+    @apply text-primary font-medium;
+  }
+}
