@@ -87,7 +87,7 @@ function renderSegment(seg: { type: "text" | "inline" | "display"; content: stri
     return (
       <span
         key={index}
-        className={seg.type === "display" ? "block my-6 overflow-x-auto text-center bg-[#f0f2f5] border border-slate-200 py-6 text-slate-700 font-medium" : "inline"}
+        className={seg.type === "display" ? "block my-3 overflow-x-auto text-center py-2 text-foreground font-medium" : "inline"}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
