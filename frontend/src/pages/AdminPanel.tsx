@@ -8,40 +8,66 @@ import { useNavigate } from "react-router-dom";
 const CREATION_PROTOCOLS = {
   Problem: {
     title: "GATE DA Problem Formatting Protocol",
-    description: "Follow this standardized prompt to generate authentic, high-quality GATE Data Science & AI problems using AI models (like GPT-4 or Claude).",
-    promptTemplate: `You are an expert GATE Data Science & AI exam designer. Generate a high-fidelity GATE exam question.
-Topic: [Insert Topic, e.g., Probability & Statistics]
-Difficulty: [Easy/Medium/Hard]
+    description: "Follow this standardized prompt to generate authentic, high-quality GATE Data Science & AI problems inside a valid, parsable JSON array.",
+    promptTemplate: `You are an expert GATE Data Science & AI exam designer. Generate a high-fidelity GATE exam question in standard JSON format.
 
 OUTPUT REQUIREMENTS:
-1. LaTeX formulas must use standard delimiters: \\( ... \\) for inline, and \\[ ... \\] for block math.
-2. Problem must include an Authentic, step-by-step rigorous LaTeX solution.
-3. Keep the language academic, direct, and unambiguous.
-4. Specify MCQ, MSQ, or NAT format exactly.`,
+1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
+2. All LaTeX math backslashes MUST be properly double-escaped for JSON. For inline math use "\\\\( ... \\\\)" and for block equations use "\\\\[ ... \\\\]". (Example: "\\\\frac{\\\\lambda^k e^{-\\\\lambda}}{k!}")
+3. Problem must include an Authentic, step-by-step rigorous LaTeX solution.
+4. Keep the language academic, direct, and unambiguous.
+
+JSON SCHEME:
+[
+  {
+    "title": "Problem Title",
+    "topic": "Probability & Statistics",
+    "difficulty": "Medium",
+    "questionType": "MCQ",
+    "statement": "If \\\\( X \\\\) is a Poisson random variable...",
+    "solution": "Using Poisson formula: \\\\( P(X=k) = \\\\frac{\\\\lambda^k e^{-\\\\lambda}}{k!} \\\\)...",
+    "positiveMarks": 2,
+    "negativeMarks": 0.5,
+    "options": [
+      { "text": "\\\\( e^{-2} \\\\)", "isCorrect": true },
+      { "text": "\\\\( 2e^{-2} \\\\)", "isCorrect": false }
+    ]
+  }
+]`,
     rules: [
-      "Use \\( ... \\) for inline formulas and \\[ ... \\] for display block math equations.",
-      "Always provide at least 2 distinct option objects for MCQ/MSQ.",
+      "The response must be a 100% valid JSON array containing escaped LaTeX equations.",
+      "Use double-escaped backslashes (e.g. \\\\( ... \\\\) and \\\\frac) so it parses correctly.",
       "Check that marking schemes conform strictly (typically +2/-0.66 or +1/-0.33)."
     ]
   },
   "Theory Article": {
     title: "GATE DA Theory Article Formatting Protocol",
-    description: "Use this protocol to write or generate study-aligned notes with custom Theorem/Example blocks.",
+    description: "Use this protocol to generate syllabus-aligned notes with custom Theorem/Example blocks in a valid JSON array.",
     promptTemplate: `You are an academic textbook author designing study materials for the GATE Data Science and AI syllabus.
-Subject: [Insert Subject, e.g., Linear Algebra]
-Section ID: [e.g., 1.3]
 
 OUTPUT REQUIREMENTS:
-1. Organize using clean markdown structure.
-2. Use custom wrapped tags for special boxes:
+1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
+2. All LaTeX formulas inside the markdown text MUST be double-escaped for JSON: use "\\\\( ... \\\\)" and "\\\\[ ... \\\\]".
+3. Use custom wrapped tags for special boxes:
    - "Theorem: <Title>" followed by content for theorem boxes.
    - "Example: <Title>" followed by content for example boxes.
    - "GATE Example: <Title>" for historical GATE problems.
-3. Leverage precise LaTeX block formatting for proofs.`,
+
+JSON SCHEME:
+[
+  {
+    "title": "Introduction to Probability",
+    "topic": "Probability",
+    "chapterId": "1",
+    "chapterTitle": "Probability Foundations",
+    "sectionId": "1.1",
+    "content": "## Definition of Probability\\n\\nLet \\\\( S \\\\) be a sample space...\\n\\nTheorem: Probability Axioms\\nLet \\\\( P(A) \\\\ge 0 \\\\)..."
+  }
+]`,
     rules: [
-      "Prefix theorems with 'Theorem: [Title]' to trigger custom CSS rendering.",
-      "Divide the content logically using standard markdown heading tags (e.g. ##, ###).",
-      "Include a final 'GATE Example: [GATE Year]' for historical context at the end."
+      "The response must be a 100% valid JSON array containing escaped LaTeX equations.",
+      "Prefix theorems with 'Theorem: [Title]' inside the content string to trigger custom rendering.",
+      "Include a final 'GATE Example: [GATE Year]' inside the content string for historical context."
     ]
   }
 };
