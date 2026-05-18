@@ -1,9 +1,50 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle } from "lucide-react";
+import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle, Info, Clipboard } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import LatexRenderer from "../components/LatexRenderer";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+
+const CREATION_PROTOCOLS = {
+  Problem: {
+    title: "GATE DA Problem Formatting Protocol",
+    description: "Follow this standardized prompt to generate authentic, high-quality GATE Data Science & AI problems using AI models (like GPT-4 or Claude).",
+    promptTemplate: `You are an expert GATE Data Science & AI exam designer. Generate a high-fidelity GATE exam question.
+Topic: [Insert Topic, e.g., Probability & Statistics]
+Difficulty: [Easy/Medium/Hard]
+
+OUTPUT REQUIREMENTS:
+1. LaTeX formulas must use standard delimiters: \\( ... \\) for inline, and \\[ ... \\] for block math.
+2. Problem must include an Authentic, step-by-step rigorous LaTeX solution.
+3. Keep the language academic, direct, and unambiguous.
+4. Specify MCQ, MSQ, or NAT format exactly.`,
+    rules: [
+      "Use \\( ... \\) for inline formulas and \\[ ... \\] for display block math equations.",
+      "Always provide at least 2 distinct option objects for MCQ/MSQ.",
+      "Check that marking schemes conform strictly (typically +2/-0.66 or +1/-0.33)."
+    ]
+  },
+  "Theory Article": {
+    title: "GATE DA Theory Article Formatting Protocol",
+    description: "Use this protocol to write or generate study-aligned notes with custom Theorem/Example blocks.",
+    promptTemplate: `You are an academic textbook author designing study materials for the GATE Data Science and AI syllabus.
+Subject: [Insert Subject, e.g., Linear Algebra]
+Section ID: [e.g., 1.3]
+
+OUTPUT REQUIREMENTS:
+1. Organize using clean markdown structure.
+2. Use custom wrapped tags for special boxes:
+   - "Theorem: <Title>" followed by content for theorem boxes.
+   - "Example: <Title>" followed by content for example boxes.
+   - "GATE Example: <Title>" for historical GATE problems.
+3. Leverage precise LaTeX block formatting for proofs.`,
+    rules: [
+      "Prefix theorems with 'Theorem: [Title]' to trigger custom CSS rendering.",
+      "Divide the content logically using standard markdown heading tags (e.g. ##, ###).",
+      "Include a final 'GATE Example: [GATE Year]' for historical context at the end."
+    ]
+  }
+};
 
 type Section = "Overview" | "User Analytics" | "Content Management" | "Contest Factory" | "Approval Dashboard" | "Content Inventory" | "Problem Bank" | "Platform Logs";
 
@@ -456,6 +497,40 @@ export default function AdminPanel() {
                       <button type="button" onClick={() => setUploadMethod("Manual")} className={`px-4 py-2 text-xs rounded-sm border transition-colors ${uploadMethod === "Manual" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}>Manual Entry</button>
                       <button type="button" onClick={() => setUploadMethod("Bulk")} className={`px-4 py-2 text-xs rounded-sm border transition-colors ${uploadMethod === "Bulk" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}>Bulk JSON Upload</button>
                     </div>
+                  </div>
+                </div>
+
+                {/* Scalable Guidelines & AI Prompt Protocol */}
+                <div className="bg-primary/5 border border-primary/20 rounded-md p-4 animate-in fade-in duration-200">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <Info size={16} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold text-primary uppercase tracking-wide">
+                        {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.title}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.promptTemplate);
+                        toast.success("AI Prompt Template copied to clipboard!");
+                      }}
+                      className="flex items-center gap-1.5 text-[10px] bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1 rounded-sm border border-primary/20 transition-all font-bold self-start sm:self-auto shrink-0"
+                    >
+                      <Clipboard size={10} /> Copy AI Prompt Template
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                    {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.description}
+                  </p>
+                  <div className="space-y-1.5 border-t border-primary/10 pt-3">
+                    <span className="text-[10px] font-bold text-foreground block uppercase tracking-wider mb-1">Strict Rules:</span>
+                    {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.rules.map((rule, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-[10px] text-muted-foreground leading-relaxed">
+                        <span className="text-primary mt-0.5">•</span>
+                        <span>{rule}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
