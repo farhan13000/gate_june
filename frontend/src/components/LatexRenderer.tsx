@@ -44,13 +44,16 @@ function parseSegments(input: string): Array<{ type: "text" | "inline" | "displa
 
 function renderSegment(seg: { type: "text" | "inline" | "display"; content: string }, index: number) {
   if (seg.type === "text") {
+    // Basic Markdown bold parsing
+    let content = seg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
     // Preserve newlines as line breaks
-    const lines = seg.content.split("\n");
+    const lines = content.split("\n");
     return (
       <span key={index}>
         {lines.map((line, i) => (
           <span key={i}>
-            {line}
+            <span dangerouslySetInnerHTML={{ __html: line }} />
             {i < lines.length - 1 && <br />}
           </span>
         ))}
@@ -67,7 +70,7 @@ function renderSegment(seg: { type: "text" | "inline" | "display"; content: stri
     return (
       <span
         key={index}
-        className={seg.type === "display" ? "block my-3 overflow-x-auto text-center" : "inline"}
+        className={seg.type === "display" ? "block my-6 overflow-x-auto text-center bg-[#f0f1f2] rounded-md border border-[#e2e4e6] py-6 shadow-sm" : "inline"}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );

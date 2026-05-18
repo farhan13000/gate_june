@@ -93,83 +93,104 @@ export default function Theory() {
   const currentTheory = subjectTheories.find(t => t._id === activeTheoryId);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
-      {/* ToC sidebar */}
-      <aside className="w-56 shrink-0 hidden md:block">
-        <div className="sticky top-20">
+    <div className="bg-[#f4f4f4] min-h-screen pt-8 pb-16">
+      <div className="max-w-[1200px] mx-auto px-6 flex flex-col md:flex-row gap-12">
+        {/* ToC sidebar */}
+        <aside className="w-64 shrink-0 hidden md:block">
+          <div className="sticky top-24">
+            <button 
+              onClick={() => setSelectedSubject(null)} 
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-8 transition-colors"
+            >
+              <ArrowLeft size={12} /> Back to Library
+            </button>
+            
+            <div className="text-[11px] font-bold text-muted-foreground mb-4 uppercase tracking-widest">Contents</div>
+            <nav className="space-y-1">
+              {toc.map((item: any) => (
+                <button
+                  key={item.id}
+                  onClick={() => { if (item._id) setActiveId(item._id); }}
+                  className={`block w-full text-left py-1.5 text-sm transition-colors duration-150 ${
+                    item.level === 2 ? "pl-4" : "font-semibold mt-4 cursor-default text-foreground/80"
+                  } ${
+                    activeTheoryId === item._id 
+                      ? "text-blue-500 font-medium" 
+                      : item.level === 2 ? "text-muted-foreground hover:text-foreground" : ""
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        {/* Article content */}
+        <article className="flex-1 min-w-0 max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Mobile Back Button */}
           <button 
             onClick={() => setSelectedSubject(null)} 
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
+            className="md:hidden text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
           >
             <ArrowLeft size={12} /> Back to Library
           </button>
-          
-          <div className="text-xs font-medium text-muted-foreground mb-4 uppercase tracking-wider">Contents</div>
-          <nav className="space-y-0.5 border-l border-border pl-2">
-            {toc.map((item: any) => (
-              <button
-                key={item.id}
-                onClick={() => { if (item._id) setActiveId(item._id); }}
-                className={`block w-full text-left py-1.5 px-3 rounded-sm text-xs transition-colors duration-150 relative ${item.level === 2 ? "ml-2" : "font-medium mt-2 cursor-default"} ${activeTheoryId === item._id ? "text-primary bg-primary/5 font-bold" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {activeTheoryId === item._id && <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary -ml-[9px] rounded-r-sm"></span>}
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </aside>
 
-      {/* Article content */}
-      <article className="flex-1 min-w-0 max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {/* Mobile Back Button */}
-        <button 
-          onClick={() => setSelectedSubject(null)} 
-          className="md:hidden text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
-        >
-          <ArrowLeft size={12} /> Back to Library
-        </button>
-
-        {/* Article header */}
-        <div className="mb-8 pb-6 border-b border-border">
-          <div className="text-xs font-mono text-muted-foreground mb-2">
-            Theory · {selectedSubject}
-          </div>
-          <div className="flex items-start justify-between">
-            <h1 className="font-serif text-3xl font-bold text-foreground leading-tight">
-              {currentTheory ? currentTheory.title : "Select a topic"}
-            </h1>
-          </div>
-          <div className="flex flex-wrap gap-4 mt-4 text-xs text-muted-foreground font-medium">
-            {currentTheory && <span className="px-2 py-0.5 bg-secondary border border-border rounded-sm">Section {currentTheory.sectionId}</span>}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="prose-academic space-y-8 text-sm leading-relaxed text-foreground/85">
           {currentTheory ? (
-            <div>
-              <h2 className="font-serif text-xl font-bold text-foreground mb-4">{currentTheory.sectionId} {currentTheory.title}</h2>
-              {currentTheory.imageUrl && (
-                <div className="mb-6">
-                  <img src={currentTheory.imageUrl} alt={currentTheory.title} className="rounded-xl border border-border max-w-full h-auto object-cover bg-secondary/10 shadow-sm" style={{ maxHeight: '600px' }} />
+            <div className="space-y-12">
+              {/* Header */}
+              <div>
+                <h1 className="font-serif text-[2.5rem] font-bold text-foreground leading-tight text-slate-800">
+                  {currentTheory.sectionId} {currentTheory.title}
+                </h1>
+              </div>
+
+              {/* Content */}
+              <div className="prose-academic text-[15px] leading-relaxed text-slate-700 space-y-6">
+                {currentTheory.imageUrl && (
+                  <div className="mb-8">
+                    <img src={currentTheory.imageUrl} alt={currentTheory.title} className="rounded-md border border-border max-w-full h-auto object-cover bg-white shadow-sm" style={{ maxHeight: '400px' }} />
+                  </div>
+                )}
+                
+                {/* Main Latex Content */}
+                <div className="latex-content-wrapper">
+                  <LatexRenderer latex={currentTheory.content} />
                 </div>
-              )}
-              <div className="mb-4">
-                <LatexRenderer latex={currentTheory.content} />
+              </div>
+
+              {/* Practice Problems Section (Mockup) */}
+              <div className="pt-12 mt-12 border-t border-slate-200">
+                <h2 className="font-serif text-2xl font-bold text-slate-800 mb-6">Practice Problems</h2>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-[#f8f9fa] border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-4">
+                      <span className="font-mono text-xs text-slate-400">DA004</span>
+                      <span className="text-sm font-medium text-slate-700">Bayes' Theorem Application</span>
+                    </div>
+                    <span className="text-xs text-slate-500">Easy</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-[#f8f9fa] border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-4">
+                      <span className="font-mono text-xs text-slate-400">DA007</span>
+                      <span className="text-sm font-medium text-slate-700">Hypothesis Testing - Type II Error</span>
+                    </div>
+                    <span className="text-xs font-medium text-blue-600">Hard</span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-border rounded-xl bg-secondary/5 mt-8">
-              <HardHat size={48} className="text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-serif font-bold text-foreground mb-2">Content Under Construction</h3>
-              <p className="text-muted-foreground text-sm max-w-sm">
+            <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-slate-300 rounded-xl bg-slate-50 mt-8">
+              <HardHat size={48} className="text-slate-300 mb-4" />
+              <h3 className="text-xl font-serif font-bold text-slate-700 mb-2">Content Under Construction</h3>
+              <p className="text-slate-500 text-sm max-w-md">
                 The academic material for {selectedSubject} is currently being prepared and verified by our experts. It will be available soon!
               </p>
             </div>
           )}
-        </div>
-      </article>
+        </article>
+      </div>
     </div>
   );
 }
