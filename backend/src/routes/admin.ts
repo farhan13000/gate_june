@@ -26,15 +26,15 @@ router.get("/users", getAllUsers);
 // Questions - Full CRUD
 router.get("/questions", getQuestions);
 router.post("/questions", createQuestion);
-router.put("/questions/:id", updateQuestion);
 router.put("/questions/:id/approve", approveQuestion);
+router.put("/questions/:id", updateQuestion);
 router.delete("/questions/:id", deleteQuestion);
 
 // Theory - Full CRUD
 router.get("/theories", getTheories);
 router.post("/theories", createTheory);
-router.put("/theories/:id", updateTheory);
 router.put("/theories/:id/approve", approveTheory);
+router.put("/theories/:id", updateTheory);
 router.delete("/theories/:id", deleteTheory);
 
 // Bulk Upload
