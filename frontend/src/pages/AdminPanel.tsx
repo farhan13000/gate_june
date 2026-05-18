@@ -63,27 +63,37 @@ CRITICAL LATEX FORMATTING RULES:
 
 OUTPUT REQUIREMENTS:
 1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
-2. All LaTeX math backslashes MUST be properly double-escaped for JSON. For inline math use "\\\\( ... \\\\)" and for block equations use "\\\\[ ... \\\\]". (Example: "\\\\frac{\\\\lambda^k e^{-\\\\lambda}}{k!}")
-3. Include an authentic, step-by-step rigorous LaTeX solution detailing all calculations, theorem references, and intermediate derivations.
-4. Keep the language academic, direct, precise, and unambiguous.
+2. All LaTeX math backslashes MUST be properly double-escaped for JSON. For inline math use "\\\\( ... \\\\)" and for block equations use "\\\\[ ... \\\\]".
+3. Include an authentic, highly structured, premium step-by-step LaTeX solution matching this exact editorial visual scheme:
+   a. Introductory Sentence: Briefly state the system configuration (e.g. "We are given binary logistic regression with:").
+   b. Parameter Summary Grid: Create an elegant 3-column markdown table summarizing the given inputs/variables. Example:
+      | Parameter vector | Training example | Learning rate |
+      | :---: | :---: | :---: |
+      | \\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\) | \\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, \\\\, y = 1 \\\\) | \\\\( \\\\eta = 0.1 \\\\) |
+   c. Step-by-Step Unicode Numbered Highlights (❶, ❷, ❸, ❹, etc.):
+      - Use bold headings (e.g., "❶ **Compute the linear score z**").
+      - Place equation blocks inside an HTML div container with light-blue styling:
+        <div class="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center">
+          \\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = (1)(2) + (-1)(1) = 2 - 1 = 1 \\\\)
+        </div>
+   d. Final Answer Box: Place the final formatted answer inside a light-green alert container at the very end:
+      <div class="bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/40 p-3.5 rounded-sm my-3 font-semibold text-green-700 dark:text-green-400 flex items-center gap-2">
+        ✓ **Final Answer:** 1.054 (rounded to three decimal places)
+      </div>
+4. Keep the language academic, direct, precise, and highly rigorous.
 
 JSON SCHEME REFERENCE:
 [
   {
-    "title": "Problem Title",
-    "topic": "Probability & Statistics",
-    "difficulty": "Hard",
-    "questionType": "MCQ",
-    "statement": "Let \\\\( X \\\\) and \\\\( Y \\\\) be independent random variables... Find \\\\( P(X > Y) \\\\).",
-    "solution": "First, express the joint probability density function... Hence, \\\\( P(X > Y) = \\\\int_{0}^{\\\\infty} \\\\int_{0}^{x} f(x, y) \\\\, dy \\\\, dx = \\\\frac{3}{5} \\\\).",
+    "title": "Gradient Descent Update in Logistic Regression",
+    "topic": "Calculus & Optimization + Machine Learning",
+    "difficulty": "Medium",
+    "questionType": "NAT",
+    "statement": "Consider binary logistic regression with parameter vector... Round your answer to three decimal places.",
+    "solution": "We are given binary logistic regression with:\\n\\n| Parameter vector | Training example | Learning rate |\\n| :---: | :---: | :---: |\\n| \\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\) | \\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, \\\\, y = 1 \\\\) | \\\\( \\\\eta = 0.1 \\\\) |\\n\\n❶ **Compute the linear score z**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = (1)(2) + (-1)(1) = 2 - 1 = 1 \\\\)</div>\\n\\n❷ **Compute the prediction**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( \\\\sigma(z) = \\\\frac{1}{1 + e^{-z}} = \\\\frac{1}{1 + e^{-1}} \\\\approx 0.7311 \\\\)</div>\\n\\n❸ **Compute the gradient**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( \\\\nabla J(\\\\mathbf{w}) = (\\\\sigma(z) - y)\\\\mathbf{x} = (0.7311 - 1)\\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix} = \\\\begin{pmatrix} -0.5378 \\\\\\\\ -0.2689 \\\\end{pmatrix} \\\\)</div>\\n\\n❹ **Perform gradient descent update**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( w_1^{new} = 1 - 0.1(-0.5378) = 1.05378 \\\\)</div>\\n\\n<div class=\\\"bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/40 p-3.5 rounded-sm my-3 font-semibold text-green-700 dark:text-green-400 flex items-center gap-2\\\">✓ **Final Answer:** 1.054 (rounded to three decimal places)</div>",
     "positiveMarks": 2,
-    "negativeMarks": 0.66,
-    "options": [
-      { "text": "\\\\( \\\\frac{3}{5} \\\\)", "isCorrect": true },
-      { "text": "\\\\( \\\\frac{2}{5} \\\\)", "isCorrect": false },
-      { "text": "\\\\( \\\\frac{1}{2} \\\\)", "isCorrect": false },
-      { "text": "\\\\( \\\\frac{4}{5} \\\\)", "isCorrect": false }
-    ]
+    "negativeMarks": 0,
+    "options": []
   }
 ]`,
     rules: [
@@ -269,10 +279,43 @@ export default function AdminPanel() {
     } catch (error) { toast.error("Network error"); }
   };
 
+  const robustJsonParse = (str: string) => {
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      let result = "";
+      let i = 0;
+      while (i < str.length) {
+        if (str[i] === '\\') {
+          const next = str[i + 1];
+          if (next && '"\\/ntru'.includes(next)) {
+            if (next === 'u') {
+              const hex = str.substring(i + 2, i + 6);
+              if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+                result += '\\u' + hex;
+                i += 6;
+                continue;
+              }
+            }
+            result += '\\' + next;
+            i += 2;
+          } else {
+            result += '\\\\';
+            i += 1;
+          }
+        } else {
+          result += str[i];
+          i += 1;
+        }
+      }
+      return JSON.parse(result);
+    }
+  };
+
   const formatBulkJson = () => {
     try {
       if (!bulkJson.trim()) return;
-      const parsed = JSON.parse(bulkJson);
+      const parsed = robustJsonParse(bulkJson);
       const formatted = JSON.stringify(parsed, null, 2);
       setBulkJson(formatted);
       setBulkParseError("");
@@ -285,7 +328,7 @@ export default function AdminPanel() {
 
   const parseBulkJson = () => {
     try {
-      const data = JSON.parse(bulkJson);
+      const data = robustJsonParse(bulkJson);
       if (!Array.isArray(data)) { setBulkParseError("JSON must be an array [ ... ]"); return; }
       setBulkParseError("");
       setBulkPreview(data);

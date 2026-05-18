@@ -234,21 +234,13 @@ export default function ProblemDetail() {
           )}
 
           {tab === "editorial" && (
-            <div className="space-y-4 text-sm leading-relaxed">
-              {submitted ? (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Step-by-step Solution</div>
-                  <div className="definition-box mb-4 text-sm text-foreground/85 leading-[1.8]">
-                    <LatexRenderer latex={problem.solution} />
-                  </div>
+            <div className="space-y-4 text-sm leading-relaxed animate-in fade-in duration-200">
+              <div>
+                <h3 className="font-serif font-bold text-base mb-3 text-foreground">Editorial Solution</h3>
+                <div className="text-foreground/85 leading-[1.8]">
+                  <LatexRenderer latex={problem.solution} />
                 </div>
-              ) : (
-                <div className="definition-box">
-                  <p className="text-sm text-muted-foreground">
-                    Submit an answer to unlock the full step-by-step editorial.
-                  </p>
-                </div>
-              )}
+              </div>
             </div>
           )}
 
