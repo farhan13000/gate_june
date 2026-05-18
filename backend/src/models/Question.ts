@@ -16,7 +16,7 @@ export interface IQuestion extends Document {
   options?: { text: string; isCorrect: boolean }[];
   questionType: "MCQ" | "MSQ" | "NAT";
   imageUrl?: string;
-  solution: string;
+  solution: any;
   markingScheme: { positive: number; negative: number };
   status: "draft" | "pending_review" | "approved" | "rejected";
   createdBy: mongoose.Types.ObjectId;
@@ -53,7 +53,7 @@ const questionSchema = new Schema<IQuestion>(
     ],
     questionType: { type: String, enum: ["MCQ", "MSQ", "NAT"], required: true },
     imageUrl: { type: String },
-    solution: { type: String, required: true },
+    solution: { type: Schema.Types.Mixed, required: true },
     markingScheme: {
       positive: { type: Number, required: true, default: 1 },
       negative: { type: Number, required: true, default: 0 },
