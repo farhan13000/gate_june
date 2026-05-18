@@ -199,8 +199,9 @@ export const approveTheory = async (req: Request, res: Response): Promise<void> 
 
     await theory.save();
     res.json(theory);
-  } catch (error) {
-    res.status(500).json({ message: "Failed to approve theory" });
+  } catch (error: any) {
+    console.error("[approveTheory] Error saving theory:", error);
+    res.status(500).json({ message: error.message || "Failed to approve theory" });
   }
 };
 

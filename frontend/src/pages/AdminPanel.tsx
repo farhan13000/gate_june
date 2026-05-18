@@ -138,21 +138,33 @@ export default function AdminPanel() {
   };
 
   const handleApprove = async (id: string, status: "approved" | "rejected", contentType: "question" | "theory" = "question") => {
+    console.log(`[handleApprove] Initiating ${status} for ID: ${id}, Type: ${contentType}`);
     try {
       const endpoint = contentType === "theory"
         ? `/api/admin/theories/${id}/approve`
         : `/api/admin/questions/${id}/approve`;
+      
+      console.log(`[handleApprove] Making PUT request to endpoint: ${endpoint}`);
       const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      
       if (res.ok) {
+        console.log(`[handleApprove] Request successful with status: ${res.status}`);
         toast.success(`Item ${status}!`);
         fetchPendingQuestions();
         fetchProblems();
+      } else {
+        const errorData = await res.json().catch(() => ({ message: "Unknown error" }));
+        console.error(`[handleApprove] Request failed with status ${res.status}:`, errorData);
+        toast.error(`Error: ${errorData.message || "Failed to update status"}`);
       }
-    } catch (error) { toast.error("Error updating status"); }
+    } catch (error) { 
+      console.error("[handleApprove] Network or execution error:", error);
+      toast.error("Network error updating status"); 
+    }
   };
 
   const sections: Section[] = ["Overview", "User Analytics", "Content Management", "Problem Bank", "Content Inventory", "Contest Factory", "Approval Dashboard", "Platform Logs"];
