@@ -22,6 +22,14 @@ export default function AdminPanel() {
   // User Modal State
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
+  // Bulk Selection State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Reset selection on section change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [activeSection]);
+
   // Content Creation State
   const [uploadMethod, setUploadMethod] = useState<"Manual" | "Bulk">("Manual");
   const [bulkJson, setBulkJson] = useState("");
@@ -167,6 +175,52 @@ export default function AdminPanel() {
     }
   };
 
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const toggleAllSelection = (items: any[]) => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map(i => i._id)));
+    }
+  };
+
+  const handleBulkApprove = async (status: "approved" | "rejected") => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to bulk ${status} ${selectedIds.size} items?`)) return;
+    
+    const itemsToProcess = pendingQuestions.filter(q => selectedIds.has(q._id));
+    toast.loading(`Processing ${itemsToProcess.length} items...`);
+    
+    const promises = itemsToProcess.map(item => {
+      const endpoint = item._contentType === "theory"
+        ? `/api/admin/theories/${item._id}/approve`
+        : `/api/admin/questions/${item._id}/approve`;
+      return fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+    });
+
+    try {
+      await Promise.all(promises);
+      toast.dismiss();
+      toast.success(`Bulk ${status} complete!`);
+      setSelectedIds(new Set());
+      fetchPendingQuestions();
+      fetchProblems();
+    } catch (error) {
+      toast.dismiss();
+      toast.error("An error occurred during bulk operation");
+    }
+  };
+
   const sections: Section[] = ["Overview", "User Analytics", "Content Management", "Problem Bank", "Content Inventory", "Contest Factory", "Approval Dashboard", "Platform Logs"];
 
   // ── Content Inventory State ──
@@ -200,6 +254,32 @@ export default function AdminPanel() {
       if (res.ok) { toast.success("Deleted!"); fetchAllContent(); }
       else toast.error("Failed to delete");
     } catch { toast.error("Network error"); }
+  };
+
+  const handleBulkDelete = async (itemsSource: any[]) => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Permanently delete ${selectedIds.size} items? This cannot be undone.`)) return;
+
+    const itemsToProcess = itemsSource.filter(i => selectedIds.has(i._id));
+    toast.loading(`Deleting ${itemsToProcess.length} items...`);
+
+    const promises = itemsToProcess.map(item => {
+      // If it has questionType it's a question, else a theory (since problem bank only has questions, and inventory has both but split by tab)
+      const type = item.questionType !== undefined || item.options !== undefined ? "questions" : "theories";
+      const endpoint = `/api/admin/${type}/${item._id}`;
+      return fetch(endpoint, { method: "DELETE" });
+    });
+
+    try {
+      await Promise.all(promises);
+      toast.dismiss();
+      toast.success(`Bulk delete complete!`);
+      setSelectedIds(new Set());
+      fetchAllContent();
+    } catch (error) {
+      toast.dismiss();
+      toast.error("An error occurred during bulk delete");
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -562,11 +642,24 @@ export default function AdminPanel() {
               <h2 className="text-lg font-bold font-serif text-foreground">Content Approval Queue</h2>
               <span className="text-xs bg-amber-500/10 border border-amber-500/20 text-amber-600 px-2.5 py-1 rounded-sm font-bold">{pendingQuestions.length} Awaiting Review</span>
             </div>
+
+            {selectedIds.size > 0 && (
+              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 mb-4 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+                <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
+                  <button onClick={() => handleBulkApprove("rejected")} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Bulk Reject</button>
+                  <button onClick={() => handleBulkApprove("approved")} className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-sm font-medium transition-colors">Bulk Approve</button>
+                </div>
+              </div>
+            )}
+
             <div className="academic-card">
               <table className="w-full text-xs text-left">
                 <thead className="border-b border-border text-muted-foreground bg-secondary/20">
                   <tr>
-                    <th className="py-3 px-4 font-bold">Content ID</th>
+                    <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === pendingQuestions.length && pendingQuestions.length > 0} onChange={() => toggleAllSelection(pendingQuestions)} className="cursor-pointer" /></th>
+                    <th className="py-3 px-2 font-bold">Content ID</th>
                     <th className="py-3 px-4 font-bold">Title &amp; Details</th>
                     <th className="py-3 px-4 font-bold">Type</th>
                     <th className="py-3 px-4 font-bold">Creator</th>
@@ -577,7 +670,8 @@ export default function AdminPanel() {
                 <tbody className="divide-y divide-border">
                   {pendingQuestions.map(q => (
                     <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
+                      <td className="py-3.5 px-2">
                         <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span>
                       </td>
                       <td className="py-3.5 px-4 max-w-[220px]">
@@ -666,12 +760,23 @@ export default function AdminPanel() {
               </div>
             </div>
 
+            {selectedIds.size > 0 && (
+              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+                <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
+                  <button onClick={() => handleBulkDelete(inventoryTab === "problems" ? allQuestions : allTheories)} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
+                </div>
+              </div>
+            )}
+
             {inventoryTab === "problems" && (
               <div className="academic-card">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-secondary/20 border-b border-border text-muted-foreground">
                     <tr>
-                      <th className="py-3 px-4 font-bold">Content ID</th>
+                      <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === allQuestions.length && allQuestions.length > 0} onChange={() => toggleAllSelection(allQuestions)} className="cursor-pointer" /></th>
+                      <th className="py-3 px-2 font-bold">Content ID</th>
                       <th className="py-3 px-4 font-bold">Title</th>
                       <th className="py-3 px-4 font-bold">Topic</th>
                       <th className="py-3 px-4 font-bold">Type</th>
@@ -684,7 +789,8 @@ export default function AdminPanel() {
                   <tbody className="divide-y divide-border">
                     {allQuestions.map(q => (
                       <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-3 px-4"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
+                        <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
+                        <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
                         <td className="py-3 px-4 font-medium text-foreground max-w-[180px] truncate">{q.title}</td>
                         <td className="py-3 px-4 text-muted-foreground">{q.topic}</td>
                         <td className="py-3 px-4"><span className="px-1.5 py-0.5 bg-secondary border border-border rounded-sm">{q.questionType}</span></td>
@@ -711,7 +817,8 @@ export default function AdminPanel() {
                 <table className="w-full text-xs text-left">
                   <thead className="bg-secondary/20 border-b border-border text-muted-foreground">
                     <tr>
-                      <th className="py-3 px-4 font-bold">Content ID</th>
+                      <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === allTheories.length && allTheories.length > 0} onChange={() => toggleAllSelection(allTheories)} className="cursor-pointer" /></th>
+                      <th className="py-3 px-2 font-bold">Content ID</th>
                       <th className="py-3 px-4 font-bold">Title</th>
                       <th className="py-3 px-4 font-bold">Topic</th>
                       <th className="py-3 px-4 font-bold">Section</th>
@@ -723,7 +830,8 @@ export default function AdminPanel() {
                   <tbody className="divide-y divide-border">
                     {allTheories.map(t => (
                       <tr key={t._id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-3 px-4"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{t.contentId || t._id.substring(0,8).toUpperCase()}</span></td>
+                        <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(t._id)} onChange={() => toggleSelection(t._id)} className="cursor-pointer" /></td>
+                        <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{t.contentId || t._id.substring(0,8).toUpperCase()}</span></td>
                         <td className="py-3 px-4 font-medium text-foreground max-w-[180px] truncate">{t.title}</td>
                         <td className="py-3 px-4 text-muted-foreground">{t.topic}</td>
                         <td className="py-3 px-4 font-mono text-muted-foreground">{t.sectionId}</td>
@@ -750,11 +858,23 @@ export default function AdminPanel() {
         {activeSection === "Problem Bank" && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold font-serif text-foreground">Problem Bank — Approved & Live</h2>
+            
+            {selectedIds.size > 0 && (
+              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+                <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
+                  <button onClick={() => handleBulkDelete(allQuestions.filter(q => q.status === "approved"))} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
+                </div>
+              </div>
+            )}
+
             <div className="academic-card">
               <table className="w-full text-xs text-left">
                 <thead className="bg-secondary/20 border-b border-border text-muted-foreground">
                   <tr>
-                    <th className="py-3 px-4 font-bold">Content ID</th>
+                    <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === allQuestions.filter(q => q.status === "approved").length && selectedIds.size > 0} onChange={() => toggleAllSelection(allQuestions.filter(q => q.status === "approved"))} className="cursor-pointer" /></th>
+                    <th className="py-3 px-2 font-bold">Content ID</th>
                     <th className="py-3 px-4 font-bold">Title</th>
                     <th className="py-3 px-4 font-bold">Topic</th>
                     <th className="py-3 px-4 font-bold">Type</th>
@@ -766,7 +886,8 @@ export default function AdminPanel() {
                 <tbody className="divide-y divide-border">
                   {allQuestions.filter(q => q.status === "approved").map(q => (
                     <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
-                      <td className="py-3 px-4"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
+                      <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
+                      <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
                       <td className="py-3 px-4 font-medium text-foreground max-w-[200px] truncate">{q.title}</td>
                       <td className="py-3 px-4 text-muted-foreground">{q.topic}</td>
                       <td className="py-3 px-4"><span className="px-1.5 py-0.5 bg-secondary border border-border rounded-sm">{q.questionType}</span></td>
