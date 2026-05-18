@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
 import User from "../models/User";
 import Question from "../models/Question";
 import Theory from "../models/Theory";
@@ -216,19 +217,52 @@ export const bulkUpload = async (req: Request, res: Response): Promise<void> => 
     }
 
     const userId = req.currentUser!._id;
-    const itemsToSave = data.map((item: any) => ({
-      ...item,
-      createdBy: userId,
-      status: "pending_review",
-      auditLog: [{ action: "Bulk Imported", performedBy: userId, timestamp: new Date() }],
-    }));
+    const itemsToSave = data.map((item: any) => {
+      // Manually generate contentId because pre("save") does not execute on insertMany()
+      let generatedId = item.contentId;
+      if (!generatedId) {
+        const topicCode = (item.topic || "GEN")
+          .toUpperCase()
+          .replace(/[^A-Z]/g, "")
+          .substring(0, 4)
+          .padEnd(4, "X");
+        const uniqueHash = crypto.randomBytes(3).toString("hex").toUpperCase();
+        generatedId = type === "Problem"
+          ? `${topicCode}-${item.questionType || "MCQ"}-${uniqueHash}`
+          : `${topicCode}-TH-${uniqueHash}`;
+      }
+
+      return {
+        ...item,
+        contentId: generatedId,
+        createdBy: userId,
+        status: "pending_review",
+        auditLog: [{ action: "Bulk Imported", performedBy: userId, timestamp: new Date() }],
+      };
+    });
 
     if (type === "Problem") {
-      const docs = await Question.insertMany(itemsToSave, { ordered: false });
-      res.status(201).json({ message: `Successfully added ${docs.length} problems for review` });
+      try {
+        const docs = await Question.insertMany(itemsToSave, { ordered: false });
+        res.status(201).json({ message: `Successfully added ${docs.length} problems for review` });
+      } catch (err: any) {
+        const insertedCount = err.insertedDocs ? err.insertedDocs.length : 0;
+        const duplicateCount = err.writeErrors ? err.writeErrors.length : itemsToSave.length - insertedCount;
+        res.status(201).json({
+          message: `Successfully added ${insertedCount} problems for review${duplicateCount > 0 ? ` (${duplicateCount} items skipped as duplicates)` : ""}`
+        });
+      }
     } else if (type === "Theory Article") {
-      const docs = await Theory.insertMany(itemsToSave, { ordered: false });
-      res.status(201).json({ message: `Successfully added ${docs.length} theory articles for review` });
+      try {
+        const docs = await Theory.insertMany(itemsToSave, { ordered: false });
+        res.status(201).json({ message: `Successfully added ${docs.length} theory articles for review` });
+      } catch (err: any) {
+        const insertedCount = err.insertedDocs ? err.insertedDocs.length : 0;
+        const duplicateCount = err.writeErrors ? err.writeErrors.length : itemsToSave.length - insertedCount;
+        res.status(201).json({
+          message: `Successfully added ${insertedCount} theory articles for review${duplicateCount > 0 ? ` (${duplicateCount} items skipped as duplicates)` : ""}`
+        });
+      }
     } else {
       res.status(400).json({ message: "Invalid type" });
     }
