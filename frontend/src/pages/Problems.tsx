@@ -37,9 +37,9 @@ export default function Problems() {
   });
 
   const diffClass = (d: string) => {
-    if (d === "Easy") return "difficulty-easy";
-    if (d === "Medium") return "difficulty-medium";
-    return "difficulty-hard";
+    if (d === "Easy") return "bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50 rounded-sm font-sans font-semibold text-[11px] px-2 py-0.5";
+    if (d === "Medium") return "bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50 rounded-sm font-sans font-semibold text-[11px] px-2 py-0.5";
+    return "bg-red-50 text-red-600 border border-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50 rounded-sm font-sans font-semibold text-[11px] px-2 py-0.5";
   };
 
   return (
@@ -150,7 +150,7 @@ export default function Problems() {
                           {p.topic ? p.topic.split(/\s*[\+,]\s*/).map((subTopic: string, idx: number) => (
                             <span
                               key={idx}
-                              className="text-[10px] px-2 py-0.5 border border-zinc-200/80 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300 rounded-sm font-sans font-medium transition-all"
+                              className="text-xs px-2.5 py-0.5 border border-border bg-card text-foreground/80 rounded-sm font-sans font-semibold transition-all"
                             >
                               {subTopic}
                             </span>

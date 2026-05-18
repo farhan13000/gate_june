@@ -156,17 +156,21 @@ export default function ProblemDetail() {
                   {problem.topic ? problem.topic.split(/\s*[\+,]\s*/).map((subTopic: string, idx: number) => (
                     <span
                       key={idx}
-                      className="text-[10px] px-2 py-0.5 border border-zinc-200/80 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300 rounded-sm font-sans font-medium transition-all"
+                      className="text-xs px-2.5 py-0.5 border border-border bg-card text-foreground/80 rounded-sm font-sans font-semibold transition-all"
                     >
                       {subTopic}
                     </span>
                   )) : null}
                 </div>
-                <span className={`${diffClass} text-xs border border-border px-2 py-0.5 rounded-sm ml-1`}>
+                <span className={`text-xs px-2.5 py-0.5 border rounded-sm font-sans font-semibold transition-all ml-1 ${
+                  problem.difficulty === "Easy" ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50" :
+                  problem.difficulty === "Medium" ? "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50" :
+                  "bg-red-50 text-red-600 border-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/50"
+                }`}>
                   {problem.difficulty}
                 </span>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Hash size={11} />{upvotes.toLocaleString()} upvotes
+                <span className="text-xs text-muted-foreground font-sans ml-2">
+                  {upvotes.toLocaleString()} Upvotes
                 </span>
               </div>
             </div>
