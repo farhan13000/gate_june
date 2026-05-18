@@ -222,7 +222,7 @@ export default function ProblemDetail() {
 
           {tab === "editorial" && (
             <div className="space-y-4 text-sm leading-relaxed">
-              {submitted && result?.isCorrect ? (
+              {submitted ? (
                 <div>
                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Step-by-step Solution</div>
                   <div className="definition-box mb-4 text-sm text-foreground/85 leading-[1.8]">
@@ -232,7 +232,7 @@ export default function ProblemDetail() {
               ) : (
                 <div className="definition-box">
                   <p className="text-sm text-muted-foreground">
-                    Submit a correct answer to unlock the full step-by-step editorial.
+                    Submit an answer to unlock the full step-by-step editorial.
                   </p>
                 </div>
               )}
@@ -265,8 +265,17 @@ export default function ProblemDetail() {
                   value={natAnswer}
                   onChange={e => setNatAnswer(e.target.value)}
                   disabled={submitted}
-                  className="w-full px-4 py-3 border border-border rounded-sm bg-background font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-foreground disabled:opacity-60"
+                  className={`w-full px-4 py-3 border rounded-sm bg-background font-mono text-sm focus:outline-none focus:ring-1 text-foreground disabled:opacity-100 ${
+                    submitted 
+                      ? (result?.isCorrect ? "border-green-500 bg-green-500/5 text-green-700 font-bold" : "border-red-500 bg-red-500/5 text-red-600") 
+                      : "border-border focus:ring-primary focus:border-primary"
+                  }`}
                 />
+                {submitted && !result?.isCorrect && (
+                  <div className="text-xs text-red-600 bg-red-500/5 border border-red-200 p-2.5 rounded-sm">
+                    Incorrect answer. Check the <strong>Editorial</strong> tab for the step-by-step solution.
+                  </div>
+                )}
               </div>
             )}
 
@@ -275,14 +284,40 @@ export default function ProblemDetail() {
                 <p className="text-xs text-muted-foreground mb-3">Select exactly one option:</p>
                 {(problem.options || []).map((opt: any) => {
                   const selected = mcqSelected === opt._id;
+                  let optionStyle = "border-border bg-background hover:bg-secondary/20";
+                  if (submitted) {
+                    if (opt.isCorrect) {
+                      optionStyle = "border-green-500 bg-green-500/5 text-green-700 font-medium";
+                    } else if (selected) {
+                      optionStyle = "border-red-500 bg-red-500/5 text-red-600";
+                    } else {
+                      optionStyle = "border-border bg-background/50 opacity-60";
+                    }
+                  } else if (selected) {
+                    optionStyle = "border-primary bg-primary/5";
+                  }
+
+                  let dotStyle = "bg-secondary border-border";
+                  if (selected) {
+                    dotStyle = "bg-primary border-primary";
+                  }
+                  if (submitted && opt.isCorrect) {
+                    dotStyle = "bg-green-500 border-green-500";
+                  } else if (submitted && selected && !opt.isCorrect) {
+                    dotStyle = "bg-red-500 border-red-500";
+                  }
+
                   return (
                     <button
                       key={opt._id}
                       onClick={() => !submitted && setMcqSelected(opt._id)}
                       disabled={submitted}
-                      className={`w-full flex items-center p-3.5 border rounded-sm text-left disabled:opacity-60 ${selected ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-secondary/20"}`}
+                      className={`w-full flex items-center p-3.5 border rounded-sm text-left disabled:opacity-100 transition-colors ${optionStyle}`}
                     >
-                      <span className={`w-6 h-6 rounded-full mr-3 border ${selected ? "bg-primary text-primary-foreground border-primary" : "bg-secondary border-border"}`} />
+                      <span className={`w-4 h-4 rounded-full mr-3 border flex items-center justify-center shrink-0 ${dotStyle}`}>
+                        {submitted && opt.isCorrect && <CheckCircle2 size={10} className="text-white" />}
+                        {submitted && selected && !opt.isCorrect && <XCircle size={10} className="text-white" />}
+                      </span>
                       <span className="text-sm"><LatexRenderer latex={opt.text} /></span>
                     </button>
                   );
@@ -295,15 +330,40 @@ export default function ProblemDetail() {
                 <p className="text-xs text-muted-foreground mb-3">Select all correct options:</p>
                 {(problem.options || []).map((opt: any) => {
                   const selected = msqSelected.includes(opt._id);
+                  let optionStyle = "border-border bg-background hover:bg-secondary/20";
+                  if (submitted) {
+                    if (opt.isCorrect) {
+                      optionStyle = "border-green-500 bg-green-500/5 text-green-700 font-medium";
+                    } else if (selected) {
+                      optionStyle = "border-red-500 bg-red-500/5 text-red-600";
+                    } else {
+                      optionStyle = "border-border bg-background/50 opacity-60";
+                    }
+                  } else if (selected) {
+                    optionStyle = "border-primary bg-primary/5";
+                  }
+
+                  let checkStyle = "bg-background border-border text-transparent";
+                  if (selected) {
+                    checkStyle = "bg-primary border-primary text-white";
+                  }
+                  if (submitted && opt.isCorrect) {
+                    checkStyle = "bg-green-500 border-green-500 text-white";
+                  } else if (submitted && selected && !opt.isCorrect) {
+                    checkStyle = "bg-red-500 border-red-500 text-white";
+                  }
+
                   return (
                     <button
                       key={opt._id}
                       onClick={() => !submitted && toggleMsq(opt._id)}
                       disabled={submitted}
-                      className={`w-full flex items-center p-3.5 border rounded-sm text-left disabled:opacity-60 ${selected ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-secondary/20"}`}
+                      className={`w-full flex items-center p-3.5 border rounded-sm text-left disabled:opacity-100 transition-colors ${optionStyle}`}
                     >
-                      <span className={`w-5 h-5 rounded-sm mr-3 border flex items-center justify-center ${selected ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border"}`}>
-                        {selected && <CheckCircle2 size={11} />}
+                      <span className={`w-4 h-4 rounded-sm mr-3 border flex items-center justify-center shrink-0 ${checkStyle}`}>
+                        {selected && !submitted && <CheckCircle2 size={10} />}
+                        {submitted && opt.isCorrect && <CheckCircle2 size={10} />}
+                        {submitted && selected && !opt.isCorrect && <XCircle size={10} />}
                       </span>
                       <span className="text-sm"><LatexRenderer latex={opt.text} /></span>
                     </button>
