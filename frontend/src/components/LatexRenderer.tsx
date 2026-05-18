@@ -18,8 +18,8 @@ interface LatexRendererProps {
  */
 function parseSegments(input: string): Array<{ type: "text" | "inline" | "display"; content: string }> {
   const segments: Array<{ type: "text" | "inline" | "display"; content: string }> = [];
-  // Match $$...$$ first (display), then $...$ (inline)
-  const regex = /\$\$([\s\S]*?)\$\$|\$([\s\S]*?)\$/g;
+  // Match $$...$$ (group 1), $...$ (group 2), \[...\] (group 3), \(...\) (group 4)
+  const regex = /\$\$([\s\S]*?)\$\$|\$([\s\S]*?)\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -31,6 +31,10 @@ function parseSegments(input: string): Array<{ type: "text" | "inline" | "displa
       segments.push({ type: "display", content: match[1] });
     } else if (match[2] !== undefined) {
       segments.push({ type: "inline", content: match[2] });
+    } else if (match[3] !== undefined) {
+      segments.push({ type: "display", content: match[3] });
+    } else if (match[4] !== undefined) {
+      segments.push({ type: "inline", content: match[4] });
     }
     lastIndex = regex.lastIndex;
   }
