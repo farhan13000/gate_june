@@ -152,7 +152,16 @@ export default function ProblemDetail() {
                 <LatexRenderer latex={problem.title} />
               </h1>
               <div className="flex flex-wrap gap-2 items-center">
-                <span className="tag-pill">{problem.topic}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {problem.topic ? problem.topic.split(/\s*[\+,]\s*/).map((subTopic: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="text-[10px] px-2 py-0.5 border border-zinc-200/80 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300 rounded-sm font-sans font-medium transition-all"
+                    >
+                      {subTopic}
+                    </span>
+                  )) : null}
+                </div>
                 <span className={`${diffClass} text-xs border border-border px-2 py-0.5 rounded-sm ml-1`}>
                   {problem.difficulty}
                 </span>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle, Info, Clipboard } from "lucide-react";
+import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle, Info, Clipboard, Eye } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import LatexRenderer from "../components/LatexRenderer";
 import { toast } from "sonner";
@@ -7,67 +7,156 @@ import { useNavigate } from "react-router-dom";
 
 const CREATION_PROTOCOLS = {
   Problem: {
-    title: "GATE DA Problem Formatting Protocol",
-    description: "Follow this standardized prompt to generate authentic, high-quality GATE Data Science & AI problems inside a valid, parsable JSON array.",
-    promptTemplate: `You are an expert GATE Data Science & AI exam designer. Generate a high-fidelity GATE exam question in standard JSON format.
+    title: "GATE DA Advanced Problem Generation Protocol",
+    description: "Use this comprehensive, multi-criteria AI prompt to generate highly authentic, mathematically rigorous GATE Data Science & AI problems, including interdisciplinary topics, diagrams, and multiple question formats (MCQ, MSQ, NAT) with full LaTeX support.",
+    promptTemplate: `You are an expert, highly distinguished designer of the GATE (Graduate Aptitude Test in Engineering) Data Science & Artificial Intelligence (DA) exam.
+Your mission is to generate a high-fidelity, mathematically rigorous, and syllabus-aligned GATE exam question in standard JSON format.
+
+SYLLABUS & TOPIC COVERAGE:
+Ensure the problem is strictly mapped to one or more of the following official syllabus domains:
+1. PROBABILITY & STATISTICS (e.g., Bayes theorem, joint distributions, covariance, Correlation, CLT, parameter estimation, MLE/MAP, hypothesis testing (z-test, t-test, chi-square), random variables, distributions (Binomial, Poisson, Normal, Exponential)).
+2. LINEAR ALGEBRA (e.g., Vector spaces, basis, dimension, eigenvalues, eigenvectors, symmetric matrices, SVD, systems of linear equations).
+3. CALCULUS & OPTIMIZATION (e.g., Maxima/minima, partial derivatives, gradient, Hessian, convex sets/functions, gradient descent updates, constrained optimization).
+4. PROGRAMMING, DATA STRUCTURES & ALGORITHMS (e.g., Python implementation, binary heaps, BSTs, sorting/searching, graph traversals, greedy/dynamic programming, Big-O complexity).
+5. DATABASE MANAGEMENT & WAREHOUSING (e.g., Relational algebra, SQL, normalization (BCNF/3NF), indexing (B/B+ trees), transactions & ACID properties).
+6. MACHINE LEARNING (e.g., Linear/logistic regression, SVM decision boundary, decision trees, k-NN complexity, Random Forest, k-means, PCA math, ROC/AUC, Bias-Variance tradeoff).
+7. ARTIFICIAL INTELLIGENCE (e.g., A* search, adversarial minimax, alpha-beta pruning, MDP, Q-learning).
+
+DIFFICULTY LEVEL STANDARDS:
+- Easy: Basic conceptual comprehension, direct single-formula applications.
+- Medium: Multi-step analytical calculations, standard derivation, or applying concepts to structured scenarios.
+- Hard: Deeply rigorous, mathematically intensive problems testing core theoretical limits, or interdisciplinary (hybrid) questions combining concepts across multiple domains.
+
+INTERDISCIPLINARY / MIXTURE OF TOPICS:
+Where appropriate, design high-quality "hybrid" questions that fuse topics. Examples:
+- Linear Algebra + Machine Learning (e.g., computing projection of data using PCA eigenvectors, low-rank approximations via SVD).
+- Calculus + Machine Learning (e.g., analytical derivation of gradient updates for custom loss functions like Huber loss, MSE, or cross-entropy).
+- Probability + Machine Learning (e.g., Bayesian decision boundary computation, MLE/MAP derivations for regression coefficients).
+- Programming + Machine Learning/Math (e.g., computational complexity of executing a k-NN search or training a decision tree).
+
+QUESTION FORMATS & SCHEMES:
+1. MCQ (Multiple Choice Question): Exactly 4 choices. Provide 1 correct option and 3 plausible distractors based on common student errors (e.g., sign errors, off-by-one errors, missing division terms).
+2. MSQ (Multiple Select Question): Exactly 4 choices. One or more choices can be correct (can be 1, 2, 3, or all 4). Clearly state that it is an MSQ in the description. No partial marking is awarded.
+3. NAT (Numerical Answer Type): No options are provided (set "options" to an empty array []). The statement must specify rounding requirements (e.g., "Round to two decimal places"). The correct answer must be a single real number or integer. The final correct value MUST be explicitly stated at the end of the solution (e.g., "Final Answer: 0.23").
+
+DIAGRAMS & STRUCTURAL DESCRIPTIONS:
+- For questions involving architectures, search trees, database tables, or matrices:
+  - Use elegant LaTeX matrices (\\\\begin{pmatrix} ... \\\\end{pmatrix}) or mathematical tables for matrices or transition tables.
+  - For structural diagrams (like neural networks or state diagrams), provide a clean, descriptive ASCII representation or a detailed LaTeX array representation within the statement.
+
+CRITICAL LATEX FORMATTING RULES:
+1. NEVER write any mathematical variable, constant, equation, fraction, subscript, superscript, matrix, parameter, or math symbol as plain text!
+   - BAD (Never do this): "mu_MAP = [ (n/sigma^2)*x_bar + (1/tau^2)*mu_0 ] / [ (n/sigma^2) + (1/tau^2) ]"
+   - BAD (Never do this): "mu_0 = 2", "tau^2 = 1", "x_bar = 4", "n = 3", "sigma^2 = 4"
+   - BAD (Never do this): "A = A^T", "lambda = 1 and 3"
+   - GOOD (Always do this): "\\\\( \\\\mu_{\\\\text{MAP}} = \\\\frac{\\\\frac{n}{\\\\sigma^2}\\\\bar{x} + \\\\frac{1}{\\\\tau^2}\\\\mu_0}{\\\\frac{n}{\\\\sigma^2} + \\\\frac{1}{\\\\tau^2}} \\\\)"
+   - GOOD (Always do this): "\\\\( \\\\mu_0 = 2 \\\\)", "\\\\( \\\\tau^2 = 1 \\\\)", "\\\\( \\\\bar{x} = 4 \\\\)", "\\\\( n = 3 \\\\)", "\\\\( \\\\sigma^2 = 4 \\\\)"
+   - GOOD (Always do this): "\\\\( A = A^T \\\\)", "\\\\( \\\\lambda = 1 \\\\text{ and } 3 \\\\)"
+2. All LaTeX formulas inside the JSON string must have double-escaped backslashes.
+   - For inline formulas, wrap them in: "\\\\( ... \\\\)"
+   - For block equations, wrap them in: "\\\\[ ... \\\\]"
+   - For bold textbook-style text inside LaTeX, use "\\\\mathbf{...}" or "\\\\text{...}".
+   - For fractions, use "\\\\frac{numerator}{denominator}".
+   - For derivatives, use "\\\\frac{\\\\partial y}{\\\\partial x}".
+   - For greek letters, use "\\\\lambda", "\\\\sigma", "\\\\tau", "\\\\mu", "\\\\theta", "\\\\alpha", "\\\\beta".
+3. Check and verify that EVERY equation in the question "statement", "options", and "solution" conforms to this rule. No mathematical characters should be naked in the plain text.
 
 OUTPUT REQUIREMENTS:
 1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
 2. All LaTeX math backslashes MUST be properly double-escaped for JSON. For inline math use "\\\\( ... \\\\)" and for block equations use "\\\\[ ... \\\\]". (Example: "\\\\frac{\\\\lambda^k e^{-\\\\lambda}}{k!}")
-3. Problem must include an Authentic, step-by-step rigorous LaTeX solution.
-4. Keep the language academic, direct, and unambiguous.
+3. Include an authentic, step-by-step rigorous LaTeX solution detailing all calculations, theorem references, and intermediate derivations.
+4. Keep the language academic, direct, precise, and unambiguous.
 
-JSON SCHEME:
+JSON SCHEME REFERENCE:
 [
   {
     "title": "Problem Title",
     "topic": "Probability & Statistics",
-    "difficulty": "Medium",
+    "difficulty": "Hard",
     "questionType": "MCQ",
-    "statement": "If \\\\( X \\\\) is a Poisson random variable...",
-    "solution": "Using Poisson formula: \\\\( P(X=k) = \\\\frac{\\\\lambda^k e^{-\\\\lambda}}{k!} \\\\)...",
+    "statement": "Let \\\\( X \\\\) and \\\\( Y \\\\) be independent random variables... Find \\\\( P(X > Y) \\\\).",
+    "solution": "First, express the joint probability density function... Hence, \\\\( P(X > Y) = \\\\int_{0}^{\\\\infty} \\\\int_{0}^{x} f(x, y) \\\\, dy \\\\, dx = \\\\frac{3}{5} \\\\).",
     "positiveMarks": 2,
-    "negativeMarks": 0.5,
+    "negativeMarks": 0.66,
     "options": [
-      { "text": "\\\\( e^{-2} \\\\)", "isCorrect": true },
-      { "text": "\\\\( 2e^{-2} \\\\)", "isCorrect": false }
+      { "text": "\\\\( \\\\frac{3}{5} \\\\)", "isCorrect": true },
+      { "text": "\\\\( \\\\frac{2}{5} \\\\)", "isCorrect": false },
+      { "text": "\\\\( \\\\frac{1}{2} \\\\)", "isCorrect": false },
+      { "text": "\\\\( \\\\frac{4}{5} \\\\)", "isCorrect": false }
     ]
   }
 ]`,
     rules: [
-      "The response must be a 100% valid JSON array containing escaped LaTeX equations.",
-      "Use double-escaped backslashes (e.g. \\\\( ... \\\\) and \\\\frac) so it parses correctly.",
-      "Check that marking schemes conform strictly (typically +2/-0.66 or +1/-0.33)."
+      "The response must be a 100% valid JSON array containing properly double-escaped LaTeX equations.",
+      "Integrate interdisciplinary concepts (e.g., combining linear algebra and ML) to match premium GATE standards.",
+      "Strictly ensure options contain clever distractors for MCQs, multiple correct options for MSQs, and empty option arrays for NATs.",
+      "Verify that positive/negative marking conforms to standard GATE norms (+2/-0.66, +1/-0.33, or no negative marks for MSQ/NAT)."
     ]
   },
   "Theory Article": {
-    title: "GATE DA Theory Article Formatting Protocol",
-    description: "Use this protocol to generate syllabus-aligned notes with custom Theorem/Example blocks in a valid JSON array.",
+    title: "GATE DA Comprehensive Theory Article Protocol",
+    description: "Use this protocol to generate syllabus-aligned, conceptually deep theory notes complete with LaTeX equations, Mermaid.js visual diagrams, and customized blocks.",
     promptTemplate: `You are an academic textbook author designing study materials for the GATE Data Science and AI syllabus.
+Your goal is to generate extremely detailed, textbook-quality study notes in standard JSON format.
+
+SYLLABUS & TOPIC COVERAGE:
+The content must strictly target the GATE DA syllabus domains: Probability & Statistics, Linear Algebra, Calculus & Optimization, DBMS, Algorithms/Data Structures, Machine Learning, and Artificial Intelligence.
+
+STRUCTURAL COMPONENTS:
+1. Concepts & Formulas: Rigorous explanations using double-escaped LaTeX math formulas.
+2. Custom Render Blocks:
+   - "Theorem: <Title>" followed by the mathematical theorem statement.
+   - "Example: <Title>" followed by a detailed illustrative example.
+   - "GATE Example: <Title>" followed by historical GATE problems with analytical solutions.
+3. MERMAID.JS DIAGRAMS:
+   - To illustrate data flows, decision boundaries, neural network layers, search trees, database relation relationships, or algorithmic steps, you MUST embed professional, valid Mermaid.js diagrams directly within the markdown content.
+   - Use standard Mermaid syntax inside a standard markdown code block:
+     \`\`\`mermaid
+     graph TD
+     A[Input Data] --> B(Standardization)
+     B --> C{PCA Projection}
+     C --> D[Eigenvector 1]
+     C --> E[Eigenvector 2]
+     \`\`\`
+   - Ensure the Mermaid code is fully correct, double-escaping any backslashes or newlines in the JSON string representation.
+
+CRITICAL LATEX FORMATTING RULES:
+1. NEVER write any mathematical variable, constant, equation, fraction, subscript, superscript, matrix, parameter, or math symbol as plain text!
+   - BAD (Never do this): "mu_MAP = [ (n/sigma^2)*x_bar + (1/tau^2)*mu_0 ] / [ (n/sigma^2) + (1/tau^2) ]"
+   - BAD (Never do this): "mu_0 = 2", "tau^2 = 1", "x_bar = 4", "n = 3", "sigma^2 = 4"
+   - BAD (Never do this): "A = A^T", "lambda = 1 and 3"
+   - GOOD (Always do this): "\\\\( \\\\mu_{\\\\text{MAP}} = \\\\frac{\\\\frac{n}{\\\\sigma^2}\\\\bar{x} + \\\\frac{1}{\\\\tau^2}\\\\mu_0}{\\\\frac{n}{\\\\sigma^2} + \\\\frac{1}{\\\\tau^2}} \\\\)"
+   - GOOD (Always do this): "\\\\( \\\\mu_0 = 2 \\\\)", "\\\\( \\\\tau^2 = 1 \\\\)", "\\\\( \\\\bar{x} = 4 \\\\)", "\\\\( n = 3 \\\\)", "\\\\( \\\\sigma^2 = 4 \\\\)"
+   - GOOD (Always do this): "\\\\( A = A^T \\\\)", "\\\\( \\\\lambda = 1 \\\\text{ and } 3 \\\\)"
+2. All LaTeX formulas inside the JSON string must have double-escaped backslashes.
+   - For inline formulas, wrap them in: "\\\\( ... \\\\)"
+   - For block equations, wrap them in: "\\\\[ ... \\\\]"
+   - For bold textbook-style text inside LaTeX, use "\\\\mathbf{...}" or "\\\\text{...}".
+   - For fractions, use "\\\\frac{numerator}{denominator}".
+   - For derivatives, use "\\\\frac{\\\\partial y}{\\\\partial x}".
+   - For greek letters, use "\\\\lambda", "\\\\sigma", "\\\\tau", "\\\\mu", "\\\\theta", "\\\\alpha", "\\\\beta".
+3. Check and verify that EVERY equation in the article "content" conforms to this rule. No mathematical characters should be naked in the plain text.
 
 OUTPUT REQUIREMENTS:
 1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
 2. All LaTeX formulas inside the markdown text MUST be double-escaped for JSON: use "\\\\( ... \\\\)" and "\\\\[ ... \\\\]".
-3. Use custom wrapped tags for special boxes:
-   - "Theorem: <Title>" followed by content for theorem boxes.
-   - "Example: <Title>" followed by content for example boxes.
-   - "GATE Example: <Title>" for historical GATE problems.
+3. Keep the content deeply analytical, focusing on 'Why' rather than just 'What'. Explain trade-offs, constraints, and mathematical proofs.
 
-JSON SCHEME:
+JSON SCHEME REFERENCE:
 [
   {
-    "title": "Introduction to Probability",
-    "topic": "Probability",
-    "chapterId": "1",
-    "chapterTitle": "Probability Foundations",
-    "sectionId": "1.1",
-    "content": "## Definition of Probability\\n\\nLet \\\\( S \\\\) be a sample space...\\n\\nTheorem: Probability Axioms\\nLet \\\\( P(A) \\\\ge 0 \\\\)..."
+    "title": "Principal Component Analysis (PCA)",
+    "topic": "Machine Learning",
+    "chapterId": "4",
+    "chapterTitle": "Dimensionality Reduction",
+    "sectionId": "4.1",
+    "content": "## Core Concept of PCA\\n\\nPrincipal Component Analysis is a linear dimensionality reduction technique that finds the directions of maximum variance...\\n\\n\\\\frac{1}{n} X^T X\\\\) is the covariance matrix...\\n\\n\`\`\`mermaid\\ngraph LR\\nA[Data] --> B[Covariance Matrix] --> C[Eigenvalue Decomposition] --> D[Principal Components]\\n\`\`\`\\n\\nTheorem: Maximum Variance Projection\\nLet \\\\( u_1 \\\\) be the first principal direction...\\n\\nExample: 2D Data Projection\\nConsider a dataset of 3 points..."
   }
 ]`,
     rules: [
-      "The response must be a 100% valid JSON array containing escaped LaTeX equations.",
-      "Prefix theorems with 'Theorem: [Title]' inside the content string to trigger custom rendering.",
-      "Include a final 'GATE Example: [GATE Year]' inside the content string for historical context."
+      "The response must be a 100% valid JSON array containing double-escaped LaTeX equations.",
+      "Embed visual Mermaid.js diagrams directly inside the markdown content for all complex structural or flow concepts.",
+      "Use custom block prefixes ('Theorem: [Title]', 'Example: [Title]', 'GATE Example: [Title]') to structure the layout of the notes."
     ]
   }
 };
@@ -178,6 +267,20 @@ export default function AdminPanel() {
         toast.error("Submission failed");
       }
     } catch (error) { toast.error("Network error"); }
+  };
+
+  const formatBulkJson = () => {
+    try {
+      if (!bulkJson.trim()) return;
+      const parsed = JSON.parse(bulkJson);
+      const formatted = JSON.stringify(parsed, null, 2);
+      setBulkJson(formatted);
+      setBulkParseError("");
+      toast.success("JSON Formatted Successfully!");
+    } catch (e: any) {
+      setBulkParseError("Formatting failed. Invalid JSON syntax: " + e.message);
+      toast.error("Format failed: Invalid JSON syntax");
+    }
   };
 
   const parseBulkJson = () => {
@@ -296,6 +399,7 @@ export default function AdminPanel() {
   const [inventoryTab, setInventoryTab] = useState<"problems" | "theories">("problems");
   const [editItem, setEditItem] = useState<any | null>(null);
   const [historyItem, setHistoryItem] = useState<any | null>(null);
+  const [previewItem, setPreviewItem] = useState<any | null>(null);
   const [editNote, setEditNote] = useState("");
 
   const fetchAllContent = async () => {
@@ -584,7 +688,17 @@ export default function AdminPanel() {
                     {/* Step 2: Paste & Parse */}
                     {!bulkPreview && (
                       <div className="space-y-3">
-                        <label className="block text-xs font-bold text-foreground">Step 1 — Paste JSON Array</label>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-bold text-foreground">Step 1 — Paste JSON Array</label>
+                          <button
+                            type="button"
+                            onClick={formatBulkJson}
+                            disabled={!bulkJson.trim()}
+                            className="text-[10px] bg-secondary hover:bg-secondary/80 text-foreground px-2.5 py-1 rounded-sm border border-border transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          >
+                            ✨ Format JSON
+                          </button>
+                        </div>
                         <textarea
                           rows={10}
                           value={bulkJson}
@@ -792,6 +906,7 @@ export default function AdminPanel() {
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex gap-2 justify-end">
+                          <button onClick={() => setPreviewItem(q)} className="px-3 py-1.5 text-xs border border-border hover:bg-secondary rounded-sm transition-colors flex items-center gap-1.5"><Eye size={12}/> Preview</button>
                           <button onClick={() => handleApprove(q._id, "rejected", q._contentType)} className="px-3 py-1.5 text-xs border border-border hover:bg-red-500/10 hover:text-red-500 rounded-sm transition-colors">Reject</button>
                           <button onClick={() => handleApprove(q._id, "approved", q._contentType)} className="btn-primary px-3 py-1.5 text-xs">Approve ✓</button>
                         </div>
@@ -900,6 +1015,7 @@ export default function AdminPanel() {
                         <td className="py-3 px-4 text-muted-foreground">{new Date(q.updatedAt).toLocaleDateString()}</td>
                         <td className="py-3 px-4">
                           <div className="flex gap-1.5 justify-end">
+                            <button onClick={() => setPreviewItem({...q, _contentType: "question"})} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="Preview"><Eye size={12}/></button>
                             <button onClick={() => setHistoryItem(q)} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="View History"><Clock size={12}/></button>
                             <button onClick={() => { setEditItem({...q}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
                             <button onClick={() => handleDelete(q._id, "question")} className="p-1.5 border border-red-200 rounded-sm hover:bg-red-500/10 text-red-400" title="Delete"><Trash2 size={12}/></button>
@@ -940,6 +1056,7 @@ export default function AdminPanel() {
                         <td className="py-3 px-4 text-muted-foreground">{new Date(t.updatedAt).toLocaleDateString()}</td>
                         <td className="py-3 px-4">
                           <div className="flex gap-1.5 justify-end">
+                            <button onClick={() => setPreviewItem({...t, _contentType: "theory"})} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="Preview"><Eye size={12}/></button>
                             <button onClick={() => setHistoryItem(t)} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="View History"><Clock size={12}/></button>
                             <button onClick={() => { setEditItem({...t}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
                             <button onClick={() => handleDelete(t._id, "theory")} className="p-1.5 border border-red-200 rounded-sm hover:bg-red-500/10 text-red-400" title="Delete"><Trash2 size={12}/></button>
@@ -998,6 +1115,7 @@ export default function AdminPanel() {
                       <td className="py-3 px-4 font-mono font-bold text-primary">{q.upvotes || 0}</td>
                       <td className="py-3 px-4">
                         <div className="flex gap-1.5 justify-end">
+                          <button onClick={() => setPreviewItem({...q, _contentType: "question"})} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="Preview"><Eye size={12}/></button>
                           <button onClick={() => setHistoryItem(q)} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="History"><Clock size={12}/></button>
                           <button onClick={() => { setEditItem({...q}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
                         </div>
@@ -1162,6 +1280,172 @@ export default function AdminPanel() {
                   <button className="text-center px-2 py-2 text-xs border border-amber-500/30 text-amber-500 rounded-sm hover:bg-amber-500/10 transition-colors">Suspend User</button>
                   <button className="col-span-2 text-center px-2 py-2 text-xs bg-destructive text-destructive-foreground rounded-sm hover:bg-destructive/90 transition-colors flex items-center justify-center gap-2"><Trash2 size={12}/> Permanently Delete Account</button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════ PREVIEW MODAL ════ */}
+      {previewItem && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-md shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            <div className="bg-secondary/80 px-5 py-4 flex justify-between items-center border-b border-border sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-foreground">Content Preview</span>
+                <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{previewItem.contentId || previewItem._id?.substring(0,8).toUpperCase()}</span>
+                <span className={`px-1.5 py-0.5 rounded-sm border text-[10px] font-bold uppercase ${
+                  previewItem.status === "approved" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                  previewItem.status === "rejected" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                  "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                }`}>
+                  {previewItem.status}
+                </span>
+              </div>
+              <button onClick={() => setPreviewItem(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Metadata Badges */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <div className="px-2.5 py-1 bg-secondary rounded-sm border border-border">
+                  <span className="text-muted-foreground">Topic:</span> <strong className="text-foreground">{previewItem.topic}</strong>
+                </div>
+                {previewItem.chapterTitle && (
+                  <div className="px-2.5 py-1 bg-secondary rounded-sm border border-border">
+                    <span className="text-muted-foreground">Chapter:</span> <strong className="text-foreground">{previewItem.chapterId} - {previewItem.chapterTitle}</strong>
+                  </div>
+                )}
+                {previewItem.sectionId && (
+                  <div className="px-2.5 py-1 bg-secondary rounded-sm border border-border">
+                    <span className="text-muted-foreground">Section:</span> <strong className="text-foreground">{previewItem.sectionId}</strong>
+                  </div>
+                )}
+                {previewItem.questionType && (
+                  <div className="px-2.5 py-1 bg-secondary rounded-sm border border-border">
+                    <span className="text-muted-foreground">Type:</span> <strong className="text-foreground">{previewItem.questionType}</strong>
+                  </div>
+                )}
+                {previewItem.difficulty && (
+                  <div className="px-2.5 py-1 bg-secondary rounded-sm border border-border">
+                    <span className="text-muted-foreground">Difficulty:</span> <strong className={`font-bold ${
+                      previewItem.difficulty === "Hard" ? "text-red-500" :
+                      previewItem.difficulty === "Medium" ? "text-amber-500" :
+                      "text-green-500"
+                    }`}>{previewItem.difficulty}</strong>
+                  </div>
+                )}
+                {previewItem.markingScheme && (
+                  <div className="px-2.5 py-1 bg-secondary rounded-sm border border-border">
+                    <span className="text-muted-foreground">Marks:</span> <strong className="text-foreground">+{previewItem.markingScheme.positive} / -{previewItem.markingScheme.negative}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Title */}
+              <div>
+                <h3 className="text-base font-serif font-bold text-foreground mb-1">{previewItem.title}</h3>
+                <span className="text-[10px] text-muted-foreground block">Created by {previewItem.createdBy?.fullName || "Admin"} · {new Date(previewItem.createdAt).toLocaleDateString()}</span>
+              </div>
+
+              {/* Image if any */}
+              {previewItem.imageUrl && (
+                <div className="border border-border rounded-sm overflow-hidden bg-secondary/15 max-w-md mx-auto p-2">
+                  <img src={previewItem.imageUrl} alt={previewItem.title} className="max-h-60 object-contain rounded-sm w-full" />
+                </div>
+              )}
+
+              {/* Main Content / Statement */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  {previewItem.questionType ? "Question Statement" : "Article Content"}
+                </h4>
+                <div className="p-4 bg-secondary/20 border border-border rounded-sm text-sm overflow-x-auto leading-relaxed">
+                  <LatexRenderer latex={previewItem.statement || previewItem.content || ""} />
+                </div>
+              </div>
+
+              {/* Options (for MCQ/MSQ) */}
+              {previewItem.options && previewItem.options.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Options</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {previewItem.options.map((opt: any, idx: number) => {
+                      const labels = ["A", "B", "C", "D"];
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`p-3 border rounded-sm flex items-start gap-3 transition-colors ${
+                            opt.isCorrect 
+                              ? "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400 font-semibold" 
+                              : "bg-background border-border text-foreground"
+                          }`}
+                        >
+                          <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold font-mono ${
+                            opt.isCorrect ? "bg-green-500 text-white" : "bg-secondary text-muted-foreground border border-border"
+                          }`}>
+                            {labels[idx] || (idx + 1)}
+                          </span>
+                          <div className="text-xs flex-1">
+                            <LatexRenderer latex={opt.text} />
+                          </div>
+                          {opt.isCorrect && (
+                            <span className="text-xs font-bold bg-green-500/20 text-green-600 px-1.5 py-0.5 rounded-sm shrink-0">Correct</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* NAT answer placeholder */}
+              {previewItem.questionType === "NAT" && (
+                <div className="p-3 bg-primary/5 border border-primary/20 rounded-sm text-xs flex justify-between items-center">
+                  <span className="text-muted-foreground">Question Format:</span>
+                  <span className="font-bold text-primary font-mono uppercase">Numerical Answer Type (NAT)</span>
+                </div>
+              )}
+
+              {/* Rigorous Solution */}
+              {previewItem.solution && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <span>💡 Step-by-Step Rigorous Solution</span>
+                  </h4>
+                  <div className="p-6 bg-[#fdfdfb] dark:bg-zinc-900 border border-border/70 border-l-4 border-l-amber-500 rounded-sm shadow-sm overflow-x-auto text-sm leading-relaxed text-foreground font-serif">
+                    <LatexRenderer latex={previewItem.solution} />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons inside Preview */}
+              <div className="flex justify-end gap-3 pt-5 border-t border-border">
+                <button onClick={() => setPreviewItem(null)} className="px-5 py-2 text-xs border border-border rounded-sm hover:bg-secondary">
+                  Close
+                </button>
+                {previewItem.status !== "approved" && previewItem.status !== "rejected" && (
+                  <>
+                    <button 
+                      onClick={() => {
+                        handleApprove(previewItem._id, "rejected", previewItem._contentType);
+                        setPreviewItem(null);
+                      }} 
+                      className="px-5 py-2 text-xs border border-red-200 hover:bg-red-500/10 hover:text-red-500 rounded-sm transition-colors"
+                    >
+                      Reject
+                    </button>
+                    <button 
+                      onClick={() => {
+                        handleApprove(previewItem._id, "approved", previewItem._contentType);
+                        setPreviewItem(null);
+                      }} 
+                      className="btn-primary px-6 py-2 text-xs"
+                    >
+                      Approve ✓
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

@@ -146,7 +146,16 @@ export default function Problems() {
                         </Link>
                       </td>
                       <td className="py-3 px-4 hidden sm:table-cell">
-                        <span className="tag-pill">{p.topic}</span>
+                        <div className="flex flex-wrap gap-1.5 max-w-[280px]">
+                          {p.topic ? p.topic.split(/\s*[\+,]\s*/).map((subTopic: string, idx: number) => (
+                            <span
+                              key={idx}
+                              className="text-[10px] px-2 py-0.5 border border-zinc-200/80 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300 rounded-sm font-sans font-medium transition-all"
+                            >
+                              {subTopic}
+                            </span>
+                          )) : null}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className={diffClass(p.difficulty)}>{p.difficulty}</span>
