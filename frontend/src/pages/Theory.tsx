@@ -1,41 +1,118 @@
-import { useState } from "react";
-import { Bookmark, ChevronRight, ChevronDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bookmark, ChevronRight, ChevronDown, ArrowLeft, BookOpen, Loader2, HardHat } from "lucide-react";
+import LatexRenderer from "../components/LatexRenderer";
 
-const toc = [
-  { id: "1", label: "1. Introduction to Probability", level: 1 },
-  { id: "1.1", label: "1.1 Sample Spaces", level: 2 },
-  { id: "1.2", label: "1.2 Events and Axioms", level: 2 },
-  { id: "1.3", label: "1.3 Conditional Probability", level: 2 },
-  { id: "2", label: "2. Random Variables", level: 1 },
-  { id: "2.1", label: "2.1 Discrete RVs", level: 2 },
-  { id: "2.2", label: "2.2 Continuous RVs", level: 2 },
-  { id: "2.3", label: "2.3 Expectation & Variance", level: 2 },
-  { id: "3", label: "3. Common Distributions", level: 1 },
-  { id: "3.1", label: "3.1 Normal Distribution", level: 2 },
-  { id: "3.2", label: "3.2 Binomial Distribution", level: 2 },
-  { id: "4", label: "4. Hypothesis Testing", level: 1 },
+const BASE_SUBJECTS = [
+  { id: "Probability", title: "Probability & Statistics", desc: "Foundations of probability, random variables, and hypothesis testing." },
+  { id: "Linear Algebra", title: "Linear Algebra", desc: "Vector spaces, matrices, eigenvalue decomposition, and SVD." },
+  { id: "Machine Learning", title: "Machine Learning", desc: "Supervised and unsupervised learning, SVMs, neural networks." },
+  { id: "Calculus", title: "Calculus & Optimization", desc: "Derivatives, integrals, gradient descent algorithms." },
+  { id: "Databases", title: "Databases & SQL", desc: "Relational algebra, normal forms, and complex queries." },
+  { id: "Computer Architecture", title: "Computer Architecture", desc: "Memory coalescing, bank mapping, and GPU architectures." }
 ];
 
 export default function Theory() {
-  const [active, setActive] = useState("1.3");
+  const [theories, setTheories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  
   const [bookmarked, setBookmarked] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    fetch("/api/problems/theories/all")
+      .then(r => r.json())
+      .then(data => {
+        setTheories(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
   const toggle = (id: string) => setCollapsed(p => ({ ...p, [id]: !p[id] }));
 
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-muted-foreground"><Loader2 className="animate-spin mr-2"/> Loading Theory Library...</div>;
+  }
+
+  // Derive Subjects dynamically mixed with Base Subjects
+  const SUBJECTS = BASE_SUBJECTS.map(base => {
+    const matchingTheories = theories.filter(t => t.topic === base.id);
+    const uniqueChapters = new Set(matchingTheories.map(t => t.chapterId));
+    return { ...base, chapters: uniqueChapters.size, hasContent: matchingTheories.length > 0 };
+  });
+
+  // Subject View
+  if (!selectedSubject) {
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-10">
+        <div className="mb-8">
+          <h1 className="font-serif text-3xl font-bold text-foreground mb-1">Theory Library</h1>
+          <p className="text-muted-foreground text-sm">Comprehensive academic material organized by subject for the GATE DA syllabus.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {SUBJECTS.map(sub => (
+            <button 
+              key={sub.id}
+              onClick={() => setSelectedSubject(sub.id)} 
+              className="academic-card p-6 text-left flex flex-col hover:border-primary/40 hover:shadow-sm transition-all duration-200 group"
+            >
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
+                <BookOpen size={20} />
+              </div>
+              <h2 className="font-serif text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{sub.title}</h2>
+              <p className="text-sm text-muted-foreground mb-6 leading-relaxed flex-1">{sub.desc}</p>
+              <div className="text-xs font-mono text-muted-foreground border-t border-border pt-4 mt-auto flex items-center justify-between">
+                <span>{sub.chapters} Chapters</span>
+                <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">Read →</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Article View Setup
+  const subjectTheories = theories.filter(t => t.topic === selectedSubject);
+  
+  // Build dynamic TOC
+  const chapterMap = new Map();
+  subjectTheories.forEach(t => {
+    if (!chapterMap.has(t.chapterId)) {
+      chapterMap.set(t.chapterId, { id: t.chapterId, label: `${t.chapterId}. ${t.chapterTitle}`, level: 1, _id: null });
+    }
+    chapterMap.set(t.sectionId, { id: t.sectionId, label: `${t.sectionId} ${t.title}`, level: 2, _id: t._id });
+  });
+  const toc = Array.from(chapterMap.values()).sort((a: any, b: any) => a.id.localeCompare(b.id, undefined, {numeric: true}));
+
+  const activeTheoryId = activeId || (subjectTheories[0]?._id);
+  const currentTheory = subjectTheories.find(t => t._id === activeTheoryId);
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 flex gap-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
       {/* ToC sidebar */}
       <aside className="w-56 shrink-0 hidden md:block">
         <div className="sticky top-20">
+          <button 
+            onClick={() => setSelectedSubject(null)} 
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
+          >
+            <ArrowLeft size={12} /> Back to Library
+          </button>
+          
           <div className="text-xs font-medium text-muted-foreground mb-4 uppercase tracking-wider">Contents</div>
-          <nav className="space-y-0.5">
-            {toc.map(item => (
+          <nav className="space-y-0.5 border-l border-border pl-2">
+            {toc.map((item: any) => (
               <button
                 key={item.id}
-                onClick={() => setActive(item.id)}
-                className={`block w-full text-left py-1 px-2 rounded-sm text-xs transition-colors duration-150 ${item.level === 2 ? "pl-5" : "font-medium"} ${active === item.id ? "text-primary bg-primary/8" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => { if (item._id) setActiveId(item._id); }}
+                className={`block w-full text-left py-1.5 px-3 rounded-sm text-xs transition-colors duration-150 relative ${item.level === 2 ? "ml-2" : "font-medium mt-2 cursor-default"} ${activeTheoryId === item._id ? "text-primary bg-primary/5 font-bold" : "text-muted-foreground hover:text-foreground"}`}
               >
+                {activeTheoryId === item._id && <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary -ml-[9px] rounded-r-sm"></span>}
                 {item.label}
               </button>
             ))}
@@ -44,132 +121,53 @@ export default function Theory() {
       </aside>
 
       {/* Article content */}
-      <article className="flex-1 min-w-0 max-w-3xl">
+      <article className="flex-1 min-w-0 max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Mobile Back Button */}
+        <button 
+          onClick={() => setSelectedSubject(null)} 
+          className="md:hidden text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
+        >
+          <ArrowLeft size={12} /> Back to Library
+        </button>
+
         {/* Article header */}
         <div className="mb-8 pb-6 border-b border-border">
-          <div className="text-xs font-mono text-muted-foreground mb-2">Theory · Probability & Statistics</div>
+          <div className="text-xs font-mono text-muted-foreground mb-2">
+            Theory · {selectedSubject}
+          </div>
           <div className="flex items-start justify-between">
             <h1 className="font-serif text-3xl font-bold text-foreground leading-tight">
-              Conditional Probability & Bayes' Theorem
+              {currentTheory ? currentTheory.title : "Select a topic"}
             </h1>
-            <button
-              onClick={() => setBookmarked(!bookmarked)}
-              className={`mt-1 p-1.5 rounded-sm border transition-colors duration-150 ${bookmarked ? "border-primary text-primary bg-primary/8" : "border-border text-muted-foreground hover:text-foreground"}`}
-            >
-              <Bookmark size={14} fill={bookmarked ? "currentColor" : "none"} />
-            </button>
           </div>
-          <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-            <span>Section 1.3</span>
-            <span>·</span>
-            <span>18 min read</span>
-            <span>·</span>
-            <span>GATE DA 2024 Syllabus</span>
+          <div className="flex flex-wrap gap-4 mt-4 text-xs text-muted-foreground font-medium">
+            {currentTheory && <span className="px-2 py-0.5 bg-secondary border border-border rounded-sm">Section {currentTheory.sectionId}</span>}
           </div>
         </div>
 
         {/* Content */}
         <div className="prose-academic space-y-8 text-sm leading-relaxed text-foreground/85">
-
-          {/* Definition */}
-          <div>
-            <h2 className="font-serif text-xl font-bold text-foreground mb-4">1.3.1 Definition</h2>
-            <p className="mb-4">
-              Let <em>A</em> and <em>B</em> be two events defined on a sample space Ω, with P(B) &gt; 0. The <strong>conditional probability</strong> of event <em>A</em> given event <em>B</em> has occurred is defined as:
-            </p>
-            <div className="theorem-box my-4">
-              <div className="text-xs text-muted-foreground font-mono mb-2">Definition 1.3.1 — Conditional Probability</div>
-              <div className="font-mono text-sm text-foreground text-center py-2">
-                P(A | B) = P(A ∩ B) / P(B)
-              </div>
-            </div>
-            <p>
-              Intuitively, conditioning on B restricts our universe from Ω to B — we recompute probabilities relative to this reduced sample space.
-            </p>
-          </div>
-
-          {/* Collapsible section */}
-          <div>
-            <button
-              onClick={() => toggle("props")}
-              className="flex items-center gap-2 font-serif text-xl font-bold text-foreground mb-3 w-full text-left"
-            >
-              {collapsed["props"] ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-              1.3.2 Properties
-            </button>
-            {!collapsed["props"] && (
-              <div className="space-y-3 pl-2">
-                <p>Conditional probability satisfies all axioms of probability:</p>
-                <ul className="space-y-2 pl-4">
-                  {["0 ≤ P(A | B) ≤ 1 for any event A", "P(Ω | B) = 1", "If A₁, A₂, ... are mutually exclusive, then P(⋃Aᵢ | B) = Σ P(Aᵢ | B)"].map(p => (
-                    <li key={p} className="flex gap-2">
-                      <span className="text-primary mt-0.5 shrink-0">—</span>
-                      <span className="font-mono text-xs text-foreground/80">{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-border-faint" />
-
-          {/* Bayes theorem */}
-          <div>
-            <h2 className="font-serif text-xl font-bold text-foreground mb-4">1.3.3 Bayes' Theorem</h2>
-            <p className="mb-4">
-              Bayes' Theorem provides a way to update prior beliefs in light of new evidence. It is foundational to Bayesian statistics, machine learning, and information retrieval.
-            </p>
-            <div className="theorem-box my-4">
-              <div className="text-xs text-muted-foreground font-mono mb-2">Theorem 1.3.1 — Bayes' Theorem</div>
-              <div className="font-mono text-sm text-foreground text-center py-2">
-                P(A | B) = P(B | A) · P(A) / P(B)
-              </div>
-              <div className="text-xs text-muted-foreground mt-3 border-t border-border pt-3">
-                where P(B) = Σₖ P(B | Aₖ) · P(Aₖ) by the Law of Total Probability.
-              </div>
-            </div>
-          </div>
-
-          {/* Example */}
-          <div className="border border-border rounded-sm">
-            <div className="px-4 py-2.5 border-b border-border bg-secondary/40">
-              <span className="text-xs font-mono text-muted-foreground">Example 1.3.1 — Medical Diagnosis</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-sm">
-                A disease affects 1% of the population. A diagnostic test has 95% sensitivity (true positive rate) and 90% specificity (true negative rate). Given a positive test result, find the probability that the patient actually has the disease.
-              </p>
-              <div className="definition-box text-xs font-mono">
-                <div>Let D = patient has disease, T⁺ = positive test</div>
-                <div className="mt-1">P(D) = 0.01, P(T⁺|D) = 0.95, P(T⁺|D̄) = 0.10</div>
-                <div className="mt-1">P(T⁺) = 0.95(0.01) + 0.10(0.99) = 0.1085</div>
-                <div className="mt-1 text-primary">P(D|T⁺) = (0.95 × 0.01) / 0.1085 ≈ 0.0876</div>
-              </div>
-              <p className="text-xs text-muted-foreground italic">
-                Note the counterintuitive result: even with a positive test, the posterior probability of disease is only ~8.76%. This is the base rate fallacy.
-              </p>
-            </div>
-          </div>
-
-          {/* Practice problems */}
-          <div>
-            <h2 className="font-serif text-xl font-bold text-foreground mb-4">Practice Problems</h2>
-            <div className="space-y-2">
-              {[
-                { id: "DA004", title: "Bayes' Theorem Application", diff: "Easy" },
-                { id: "DA007", title: "Hypothesis Testing — Type II Error", diff: "Hard" },
-              ].map(p => (
-                <div key={p.id} className="flex items-center justify-between border border-border p-3 rounded-sm hover:bg-secondary/30 transition-colors duration-150">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs text-muted-foreground">{p.id}</span>
-                    <span className="text-sm text-foreground">{p.title}</span>
-                  </div>
-                  <span className={p.diff === "Hard" ? "difficulty-hard" : "difficulty-easy"}>{p.diff}</span>
+          {currentTheory ? (
+            <div>
+              <h2 className="font-serif text-xl font-bold text-foreground mb-4">{currentTheory.sectionId} {currentTheory.title}</h2>
+              {currentTheory.imageUrl && (
+                <div className="mb-6">
+                  <img src={currentTheory.imageUrl} alt={currentTheory.title} className="rounded-xl border border-border max-w-full h-auto object-cover bg-secondary/10 shadow-sm" style={{ maxHeight: '600px' }} />
                 </div>
-              ))}
+              )}
+              <div className="mb-4">
+                <LatexRenderer latex={currentTheory.content} />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-border rounded-xl bg-secondary/5 mt-8">
+              <HardHat size={48} className="text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-serif font-bold text-foreground mb-2">Content Under Construction</h3>
+              <p className="text-muted-foreground text-sm max-w-sm">
+                The academic material for {selectedSubject} is currently being prepared and verified by our experts. It will be available soon!
+              </p>
+            </div>
+          )}
         </div>
       </article>
     </div>

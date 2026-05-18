@@ -129,6 +129,16 @@ export default function Navbar() {
                     <User size={12} />
                     Dashboard
                   </Link>
+                  {user.role === "admin" && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setDropdownOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-xs text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <User size={12} />
+                      Admin Panel
+                    </Link>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"

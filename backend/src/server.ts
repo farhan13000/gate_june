@@ -11,6 +11,8 @@ import passport from "passport";
 import connectDB from "./config/db";
 import configurePassport from "./config/passport";
 import authRoutes from "./routes/auth";
+import adminRoutes from "./routes/admin";
+import problemRoutes from "./routes/problems";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,6 +38,8 @@ configurePassport();
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/problems", problemRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
