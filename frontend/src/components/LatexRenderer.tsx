@@ -44,9 +44,20 @@ function parseSegments(input: string): Array<{ type: "text" | "inline" | "displa
 
 function renderSegment(seg: { type: "text" | "inline" | "display"; content: string }, index: number) {
   if (seg.type === "text") {
-    // Basic Markdown bold parsing
-    let content = seg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Custom Parsing for specific Headers to mimic mockup boxes
+    let htmlContent = seg.content.replace(/\*\*(Theorem.*?|Example.*?|GATE Example.*?)\*\*/g, (match, title) => {
+      return `<div class="mt-8 mb-4 bg-[#f1f3f5] border border-[#e5e7eb] rounded-t-sm"><div class="px-5 py-3 border-b border-[#e5e7eb] text-[13px] font-mono text-slate-500">${title}</div><div class="px-5 py-4">`;
+    });
+
+    // Replace standard bold text
+    htmlContent = htmlContent.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-800">$1</strong>');
     
+    // In our rudimentary parsing, if we opened a box div above, we don't have an easy way to close it without fully parsing the AST.
+    // Instead, let's just render the bold text normally but styled to match the screenshot.
+    
+    // Wait, let's just do standard bold styling that looks nice.
+    let content = seg.content.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-800">$1</strong>');
+
     // Preserve newlines as line breaks
     const lines = content.split("\n");
     return (
@@ -70,7 +81,7 @@ function renderSegment(seg: { type: "text" | "inline" | "display"; content: stri
     return (
       <span
         key={index}
-        className={seg.type === "display" ? "block my-6 overflow-x-auto text-center bg-[#f0f1f2] rounded-md border border-[#e2e4e6] py-6 shadow-sm" : "inline"}
+        className={seg.type === "display" ? "block my-6 overflow-x-auto text-center bg-[#f0f2f5] border border-slate-200 py-6 text-slate-700 font-medium" : "inline"}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );

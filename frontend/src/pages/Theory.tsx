@@ -93,30 +93,23 @@ export default function Theory() {
   const currentTheory = subjectTheories.find(t => t._id === activeTheoryId);
 
   return (
-    <div className="bg-[#f4f4f4] min-h-screen pt-8 pb-16">
-      <div className="max-w-[1200px] mx-auto px-6 flex flex-col md:flex-row gap-12">
+    <div className="bg-[#f2f3f5] min-h-screen pt-8 pb-16 font-sans">
+      <div className="max-w-[1100px] mx-auto px-6 flex flex-col md:flex-row gap-12">
         {/* ToC sidebar */}
-        <aside className="w-64 shrink-0 hidden md:block">
+        <aside className="w-56 shrink-0 hidden md:block">
           <div className="sticky top-24">
-            <button 
-              onClick={() => setSelectedSubject(null)} 
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-8 transition-colors"
-            >
-              <ArrowLeft size={12} /> Back to Library
-            </button>
-            
-            <div className="text-[11px] font-bold text-muted-foreground mb-4 uppercase tracking-widest">Contents</div>
-            <nav className="space-y-1">
+            <div className="text-[11px] font-bold text-slate-500 mb-4 uppercase tracking-widest">Contents</div>
+            <nav className="space-y-0">
               {toc.map((item: any) => (
                 <button
                   key={item.id}
                   onClick={() => { if (item._id) setActiveId(item._id); }}
-                  className={`block w-full text-left py-1.5 text-sm transition-colors duration-150 ${
-                    item.level === 2 ? "pl-4" : "font-semibold mt-4 cursor-default text-foreground/80"
+                  className={`block w-full text-left py-[5px] text-[13.5px] transition-colors duration-150 ${
+                    item.level === 2 ? "pl-3 text-slate-500 hover:text-slate-800" : "font-bold mt-3 mb-1 cursor-default text-slate-600"
                   } ${
-                    activeTheoryId === item._id 
-                      ? "text-blue-500 font-medium" 
-                      : item.level === 2 ? "text-muted-foreground hover:text-foreground" : ""
+                    activeTheoryId === item._id && item.level === 2
+                      ? "!text-[#1269c4]" 
+                      : ""
                   }`}
                 >
                   {item.label}
@@ -127,7 +120,7 @@ export default function Theory() {
         </aside>
 
         {/* Article content */}
-        <article className="flex-1 min-w-0 max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <article className="flex-1 min-w-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {/* Mobile Back Button */}
           <button 
             onClick={() => setSelectedSubject(null)} 
@@ -137,16 +130,16 @@ export default function Theory() {
           </button>
 
           {currentTheory ? (
-            <div className="space-y-12">
+            <div className="space-y-8">
               {/* Header */}
               <div>
-                <h1 className="font-serif text-[2.5rem] font-bold text-foreground leading-tight text-slate-800">
+                <h1 className="font-serif text-[28px] font-bold text-slate-800 leading-tight">
                   {currentTheory.sectionId} {currentTheory.title}
                 </h1>
               </div>
 
               {/* Content */}
-              <div className="prose-academic text-[15px] leading-relaxed text-slate-700 space-y-6">
+              <div className="prose-academic text-[14.5px] leading-[1.7] text-slate-600 space-y-6">
                 {currentTheory.imageUrl && (
                   <div className="mb-8">
                     <img src={currentTheory.imageUrl} alt={currentTheory.title} className="rounded-md border border-border max-w-full h-auto object-cover bg-white shadow-sm" style={{ maxHeight: '400px' }} />
