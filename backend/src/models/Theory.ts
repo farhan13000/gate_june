@@ -58,16 +58,21 @@ const theorySchema = new Schema<ITheory>(
   { timestamps: true }
 );
 
+import crypto from "crypto";
+
 // Auto-generate meaningful content ID before save
-theorySchema.pre("save", async function (next) {
+theorySchema.pre("save", function (next) {
   if (!this.contentId) {
     const topicCode = (this.topic || "GEN")
       .toUpperCase()
       .replace(/[^A-Z]/g, "")
       .substring(0, 4)
       .padEnd(4, "X");
-    const count = await mongoose.model("Theory").countDocuments();
-    this.contentId = `${topicCode}-TH-${String(count + 1).padStart(4, "0")}`;
+    
+    // Generate a secure 6-character random hex to guarantee uniqueness
+    const uniqueHash = crypto.randomBytes(3).toString("hex").toUpperCase();
+    
+    this.contentId = `${topicCode}-TH-${uniqueHash}`;
   }
   next();
 });

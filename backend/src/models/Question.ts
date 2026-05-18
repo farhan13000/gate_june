@@ -72,8 +72,10 @@ const questionSchema = new Schema<IQuestion>(
   { timestamps: true }
 );
 
+import crypto from "crypto";
+
 // Auto-generate a meaningful content ID before save
-questionSchema.pre("save", async function (next) {
+questionSchema.pre("save", function (next) {
   if (!this.contentId) {
     const topicCode = (this.topic || "GEN")
       .toUpperCase()
@@ -81,8 +83,11 @@ questionSchema.pre("save", async function (next) {
       .substring(0, 4)
       .padEnd(4, "X");
     const typeCode = this.questionType || "MCQ";
-    const count = await mongoose.model("Question").countDocuments();
-    this.contentId = `${topicCode}-${typeCode}-${String(count + 1).padStart(4, "0")}`;
+    
+    // Generate a secure 6-character random hex to guarantee uniqueness
+    const uniqueHash = crypto.randomBytes(3).toString("hex").toUpperCase();
+
+    this.contentId = `${topicCode}-${typeCode}-${uniqueHash}`;
   }
   next();
 });
