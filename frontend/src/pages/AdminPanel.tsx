@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle, Info, Clipboard, Eye } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import LatexRenderer from "../components/LatexRenderer";
+import EditorialRenderer from "../components/EditorialRenderer";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -64,22 +65,17 @@ CRITICAL LATEX FORMATTING RULES:
 OUTPUT REQUIREMENTS:
 1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
 2. All LaTeX math backslashes MUST be properly double-escaped for JSON. For inline math use "\\\\( ... \\\\)" and for block equations use "\\\\[ ... \\\\]".
-3. Include an authentic, highly structured, premium step-by-step LaTeX solution matching this exact editorial visual scheme:
-   a. Introductory Sentence: Briefly state the system configuration (e.g. "We are given binary logistic regression with:").
-   b. Parameter Summary Grid: Create an elegant 3-column markdown table summarizing the given inputs/variables. Example:
-      | Parameter vector | Training example | Learning rate |
-      | :---: | :---: | :---: |
-      | \\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\) | \\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, \\\\, y = 1 \\\\) | \\\\( \\\\eta = 0.1 \\\\) |
-   c. Step-by-Step Unicode Numbered Highlights (❶, ❷, ❸, ❹, etc.):
-      - Use bold headings (e.g., "❶ **Compute the linear score z**").
-      - Place equation blocks inside an HTML div container with light-blue styling:
-        <div class="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center">
-          \\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = (1)(2) + (-1)(1) = 2 - 1 = 1 \\\\)
-        </div>
-   d. Final Answer Box: Place the final formatted answer inside a light-green alert container at the very end:
-      <div class="bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/40 p-3.5 rounded-sm my-3 font-semibold text-green-700 dark:text-green-400 flex items-center gap-2">
-        ✓ **Final Answer:** 1.054 (rounded to three decimal places)
-      </div>
+3. The "solution" field MUST be a structured, semantic editorial JSON object (NOT a plain string) matching this exact format:
+   {
+     "type": "editorial",
+     "blocks": [
+       { "type": "intro", "content": "We are given binary logistic regression with:" },
+       { "type": "parameterGrid", "headers": ["Parameter vector", "Training example", "Learning rate"], "rows": [["\\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\)", "\\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, y = 1 \\\\)", "\\\\( \\\\eta = 0.1 \\\\)"]] },
+       { "type": "step", "number": "❶", "title": "Compute the linear score z", "equation": "\\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = 1 \\\\)" },
+       { "type": "finalAnswer", "content": "1.054 (rounded to three decimal places)" }
+     ]
+   }
+   Allowed block types: intro, concept, theorem, derivation, proof, parameterGrid, matrixBlock, equationBlock, step, observation, intuition, warning, pitfall, hint, algorithm, pseudocode, complexityAnalysis, graphExplanation, table, finalAnswer, summary.
 4. Keep the language academic, direct, precise, and highly rigorous.
 
 JSON SCHEME REFERENCE:
@@ -90,7 +86,54 @@ JSON SCHEME REFERENCE:
     "difficulty": "Medium",
     "questionType": "NAT",
     "statement": "Consider binary logistic regression with parameter vector... Round your answer to three decimal places.",
-    "solution": "We are given binary logistic regression with:\\n\\n| Parameter vector | Training example | Learning rate |\\n| :---: | :---: | :---: |\\n| \\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\) | \\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, \\\\, y = 1 \\\\) | \\\\( \\\\eta = 0.1 \\\\) |\\n\\n❶ **Compute the linear score z**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = (1)(2) + (-1)(1) = 2 - 1 = 1 \\\\)</div>\\n\\n❷ **Compute the prediction**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( \\\\sigma(z) = \\\\frac{1}{1 + e^{-z}} = \\\\frac{1}{1 + e^{-1}} \\\\approx 0.7311 \\\\)</div>\\n\\n❸ **Compute the gradient**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( \\\\nabla J(\\\\mathbf{w}) = (\\\\sigma(z) - y)\\\\mathbf{x} = (0.7311 - 1)\\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix} = \\\\begin{pmatrix} -0.5378 \\\\\\\\ -0.2689 \\\\end{pmatrix} \\\\)</div>\\n\\n❹ **Perform gradient descent update**\\n<div class=\\\"bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 p-3 rounded-sm my-2 text-center\\\">\\\\( w_1^{new} = 1 - 0.1(-0.5378) = 1.05378 \\\\)</div>\\n\\n<div class=\\\"bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/40 p-3.5 rounded-sm my-3 font-semibold text-green-700 dark:text-green-400 flex items-center gap-2\\\">✓ **Final Answer:** 1.054 (rounded to three decimal places)</div>",
+    "solution": {
+      "type": "editorial",
+      "blocks": [
+        {
+          "type": "intro",
+          "content": "We are given binary logistic regression with:"
+        },
+        {
+          "type": "parameterGrid",
+          "headers": ["Parameter vector", "Training example", "Learning rate"],
+          "rows": [
+            [
+              "\\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\)",
+              "\\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, \\\\, y = 1 \\\\)",
+              "\\\\( \\\\eta = 0.1 \\\\)"
+            ]
+          ]
+        },
+        {
+          "type": "step",
+          "number": "❶",
+          "title": "Compute the linear score z",
+          "equation": "\\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = (1)(2) + (-1)(1) = 2 - 1 = 1 \\\\)"
+        },
+        {
+          "type": "step",
+          "number": "❷",
+          "title": "Compute the prediction",
+          "equation": "\\\\( \\\\sigma(z) = \\\\frac{1}{1 + e^{-z}} = \\\\frac{1}{1 + e^{-1}} \\\\approx 0.7311 \\\\)"
+        },
+        {
+          "type": "step",
+          "number": "❸",
+          "title": "Compute the gradient",
+          "equation": "\\\\( \\\\nabla J(\\\\mathbf{w}) = (\\\\sigma(z) - y)\\\\mathbf{x} = (0.7311 - 1)\\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix} = \\\\begin{pmatrix} -0.5378 \\\\\\\\ -0.2689 \\\\end{pmatrix} \\\\)"
+        },
+        {
+          "type": "step",
+          "number": "❹",
+          "title": "Perform gradient descent update",
+          "equation": "\\\\( w_1^{new} = 1 - 0.1(-0.5378) = 1.05378 \\\\)"
+        },
+        {
+          "type": "finalAnswer",
+          "content": "1.054 (rounded to three decimal places)"
+        }
+      ]
+    },
     "positiveMarks": 2,
     "negativeMarks": 0,
     "options": []
@@ -1457,7 +1500,7 @@ export default function AdminPanel() {
                     <span>💡 Step-by-Step Rigorous Solution</span>
                   </h4>
                   <div className="p-6 bg-[#fdfdfb] dark:bg-zinc-900 border border-border/70 border-l-4 border-l-amber-500 rounded-sm shadow-sm overflow-x-auto text-sm leading-relaxed text-foreground font-serif">
-                    <LatexRenderer latex={previewItem.solution} />
+                    <EditorialRenderer solution={previewItem.solution} />
                   </div>
                 </div>
               )}

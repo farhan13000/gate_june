@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Send, RotateCcw, CheckCircle2, XCircle, ArrowLeft, Clock, Hash, ThumbsUp } from "lucide-react";
 import LatexRenderer from "@/components/LatexRenderer";
+import EditorialRenderer from "@/components/EditorialRenderer";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -238,7 +239,7 @@ export default function ProblemDetail() {
               <div>
                 <h3 className="font-serif font-bold text-base mb-3 text-foreground">Editorial Solution</h3>
                 <div className="text-foreground/85 leading-[1.8]">
-                  <LatexRenderer latex={problem.solution} />
+                  <EditorialRenderer solution={problem.solution} />
                 </div>
               </div>
             </div>
