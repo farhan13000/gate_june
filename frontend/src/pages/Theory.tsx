@@ -11,6 +11,14 @@ const BASE_SUBJECTS = [
   { id: "Computer Architecture", title: "Computer Architecture", desc: "Memory coalescing, bank mapping, and GPU architectures." }
 ];
 
+const parseTopics = (topicString?: string) => {
+  if (!topicString) return [];
+  return topicString
+    .split(/\s*(?:[,+&\/])\s*/)
+    .map((topic) => topic.trim())
+    .filter(Boolean);
+};
+
 export default function Theory() {
   const [theories, setTheories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +28,24 @@ export default function Theory() {
   
   const [bookmarked, setBookmarked] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [coveredTopics, setCoveredTopics] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("theory_covered_topics");
+      if (raw) setCoveredTopics(JSON.parse(raw));
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  const toggleCovered = (topicId: string) => {
+    setCoveredTopics(prev => {
+      const next = { ...prev, [topicId]: !prev[topicId] };
+      try { localStorage.setItem("theory_covered_topics", JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     fetch("/api/problems/theories/all")
@@ -39,7 +65,7 @@ export default function Theory() {
 
   // Derive Subjects dynamically mixed with Base Subjects
   const SUBJECTS = BASE_SUBJECTS.map(base => {
-    const matchingTheories = theories.filter(t => t.topic === base.id);
+    const matchingTheories = theories.filter(t => parseTopics(t.topic).includes(base.id));
     const uniqueChapters = new Set(matchingTheories.map(t => t.chapterId));
     return { ...base, chapters: uniqueChapters.size, hasContent: matchingTheories.length > 0 };
   });
@@ -55,21 +81,30 @@ export default function Theory() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {SUBJECTS.map(sub => (
-            <button 
-              key={sub.id}
-              onClick={() => setSelectedSubject(sub.id)} 
-              className="academic-card p-6 text-left flex flex-col hover:border-primary/40 hover:shadow-sm transition-all duration-200 group"
-            >
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
-                <BookOpen size={20} />
+            <div key={sub.id} className="relative">
+              <button
+                onClick={() => setSelectedSubject(sub.id)}
+                className="academic-card p-6 text-left flex flex-col hover:border-primary/40 hover:shadow-sm transition-all duration-200 group w-full text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
+                  <BookOpen size={20} />
+                </div>
+                <h2 className="font-serif text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{sub.title}</h2>
+                <p className="text-sm text-muted-foreground mb-6 leading-relaxed flex-1">{sub.desc}</p>
+                <div className="text-xs font-mono text-muted-foreground border-t border-border pt-4 mt-auto flex items-center justify-between">
+                  <span>{sub.chapters} Chapters</span>
+                  <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">Read →</span>
+                </div>
+              </button>
+              <div className="absolute top-3 right-3">
+                <button
+                  onClick={() => toggleCovered(sub.id)}
+                  className={`text-xs px-2 py-1 rounded-sm border ${coveredTopics[sub.id] ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border"}`}
+                >
+                  {coveredTopics[sub.id] ? "Covered" : "Mark Covered"}
+                </button>
               </div>
-              <h2 className="font-serif text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{sub.title}</h2>
-              <p className="text-sm text-muted-foreground mb-6 leading-relaxed flex-1">{sub.desc}</p>
-              <div className="text-xs font-mono text-muted-foreground border-t border-border pt-4 mt-auto flex items-center justify-between">
-                <span>{sub.chapters} Chapters</span>
-                <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">Read →</span>
-              </div>
-            </button>
+            </div>
           ))}
         </div>
       </div>
@@ -77,7 +112,7 @@ export default function Theory() {
   }
 
   // Article View Setup
-  const subjectTheories = theories.filter(t => t.topic === selectedSubject);
+  const subjectTheories = theories.filter(t => parseTopics(t.topic).includes(selectedSubject));
   
   // Build dynamic TOC
   const chapterMap = new Map();
@@ -146,12 +181,20 @@ export default function Theory() {
                 <h1 className="font-serif text-3xl font-bold text-foreground leading-tight">
                   {currentTheory.sectionId} {currentTheory.title}
                 </h1>
-                <button
-                  onClick={() => setBookmarked(!bookmarked)}
-                  className={`mt-1 p-1.5 rounded-sm border transition-colors duration-150 ${bookmarked ? "border-primary text-primary bg-primary/8" : "border-border text-muted-foreground hover:text-foreground"}`}
-                >
-                  <Bookmark size={14} fill={bookmarked ? "currentColor" : "none"} />
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setBookmarked(!bookmarked)}
+                    className={`mt-1 p-1.5 rounded-sm border transition-colors duration-150 ${bookmarked ? "border-primary text-primary bg-primary/8" : "border-border text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <Bookmark size={14} fill={bookmarked ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    onClick={() => toggleCovered(selectedSubject!)}
+                    className={`mt-1 text-xs px-2 py-1 rounded-sm border ${coveredTopics[selectedSubject!] ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border"}`}
+                  >
+                    {coveredTopics[selectedSubject!] ? "Covered" : "Mark Subject Covered"}
+                  </button>
+                </div>
               </div>
               <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
                 <span>Section {currentTheory.sectionId}</span>

@@ -1,5 +1,6 @@
 import express from "express";
 import { getApprovedQuestions, getQuestionById, toggleUpvote, getApprovedTheories, getTheoryById } from "../controllers/problemController";
+import { submitAnswer, getQuestionSubmissions } from "../controllers/submissionController";
 import { requireAuth } from "../middleware/auth";
 
 const router = express.Router();
@@ -12,5 +13,7 @@ router.get("/theories/:id", getTheoryById);
 router.get("/", getApprovedQuestions);
 router.get("/:id", getQuestionById);
 router.post("/:id/upvote", requireAuth, toggleUpvote);
+router.post("/:id/submit", requireAuth, submitAnswer);
+router.get("/:id/submissions", requireAuth, getQuestionSubmissions);
 
 export default router;

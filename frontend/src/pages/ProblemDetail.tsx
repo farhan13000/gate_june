@@ -25,9 +25,24 @@ export default function ProblemDetail() {
   const [mcqSelected, setMcqSelected] = useState<string | null>(null);
   const [msqSelected, setMsqSelected] = useState<string[]>([]);
 
+  // Submissions list
+  const [submissions, setSubmissions] = useState<any[]>([]);
+
   // Upvote state
   const [upvotes, setUpvotes] = useState(0);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+
+  const fetchSubmissions = async () => {
+    try {
+      const res = await fetch(`/api/problems/${id}/submissions`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setSubmissions(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch submissions", err);
+    }
+  };
 
   useEffect(() => {
     fetch(`/api/problems/${id}`)
@@ -44,7 +59,11 @@ export default function ProblemDetail() {
         console.error("Failed to load problem", err);
         setLoading(false);
       });
-  }, [id, user]);
+
+    if (isAuthenticated) {
+      fetchSubmissions();
+    }
+  }, [id, user, isAuthenticated]);
 
   const toggleMsq = (optId: string) =>
     setMsqSelected(prev => prev.includes(optId) ? prev.filter(x => x !== optId) : [...prev, optId]);
@@ -86,27 +105,43 @@ export default function ProblemDetail() {
     if (!canSubmit() || !problem) return;
     setSubmitting(true);
     
-    // Local evaluation for now
-    let isCorrect = false;
-    
-    if (problem.questionType === "MCQ") {
-      const correctOpt = problem.options.find((o: any) => o.isCorrect);
-      isCorrect = correctOpt && correctOpt._id === mcqSelected;
-    } else if (problem.questionType === "MSQ") {
-      const correctOptIds = problem.options.filter((o: any) => o.isCorrect).map((o: any) => o._id);
-      isCorrect = msqSelected.length === correctOptIds.length && msqSelected.every(id => correctOptIds.includes(id));
-    } else {
-      // For NAT, just a rough check (assumes solution contains the exact text, which might not be true in real scenarios, but we do our best)
-      // Since NAT isn't fully structured in the new schema yet, we just check if it contains the answer
-      isCorrect = problem.solution.includes(natAnswer.trim());
-    }
+    try {
+      const res = await fetch(`/api/problems/${id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mcqSelected,
+          msqSelected,
+          natAnswer
+        }),
+        credentials: "include"
+      });
 
-    setResult({ 
-      isCorrect, 
-      marksAwarded: isCorrect ? problem.markingScheme.positive : -problem.markingScheme.negative 
-    });
-    setSubmitted(true);
-    setSubmitting(false);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to submit answer");
+      }
+
+      const data = await res.json();
+      setResult({
+        isCorrect: data.submission.isCorrect,
+        marksAwarded: data.submission.marksAwarded
+      });
+      setSubmitted(true);
+      if (data.submission.isCorrect) {
+        toast.success("Correct answer!");
+      } else {
+        toast.error("Incorrect answer.");
+      }
+      
+      // Refresh submissions history
+      fetchSubmissions();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit answer");
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleClear = () => {
@@ -246,7 +281,52 @@ export default function ProblemDetail() {
           )}
 
           {tab === "submissions" && (
-            <div className="py-10 text-center text-sm text-muted-foreground">Submissions not tracked yet.</div>
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <h3 className="font-serif font-bold text-base mb-3 text-foreground">Submission History</h3>
+              {submissions.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground bg-card border border-border rounded-sm">
+                  No submissions yet. Solve the problem to see your history.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-border rounded-sm bg-card">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-secondary/20">
+                        <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Submitted At</th>
+                        <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Status</th>
+                        <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Answer Details</th>
+                        <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Marks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {submissions.map((sub: any) => {
+                        const date = new Date(sub.createdAt).toLocaleString();
+                        return (
+                          <tr key={sub._id} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
+                            <td className="py-3 px-4 text-muted-foreground font-mono">{date}</td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-sm text-[10px] ${
+                                sub.isCorrect 
+                                  ? "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400" 
+                                  : "bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400"
+                              }`}>
+                                {sub.isCorrect ? "Correct" : "Incorrect"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-mono text-muted-foreground">
+                              {sub.natAnswer ? `Value: ${sub.natAnswer}` : (sub.submittedOptionIds?.length ? `Option IDs: ${sub.submittedOptionIds.join(", ")}` : "N/A")}
+                            </td>
+                            <td className={`py-3 px-4 font-mono font-bold ${sub.isCorrect ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                              {sub.marksAwarded > 0 ? `+${sub.marksAwarded}` : sub.marksAwarded}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

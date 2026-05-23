@@ -7,6 +7,24 @@ const topics = ["All Topics", "Statistics", "Linear Algebra", "Probability", "Ma
 const difficulties = ["All Difficulties", "Easy", "Medium", "Hard"];
 const statuses = ["All", "Solved", "Unsolved"];
 
+const parseTopics = (topicString?: string) => {
+  if (!topicString) return [];
+  return topicString
+    .split(/\s*(?:[,+&\/])\s*/)
+    .map((topic) => topic.trim())
+    .filter(Boolean);
+};
+
+const getProblemNumber = (id: string) => {
+  try {
+    const hex = id.slice(-6);
+    const n = parseInt(hex, 16);
+    return String(n).padStart(6, "0");
+  } catch (e) {
+    return id.slice(0, 6);
+  }
+};
+
 export default function Problems() {
   const [problems, setProblems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,9 +48,29 @@ export default function Problems() {
   }, []);
 
   const filtered = problems.filter(p => {
-    if (topic !== "All Topics" && p.topic !== topic) return false;
+    if (topic !== "All Topics") {
+      const pTopics = parseTopics(p.topic).map(t => t.toLowerCase());
+      if (!pTopics.includes(topic.toLowerCase())) return false;
+    }
     if (difficulty !== "All Difficulties" && p.difficulty !== difficulty) return false;
-    if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
+    // allow searching by title or numeric id (e.g. #123 or 123)
+    if (search) {
+      const s = search.trim();
+      const asNum = s.replace(/^#/, "");
+      const pn = getProblemNumber(p._id);
+      if (/^#?\d+$/.test(s)) {
+        if (!pn.includes(asNum)) return false;
+      } else {
+        if (!p.title.toLowerCase().includes(s.toLowerCase())) return false;
+      }
+    }
+    // status filter (requires problem to include solved boolean; fallback: treat as unsolved)
+    if (status === "Solved") {
+      if (!p.solved) return false;
+    }
+    if (status === "Unsolved") {
+      if (p.solved) return false;
+    }
     return true;
   });
 
@@ -122,6 +160,7 @@ export default function Problems() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-secondary/40">
+                  <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">ID</th>
                   <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Title</th>
                   <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal hidden sm:table-cell">Topic</th>
                   <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Difficulty</th>
@@ -131,15 +170,16 @@ export default function Problems() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="py-16 text-center text-muted-foreground text-sm">Loading problems...</td>
+                    <td colSpan={5} className="py-16 text-center text-muted-foreground text-sm">Loading problems...</td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-16 text-center text-muted-foreground text-sm">No problems match the selected filters.</td>
+                    <td colSpan={5} className="py-16 text-center text-muted-foreground text-sm">No problems match the selected filters.</td>
                   </tr>
                 ) : (
                   filtered.map(p => (
                     <tr key={p._id} className="problem-row">
+                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">#{getProblemNumber(p._id)}</td>
                       <td className="py-3 px-4">
                         <Link to={`/problems/${p._id}`} className="text-foreground hover:text-primary transition-colors duration-150 font-medium">
                           <LatexRenderer latex={p.title} />
@@ -147,7 +187,7 @@ export default function Problems() {
                       </td>
                       <td className="py-3 px-4 hidden sm:table-cell">
                         <div className="flex flex-wrap gap-1.5 max-w-[280px]">
-                          {p.topic ? p.topic.split(/\s*[\+,]\s*/).map((subTopic: string, idx: number) => (
+                          {p.topic ? parseTopics(p.topic).map((subTopic: string, idx: number) => (
                             <span
                               key={idx}
                               className="text-xs px-2.5 py-0.5 border border-border bg-card text-foreground/80 rounded-sm font-sans font-semibold transition-all"

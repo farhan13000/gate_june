@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Footer from "./components/Footer";
 import Index from "./pages/Index";
 import Problems from "./pages/Problems";
 import ProblemDetail from "./pages/ProblemDetail";
@@ -12,6 +13,7 @@ import Theory from "./pages/Theory";
 import Contests from "./pages/Contests";
 import Dashboard from "./pages/Dashboard";
 import Leaderboard from "./pages/Leaderboard";
+import Discuss from "./pages/Discuss";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -22,6 +24,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main>{children}</main>
+      <Footer />
     </div>
   );
 }
@@ -77,6 +80,7 @@ const App = () => (
               }
             />
             <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/discuss" element={<Discuss />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="*" element={<NotFound />} />

@@ -8,7 +8,7 @@ import {
   BarChart as ReBarChart, Bar, Cell, PieChart, Pie, Legend,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, CartesianGrid
 } from "recharts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
@@ -169,11 +169,94 @@ export default function Dashboard() {
   const [ratingTab, setRatingTab] = useState<"current" | "old">("current");
   const [perfTab, setPerfTab] = useState<"subject" | "difficulty" | "type" | "testtype">("subject");
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
+  const [dashboard, setDashboard] = useState<any | null>(null);
 
-  const totalAttempted = subjectPerformance.reduce((s, x) => s + x.attempted, 0);
-  const totalCorrect = subjectPerformance.reduce((s, x) => s + x.correct, 0);
-  const overallAccuracy = Math.round((totalCorrect / totalAttempted) * 100);
-  const weakSubjects = subjectPerformance.filter(s => s.weak);
+  useEffect(() => {
+    console.log("Dashboard: mounting — fetching initial data");
+    const fetchDashboard = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const json = await res.json();
+        console.log("Dashboard: initial data received", json);
+        setDashboard(json.dashboard);
+      } catch (err) {
+        console.error("Dashboard: failed to fetch initial data", err);
+      }
+    };
+
+    fetchDashboard();
+
+    // Subscribe to SSE stream for live updates
+    try {
+      const esUrl = `${import.meta.env.VITE_API_BASE || ""}/api/dashboard/stream`;
+      const es = new EventSource(esUrl);
+      es.addEventListener("dashboard-update", (e: any) => {
+        try {
+          const data = JSON.parse(e.data);
+          console.log("Dashboard: SSE update", data);
+          setDashboard((prev: any) => ({ ...prev, stats: { ...prev?.stats, ...data } }));
+        } catch (err) {
+          console.error("Dashboard: SSE parse error", err);
+        }
+      });
+      es.onerror = (ev) => {
+        console.error("Dashboard: SSE error", ev);
+        es.close();
+      };
+
+      return () => {
+        console.log("Dashboard: unmounting — closing SSE");
+        es.close();
+      };
+    } catch (err) {
+      console.error("Dashboard: SSE setup failed", err);
+    }
+  }, []);
+
+  // Merge server-provided data (if any) with the static defaults
+  const subjectPerformanceData = dashboard?.subjectPerformance ?? subjectPerformance;
+  const totalAttempted = dashboard?.stats?.totalAttempted ?? subjectPerformanceData.reduce((s: number, x: any) => s + x.attempted, 0);
+  const totalCorrect = dashboard?.stats?.totalCorrect ?? subjectPerformanceData.reduce((s: number, x: any) => s + x.correct, 0);
+  const overallAccuracy = dashboard?.stats?.overallAccuracy ?? (totalAttempted ? Math.round((totalCorrect / totalAttempted) * 100) : 0);
+  const weakSubjects = subjectPerformanceData.filter((s: any) => s.weak);
+
+  // Derived radar data dynamically
+  const radarData = subjectPerformanceData.slice(0, 6).map((s: any) => ({
+    subject: s.subject.split(" ")[0],
+    score: s.accuracy,
+    fullMark: 100,
+  }));
+
+  // Dynamic charts and arrays
+  const difficultyPerformanceData = dashboard?.difficultyPerformance ?? difficultyPerformance;
+  const questionTypePerformanceData = dashboard?.questionTypePerformance ?? questionTypePerformance;
+  const weeklyActivityData = dashboard?.weeklyActivity ?? weeklyActivity;
+  const ratingDataData = dashboard?.ratingData ?? ratingData;
+  const chapterWiseDataData = dashboard?.chapterWiseData ?? chapterWiseData;
+
+  // Heatmap calculation
+  const heatmapDataData = dashboard?.heatmapData ?? heatmapData;
+  const weeks: any[][] = [];
+  let week: any[] = [];
+  heatmapDataData.forEach((d: any, i: number) => {
+    week.push(d);
+    if (week.length === 7 || i === heatmapDataData.length - 1) {
+      weeks.push(week);
+      week = [];
+    }
+  });
+
+  const rating = dashboard?.stats?.rating ?? 1500;
+  const problemsSolved = dashboard?.stats?.problemsSolved ?? 0;
+  const streak = dashboard?.stats?.currentStreakDays ?? 0;
+  const contests = dashboard?.stats?.contestsParticipated ?? 0;
+  
+  const globalRank = typeof dashboard?.stats?.rating === "number" ? `#${Math.max(1, 2000 - Math.floor(rating * 0.95))}` : "—";
+  const countryRank = typeof dashboard?.stats?.rating === "number" ? `#${Math.max(1, 500 - Math.floor(rating * 0.24))}` : "—";
+  const ratingStarsCount = Math.min(5, Math.max(1, Math.floor(rating / 400)));
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -181,9 +264,23 @@ export default function Dashboard() {
       <div className="text-xs text-muted-foreground mb-6 font-mono">
         <span className="text-primary cursor-pointer hover:underline">Home</span>
         <span className="mx-1">»</span>
-        <span>arjun_stat</span>
+        <span>{dashboard?.profile?.fullName ?? "Student"}</span>
         <span className="mx-1">»</span>
         <span className="text-muted-foreground">Dashboard</span>
+      </div>
+
+      {/* Quick Sections Nav */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        {[
+          ["Overview", "#overview"],
+          ["Performance", "#performance"],
+          ["Practice", "#practice"],
+          ["Activity", "#activity"],
+          ["Topic Mastery", "#topic-mastery"],
+          ["Quick Panel", "#quick-panel"],
+        ].map(([label, href]) => (
+          <a key={href as string} href={href as string} className="text-xs py-1 px-2 border border-border rounded-sm bg-background text-muted-foreground hover:bg-secondary/40">{label}</a>
+        ))}
       </div>
 
       {/* ── Top Stats Bar ── */}
@@ -191,9 +288,9 @@ export default function Dashboard() {
         <StatCard label="Total Attempted" value={String(totalAttempted)} sub="all tests" />
         <StatCard label="Correct" value={String(totalCorrect)} sub="answers" />
         <StatCard label="Accuracy" value={`${overallAccuracy}%`} sub="overall" />
-        <StatCard label="Problems Solved" value="312" sub="unique" />
-        <StatCard label="Current Streak" value="14d" sub="days active" />
-        <StatCard label="GATE DA Rating" value="2041" sub="Div 1 · #48 global" />
+        <StatCard label="Problems Solved" value={String(problemsSolved)} sub="unique" />
+        <StatCard label="Current Streak" value={`${streak}d`} sub="days active" />
+        <StatCard label="GATE DA Rating" value={String(rating)} sub={`${globalRank} global`} />
       </div>
 
       {/* ── Main 2-col layout ── */}
@@ -203,7 +300,7 @@ export default function Dashboard() {
         <div className="md:col-span-2 space-y-6">
 
           {/* Profile Card */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div id="overview" className="bg-card border border-border rounded-sm p-5">
             <div className="flex items-start gap-5 pb-4 border-b border-border">
               <div className="w-14 h-14 bg-secondary border border-border rounded-sm flex items-center justify-center shrink-0">
                 <svg viewBox="0 0 64 64" className="w-10 h-10 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -212,7 +309,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
-                  <h1 className="font-serif text-lg font-bold text-foreground">arjun_stat</h1>
+                  <h1 className="font-serif text-lg font-bold text-foreground">{dashboard?.profile?.fullName ?? "Student"}</h1>
                   <div className="flex gap-2">
                     <button className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={13} /></button>
                     <button className="text-muted-foreground hover:text-foreground transition-colors"><UserMinus size={13} /></button>
@@ -220,12 +317,12 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
                   {[
-                    ["Username", "arjun_stat"],
-                    ["Country", "🇮🇳 India"],
-                    ["Status", "Student"],
-                    ["Institute", "IIT Bombay"],
-                    ["Target Exam", "GATE DA 2026"],
-                    ["Prep Started", "Oct 2025"],
+                    ["Email", dashboard?.profile?.email ?? "—"],
+                    ["Role", dashboard?.profile?.role ?? "student"],
+                    ["Institution", dashboard?.profile?.institution ?? "—"],
+                    ["Target Year", dashboard?.profile?.targetGateYear ? String(dashboard.profile.targetGateYear) : "—"],
+                    ["Auth", dashboard?.profile?.authProvider ?? "local"],
+                    ["Member Since", dashboard?.profile?.createdAt ? new Date(dashboard.profile.createdAt).toLocaleDateString() : "—"],
                   ].map(([k, v]) => (
                     <div key={k} className="flex gap-2">
                       <span className="text-muted-foreground w-28 shrink-0">{k}:</span>
@@ -242,17 +339,19 @@ export default function Dashboard() {
                   <AlertTriangle size={9} /> Weak: {s.subject} ({s.accuracy}%)
                 </span>
               ))}
-              <span className="inline-flex items-center gap-1 text-[10px] bg-primary/8 border border-primary/25 text-primary px-2 py-0.5 rounded-sm font-mono">
-                <CheckCircle2 size={9} /> Strong: Databases (91%)
-              </span>
+              {subjectPerformanceData.filter((s: any) => !s.weak && s.attempted > 0).slice(0, 1).map((s: any) => (
+                <span key={s.subject} className="inline-flex items-center gap-1 text-[10px] bg-primary/8 border border-primary/25 text-primary px-2 py-0.5 rounded-sm font-mono">
+                  <CheckCircle2 size={9} /> Strong: {s.subject} ({s.accuracy}%)
+                </span>
+              ))}
               <span className="inline-flex items-center gap-1 text-[10px] bg-secondary border border-border text-muted-foreground px-2 py-0.5 rounded-sm font-mono">
-                <Flame size={9} /> 14-day streak
+                <Flame size={9} /> {streak}-day streak
               </span>
             </div>
           </div>
 
           {/* ── Performance Analytics Tabs ── */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div id="performance" className="bg-card border border-border rounded-sm p-5">
             <SectionHeader title="Performance Analytics" sub="Accuracy, attempts, and time analysis across all dimensions" />
 
             {/* Tab bar */}
@@ -281,22 +380,26 @@ export default function Dashboard() {
                   <div>
                     <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Subject Radar</p>
                     <ResponsiveContainer width="100%" height={180}>
-                      <RadarChart data={radarData} margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
-                        <PolarGrid stroke="hsl(var(--border))" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} />
-                        <Radar dataKey="score" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={1.5} />
-                      </RadarChart>
+                      {radarData && radarData.length > 0 ? (
+                        <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="80%" margin={{ top: 5, right: 20, bottom: 5, left: 20 }}>
+                          <PolarGrid stroke="hsl(var(--border))" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} />
+                          <Radar dataKey="score" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={1.5} />
+                        </RadarChart>
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">No subject data available</div>
+                      )}
                     </ResponsiveContainer>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Accuracy by Subject</p>
                     <ResponsiveContainer width="100%" height={180}>
-                      <ReBarChart data={subjectPerformance} layout="vertical" margin={{ left: 5, right: 20 }}>
+                      <ReBarChart data={subjectPerformanceData} layout="vertical" margin={{ left: 5, right: 20 }}>
                         <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                         <YAxis type="category" dataKey="subject" tick={{ fontSize: 8, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} width={70} />
                         <Tooltip {...tooltipStyle} formatter={(v: number) => [`${v}%`, "Accuracy"]} />
                         <Bar dataKey="accuracy" radius={[0, 2, 2, 0]} minPointSize={3}>
-                          {subjectPerformance.map((entry) => (
+                          {subjectPerformanceData.map((entry: any) => (
                             <Cell key={entry.subject} fill={entry.weak ? "hsl(var(--destructive) / 0.7)" : "hsl(var(--primary))"} />
                           ))}
                         </Bar>
@@ -315,7 +418,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {subjectPerformance.map(s => (
+                      {subjectPerformanceData.map((s: any) => (
                         <tr
                           key={s.subject}
                           onClick={() => setActiveSubject(activeSubject === s.subject ? null : s.subject)}
@@ -352,17 +455,17 @@ export default function Dashboard() {
 
             {/* Difficulty tab */}
             {perfTab === "difficulty" && (
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Accuracy % by Difficulty</p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <ReBarChart data={difficultyPerformance} margin={{ top: 10, bottom: 5 }}>
+                    <ReBarChart data={difficultyPerformanceData} margin={{ top: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                       <XAxis dataKey="level" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                       <Tooltip {...tooltipStyle} formatter={(v: number) => [`${v}%`, "Accuracy"]} />
                       <Bar dataKey="accuracy" radius={[2, 2, 0, 0]}>
-                        {difficultyPerformance.map((e, i) => (
+                        {difficultyPerformanceData.map((_e: any, i: number) => (
                           <Cell key={i} fill={CHART_COLORS[i]} />
                         ))}
                       </Bar>
@@ -372,7 +475,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Attempted vs Correct</p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <ReBarChart data={difficultyPerformance} margin={{ top: 10, bottom: 5 }}>
+                    <ReBarChart data={difficultyPerformanceData} margin={{ top: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                       <XAxis dataKey="level" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
@@ -383,8 +486,8 @@ export default function Dashboard() {
                     </ReBarChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="col-span-2 grid grid-cols-3 gap-3">
-                  {difficultyPerformance.map(d => (
+                <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {difficultyPerformanceData.map((d: any) => (
                     <div key={d.level} className="p-3 border border-border rounded-sm bg-secondary/20">
                       <div className="text-xs font-semibold text-foreground mb-1">{d.level}</div>
                       <div className="font-mono text-xl font-bold text-primary">{d.accuracy}%</div>
@@ -399,17 +502,17 @@ export default function Dashboard() {
             {/* Question Type tab */}
             {perfTab === "type" && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Accuracy by Question Format</p>
                     <ResponsiveContainer width="100%" height={200}>
-                      <ReBarChart data={questionTypePerformance} margin={{ bottom: 5 }}>
+                      <ReBarChart data={questionTypePerformanceData} margin={{ bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         <XAxis dataKey="type" tick={{ fontSize: 8, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                         <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                         <Tooltip {...tooltipStyle} formatter={(v: number) => [`${v}%`, "Accuracy"]} />
                         <Bar dataKey="accuracy" radius={[2, 2, 0, 0]}>
-                          {questionTypePerformance.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                          {questionTypePerformanceData.map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                         </Bar>
                       </ReBarChart>
                     </ResponsiveContainer>
@@ -417,7 +520,7 @@ export default function Dashboard() {
                   <div>
                     <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Avg Time per Format (min)</p>
                     <ResponsiveContainer width="100%" height={200}>
-                      <ReBarChart data={questionTypePerformance} margin={{ bottom: 5 }}>
+                      <ReBarChart data={questionTypePerformanceData} margin={{ bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         <XAxis dataKey="type" tick={{ fontSize: 8, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
@@ -436,7 +539,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {questionTypePerformance.map(q => (
+                    {questionTypePerformanceData.map((q: any) => (
                       <tr key={q.type} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
                         <td className="py-2 px-3 font-medium text-foreground">{q.type}</td>
                         <td className="py-2 px-3 font-mono text-muted-foreground">{q.attempted}</td>
@@ -504,7 +607,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Chapter-wise Weak Areas ── */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div id="practice" className="bg-card border border-border rounded-sm p-5">
             <SectionHeader title="Chapter-wise Focus Areas" sub="Chapters that need immediate attention, sorted by priority" />
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
@@ -516,7 +619,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {chapterWiseData.sort((a, b) => a.accuracy - b.accuracy).map(c => (
+                  {[...chapterWiseDataData].sort((a: any, b: any) => a.accuracy - b.accuracy).map((c: any) => (
                     <tr key={c.chapter} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
                       <td className="py-2 px-3 font-medium text-foreground">{c.chapter}</td>
                       <td className="py-2 px-3 text-muted-foreground">{c.subject}</td>
@@ -537,22 +640,22 @@ export default function Dashboard() {
             </div>
             <div className="mt-3 grid grid-cols-3 gap-3 text-[10px] font-mono text-muted-foreground">
               <div className="p-2.5 border border-destructive/25 bg-destructive/5 rounded-sm">
-                <div className="text-destructive font-bold mb-1">🔴 High Priority ({chapterWiseData.filter(c => c.priority === "High").length} chapters)</div>
-                {chapterWiseData.filter(c => c.priority === "High").map(c => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
+                <div className="text-destructive font-bold mb-1">🔴 High Priority ({chapterWiseDataData.filter((c: any) => c.priority === "High").length} chapters)</div>
+                {chapterWiseDataData.filter((c: any) => c.priority === "High").map((c: any) => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
               </div>
               <div className="p-2.5 border border-primary/25 bg-primary/5 rounded-sm">
-                <div className="text-primary font-bold mb-1">🔵 Medium Priority ({chapterWiseData.filter(c => c.priority === "Medium").length} chapters)</div>
-                {chapterWiseData.filter(c => c.priority === "Medium").map(c => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
+                <div className="text-primary font-bold mb-1">🔵 Medium Priority ({chapterWiseDataData.filter((c: any) => c.priority === "Medium").length} chapters)</div>
+                {chapterWiseDataData.filter((c: any) => c.priority === "Medium").map((c: any) => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
               </div>
               <div className="p-2.5 border border-border bg-secondary/20 rounded-sm">
-                <div className="font-bold mb-1 text-muted-foreground">✅ Low Priority ({chapterWiseData.filter(c => c.priority === "Low").length} chapters)</div>
-                {chapterWiseData.filter(c => c.priority === "Low").map(c => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
+                <div className="font-bold mb-1 text-muted-foreground">✅ Low Priority ({chapterWiseDataData.filter((c: any) => c.priority === "Low").length} chapters)</div>
+                {chapterWiseDataData.filter((c: any) => c.priority === "Low").map((c: any) => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
               </div>
             </div>
           </div>
 
           {/* ── Heatmap ── */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div id="activity" className="bg-card border border-border rounded-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <SectionHeader title="Submissions Heat Map" sub="Daily activity over last 6 months" />
               <select className="text-xs border border-border bg-background text-foreground px-2 py-1 rounded-sm font-mono">
@@ -584,11 +687,11 @@ export default function Dashboard() {
           {/* ── Weekly Activity ── */}
           <div className="bg-card border border-border rounded-sm p-5">
             <SectionHeader title="Weekly Activity" sub="Questions solved and time spent this week" />
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Questions / Day</p>
                 <ResponsiveContainer width="100%" height={140}>
-                  <ReBarChart data={weeklyActivity}>
+                  <ReBarChart data={weeklyActivityData}>
                     <XAxis dataKey="day" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                     <Tooltip {...tooltipStyle} />
@@ -599,7 +702,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Time Spent (min)</p>
                 <ResponsiveContainer width="100%" height={140}>
-                  <LineChart data={weeklyActivity}>
+                  <LineChart data={weeklyActivityData}>
                     <XAxis dataKey="day" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
                     <Tooltip {...tooltipStyle} />
@@ -621,12 +724,12 @@ export default function Dashboard() {
                   </button>
                 ))}
               </div>
-              <span className="text-xs text-muted-foreground font-mono">Contests: <strong className="text-foreground">6</strong></span>
+              <span className="text-xs text-muted-foreground font-mono">Contests: <strong className="text-foreground">{contests}</strong></span>
             </div>
             <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={ratingData}>
+              <LineChart data={ratingDataData}>
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
-                <YAxis domain={[1300, 2200]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} width={40} />
+                <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} width={40} />
                 <Tooltip {...tooltipStyle} />
                 <Line type="monotone" dataKey="rating" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 0 }} activeDot={{ r: 4 }} />
               </LineChart>
@@ -634,10 +737,10 @@ export default function Dashboard() {
           </div>
 
           {/* ── Topic Mastery ── */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div id="topic-mastery" className="bg-card border border-border rounded-sm p-5">
             <SectionHeader title="Topic Mastery" sub="Overall mastery level per subject (theory + practice combined)" />
             <div className="space-y-3">
-              {subjectPerformance.map(s => (
+              {subjectPerformanceData.map((s: any) => (
                 <div key={s.subject}>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-foreground flex items-center gap-1.5">
@@ -654,28 +757,28 @@ export default function Dashboard() {
         </div>
 
         {/* ════ RIGHT SIDEBAR ════ */}
-        <div className="space-y-5">
+        <div id="quick-panel" className="space-y-5">
 
           {/* Rating card */}
           <div className="bg-card border border-border rounded-sm p-5 text-center">
-            <div className="font-mono text-4xl font-bold text-foreground">2041</div>
-            <div className="text-xs text-muted-foreground mt-0.5">(Div 1)</div>
+            <div className="font-mono text-4xl font-bold text-foreground">{rating}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{rating >= 2000 ? "(Div 1)" : rating >= 1500 ? "(Div 2)" : "(Unrated)"}</div>
             <div className="flex justify-center gap-0.5 mt-2 mb-1.5">
-              {[...Array(5)].map((_, i) => (
+              {[...Array(ratingStarsCount)].map((_, i) => (
                 <div key={i} className="w-5 h-5 bg-primary flex items-center justify-center">
                   <span className="text-primary-foreground text-[10px]">★</span>
                 </div>
               ))}
             </div>
             <div className="text-xs text-primary font-semibold">GATE DA Rating</div>
-            <div className="text-[10px] text-muted-foreground">(Highest: 2041)</div>
-            <div className="border-t border-border mt-3 pt-3 grid grid-cols-2 gap-3">
-              <div className="text-center border-r border-border">
-                <div className="font-serif text-base font-bold text-foreground">#48</div>
+            <div className="text-[10px] text-muted-foreground">(Highest: {rating})</div>
+            <div className="border-t border-border mt-3 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="text-center sm:border-r sm:border-border">
+                <div className="font-serif text-base font-bold text-foreground">{globalRank}</div>
                 <div className="text-[10px] text-muted-foreground">Global Rank</div>
               </div>
               <div className="text-center">
-                <div className="font-serif text-base font-bold text-foreground">#12</div>
+                <div className="font-serif text-base font-bold text-foreground">{countryRank}</div>
                 <div className="text-[10px] text-muted-foreground">Country Rank</div>
               </div>
             </div>
@@ -686,14 +789,13 @@ export default function Dashboard() {
             <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide">Statistics</h3>
             <div className="space-y-2 text-xs">
               {[
-                ["Problems Solved", "312"],
-                ["Contest Participated", "6"],
-                ["Current Streak", "14 days"],
-                ["Longest Streak", "31 days"],
-                ["Total Study Time", "148 hrs"],
-                ["Avg. Daily Time", "52 min"],
-                ["Full Mocks Taken", "6"],
+                ["Problems Solved", String(problemsSolved)],
+                ["Contest Participated", String(contests)],
+                ["Current Streak", `${streak} days`],
+                ["Total Attempted", String(totalAttempted)],
+                ["Total Correct", String(totalCorrect)],
                 ["Accuracy (Overall)", `${overallAccuracy}%`],
+                ["GATE DA Rating", String(rating)],
               ].map(([l, v]) => (
                 <div key={l} className="flex justify-between">
                   <span className="text-muted-foreground">{l}</span>
@@ -709,17 +811,21 @@ export default function Dashboard() {
               <Zap size={11} className="text-primary" /> Study Recommendations
             </h3>
             <div className="space-y-2.5 text-[10px] font-mono text-muted-foreground">
-              <div className="p-2 bg-destructive/6 border border-destructive/20 rounded-sm">
-                <div className="text-destructive font-bold mb-0.5">🎯 Immediate Focus</div>
-                Practice Eigenvalues (NAT format) — only 35% accuracy. Do 20 NAT problems daily.
-              </div>
-              <div className="p-2 bg-primary/6 border border-primary/20 rounded-sm">
-                <div className="text-primary font-bold mb-0.5">📋 This Week</div>
-                Attempt 2 Full Mock tests. Your mock accuracy (65%) is far below chapter test (85%).
-              </div>
+              {chapterWiseDataData.filter((c: any) => c.priority === "High").slice(0, 1).map((c: any) => (
+                <div key={c.chapter} className="p-2 bg-destructive/6 border border-destructive/20 rounded-sm">
+                  <div className="text-destructive font-bold mb-0.5">🎯 Immediate Focus</div>
+                  {c.chapter} ({c.subject}) — only {c.accuracy}% accuracy. Prioritise {c.format} practice.
+                </div>
+              ))}
+              {weakSubjects.slice(0, 1).map((s: any) => (
+                <div key={s.subject} className="p-2 bg-primary/6 border border-primary/20 rounded-sm">
+                  <div className="text-primary font-bold mb-0.5">📋 This Week</div>
+                  Improve {s.subject} — currently at {s.accuracy}% accuracy. Attempt more {s.subject} practice sets.
+                </div>
+              ))}
               <div className="p-2 bg-secondary border border-border rounded-sm">
-                <div className="font-bold text-foreground mb-0.5">📚 Theory Gap</div>
-                Review SVM Kernels theory before attempting MCQ Multi sets.
+                <div className="font-bold text-foreground mb-0.5">📈 Progress</div>
+                {problemsSolved} problems solved · {streak}-day streak · {overallAccuracy}% accuracy overall.
               </div>
             </div>
           </div>
