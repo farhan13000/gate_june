@@ -5,6 +5,8 @@ import LatexRenderer from "../components/LatexRenderer";
 import EditorialRenderer from "../components/EditorialRenderer";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import AdminHomeSection from "@/components/admin/AdminHomeSection";
+import AdminContestSection from "@/components/admin/AdminContestSection";
 
 const CREATION_PROTOCOLS = {
   Problem: {
@@ -214,7 +216,7 @@ JSON SCHEME REFERENCE:
   }
 };
 
-type Section = "Overview" | "User Analytics" | "Content Management" | "Contest Factory" | "Approval Dashboard" | "Content Inventory" | "Problem Bank" | "Platform Logs";
+type Section = "Overview" | "Home Management" | "User Analytics" | "Content Management" | "Contest Factory" | "Approval Dashboard" | "Content Inventory" | "Problem Bank" | "Platform Logs";
 
 export default function AdminPanel() {
   const { user } = useAuth();
@@ -227,6 +229,7 @@ export default function AdminPanel() {
   const [users, setUsers] = useState<any[]>([]);
   const [pendingQuestions, setPendingQuestions] = useState<any[]>([]);
   const [problemsStats, setProblemsStats] = useState<any[]>([]);
+  const [activeContestCount, setActiveContestCount] = useState(0);
 
   // User Modal State
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
@@ -262,6 +265,7 @@ export default function AdminPanel() {
     fetchUsers();
     fetchPendingQuestions();
     fetchProblems();
+    fetchContestCount();
   }, []);
 
   const fetchUsers = async () => {
@@ -296,6 +300,23 @@ export default function AdminPanel() {
       const res = await fetch("/api/problems");
       if (res.ok) setProblemsStats(await res.json());
     } catch (error) {}
+  };
+
+  const fetchContestCount = async () => {
+    try {
+      const res = await fetch("/api/admin/contests", { credentials: "include" });
+      if (res.ok) {
+        const list = await res.json();
+        const now = Date.now();
+        const active = list.filter(
+          (c: { status: string; endTime: string }) =>
+            c.status === "approved" && new Date(c.endTime).getTime() > now
+        ).length;
+        setActiveContestCount(active);
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
   const submitQuestion = async (e: React.FormEvent) => {
@@ -477,7 +498,7 @@ export default function AdminPanel() {
     }
   };
 
-  const sections: Section[] = ["Overview", "User Analytics", "Content Management", "Problem Bank", "Content Inventory", "Contest Factory", "Approval Dashboard", "Platform Logs"];
+  const sections: Section[] = ["Overview", "Home Management", "User Analytics", "Content Management", "Problem Bank", "Content Inventory", "Contest Factory", "Approval Dashboard", "Platform Logs"];
 
   // ── Content Inventory State ──
   const [allQuestions, setAllQuestions] = useState<any[]>([]);
@@ -603,19 +624,23 @@ export default function AdminPanel() {
               </div>
               <div className="academic-card p-6 border-l-4 border-l-green-500">
                 <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-bold">Active Contests</div>
-                <div className="text-4xl font-bold font-mono text-foreground">0</div>
+                <div className="text-4xl font-bold font-mono text-foreground">{activeContestCount}</div>
               </div>
             </div>
             
             <div className="academic-card p-6 mt-8">
               <h3 className="font-bold text-sm mb-4">Quick Actions</h3>
-              <div className="flex gap-4">
-                <button onClick={() => setActiveSection("Content Management")} className="btn-primary px-4 py-2 text-xs">Create Content</button>
+              <div className="flex flex-wrap gap-4">
+                <button onClick={() => setActiveSection("Home Management")} className="btn-primary px-4 py-2 text-xs">Home & Announcements</button>
+                <button onClick={() => setActiveSection("Content Management")} className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Create Content</button>
                 <button onClick={() => setActiveSection("Approval Dashboard")} className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Review Queue</button>
+                <button onClick={() => setActiveSection("Contest Factory")} className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Schedule Contest</button>
               </div>
             </div>
           </div>
         )}
+
+        {activeSection === "Home Management" && <AdminHomeSection />}
 
         {/* USER ANALYTICS SECTION */}
         {activeSection === "User Analytics" && (
@@ -1008,48 +1033,7 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* CONTEST FACTORY SECTION */}
-        {activeSection === "Contest Factory" && (
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-lg font-bold font-serif mb-3 text-foreground">Contest Configuration</h2>
-            <div className="academic-card p-6">
-              <div className="grid grid-cols-2 gap-6 mb-6">
-                <div>
-                  <label className="block text-xs font-bold text-foreground mb-1.5">Contest Name</label>
-                  <input placeholder="e.g. GATE DA Mock Test 1" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-foreground mb-1.5">Scheduled Date & Time</label>
-                  <div className="relative">
-                    <input type="datetime-local" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-xs font-bold text-foreground mb-2">Problem Sets Timeline Configuration</label>
-                <div className="p-6 border border-dashed border-border rounded-sm bg-secondary/20 text-center">
-                  <p className="text-xs text-muted-foreground">Drag and drop verified problems here to build the contest timeline.</p>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-xs font-bold text-foreground mb-1.5">Participant Access List (Optional)</label>
-                <input placeholder="Leave blank for public contest" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" />
-              </div>
-
-              <div className="mb-8">
-                <label className="block text-xs font-bold text-foreground mb-1.5">Global Scoring Rules Override</label>
-                <input placeholder="e.g. Penalty mode active" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" />
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-border pt-5">
-                <button className="px-5 py-2 text-xs bg-secondary border border-border rounded-sm text-foreground hover:bg-secondary/80">Cancel</button>
-                <button className="btn-primary px-6 py-2 text-xs">Save Contest Configuration</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeSection === "Contest Factory" && <AdminContestSection />}
 
         {/* ── CONTENT INVENTORY SECTION ── */}
         {activeSection === "Content Inventory" && (

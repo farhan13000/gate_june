@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
 
 const navItems = [
+  { label: "Home", href: "/" },
   { label: "Problems", href: "/problems" },
   { label: "Contests", href: "/contests" },
   { label: "Theory", href: "/theory" },
@@ -48,102 +49,78 @@ export default function Navbar() {
   };
 
   return (
-    <header
-      className="border-b border-border sticky top-0 z-50"
-      style={{ backgroundColor: "hsl(var(--navbar-bg))", color: "hsl(var(--navbar-fg))" }}
-    >
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2">
-          <span className="font-serif font-bold text-xl tracking-tight">
-            GATE <span className="text-primary">DA</span>
-          </span>
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#111111] shadow-sm">
+      <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-6">
+        <Link to="/" className="text-lg font-semibold uppercase tracking-[0.25em] text-white">
+          GATE <span className="text-[#2563eb]">DA</span>
         </Link>
 
-        {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-6">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={`text-sm transition-colors duration-150 ${
-                location.pathname.startsWith(item.href)
-                  ? "text-white font-medium"
-                  : "text-white/70 hover:text-white"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav className="hidden lg:flex flex-1 justify-center gap-8">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? location.pathname === "/"
+                : location.pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={`text-sm transition-colors duration-150 ${
+                  isActive ? "text-white font-semibold" : "text-white/70 hover:text-white"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
-          {/* Auth section */}
+        <div className="hidden lg:flex items-center gap-3">
           {isAuthenticated && user ? (
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-2 text-sm text-white/80 hover:text-white transition-colors"
+                className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/90 transition hover:border-white/20"
               >
                 {user.avatarUrl ? (
                   <img
                     src={user.avatarUrl}
                     alt={user.fullName}
-                    className="w-6 h-6 rounded-full border border-white/20 object-cover"
+                    className="h-9 w-9 rounded-full border border-white/20 object-cover"
                   />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-primary/30 border border-white/20 flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-white">
-                      {user.fullName.charAt(0).toUpperCase()}
-                    </span>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2563eb] text-sm font-semibold text-white">
+                    {user.fullName.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="hidden lg:inline max-w-[100px] truncate font-medium">
-                  {user.fullName.split(" ")[0]}
-                </span>
-                <ChevronDown
-                  size={12}
-                  className={`transition-transform ${
-                    dropdownOpen ? "rotate-180" : ""
-                  }`}
-                />
               </button>
 
-              {/* Dropdown */}
               {dropdownOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-52 bg-card border border-border rounded-sm shadow-lg py-1 z-50"
-                  style={{ backgroundColor: "hsl(var(--card))" }}
-                >
-                  <div className="px-3 py-2 border-b border-border">
-                    <div className="text-xs font-medium text-foreground truncate">
-                      {user.fullName}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground truncate font-mono">
-                      {user.email}
-                    </div>
+                <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-[12px] border border-white/10 bg-[#111111] shadow-2xl">
+                  <div className="border-b border-white/10 px-4 py-3 text-sm text-white/80">
+                    <div className="font-semibold text-white">{user.fullName}</div>
+                    <div className="mt-1 text-xs text-white/60">{user.email}</div>
                   </div>
                   <Link
                     to="/dashboard"
                     onClick={() => setDropdownOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary/50 transition-colors"
+                    className="block px-4 py-3 text-sm text-white/80 hover:bg-white/5"
                   >
-                    <User size={12} />
                     Dashboard
                   </Link>
                   {user.role === "admin" && (
                     <Link
                       to="/admin"
                       onClick={() => setDropdownOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 text-xs text-primary hover:bg-primary/10 transition-colors"
+                      className="block px-4 py-3 text-sm text-[#93c5fd] hover:bg-white/5"
                     >
-                      <User size={12} />
                       Admin Panel
                     </Link>
                   )}
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+                    className="w-full px-4 py-3 text-left text-sm text-[#fca5a5] hover:bg-white/5"
                   >
-                    <LogOut size={12} />
                     Sign Out
                   </button>
                 </div>
@@ -152,81 +129,48 @@ export default function Navbar() {
           ) : (
             <Link
               to="/login"
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-white/20 rounded-sm text-white/80 hover:text-white hover:border-white/40 transition-colors"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white/80 transition hover:border-white/20 hover:text-white"
             >
-              <LogIn size={14} />
-              Login
+              <LogIn size={16} />
             </Link>
           )}
-        </nav>
+        </div>
 
-        {/* Mobile toggle */}
         <button
-          className="md:hidden p-1 text-white/70 hover:text-white transition-colors"
+          className="lg:hidden p-2 text-white/70 transition hover:text-white"
           onClick={() => setOpen(!open)}
         >
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
-      {/* Mobile menu */}
       {open && (
-        <div
-          className="md:hidden border-t border-white/10 px-6 py-4 space-y-3"
-          style={{ backgroundColor: "hsl(var(--navbar-bg))" }}
-        >
+        <div className="lg:hidden border-t border-white/10 bg-[#111111] px-6 py-4">
           {navItems.map((item) => (
             <Link
               key={item.href}
               to={item.href}
-              className="block text-sm text-white/70 hover:text-white py-1 transition-colors duration-150"
+              className="block py-2 text-sm text-white/70 transition hover:text-white"
               onClick={() => setOpen(false)}
             >
               {item.label}
             </Link>
           ))}
-
-          {/* Mobile auth */}
-          <div className="pt-2 border-t border-white/10">
+          <div className="mt-4 border-t border-white/10 pt-4">
             {isAuthenticated && user ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 py-1">
-                  {user.avatarUrl ? (
-                    <img
-                      src={user.avatarUrl}
-                      alt={user.fullName}
-                      className="w-6 h-6 rounded-full border border-white/20 object-cover"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-primary/30 border border-white/20 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white">
-                        {user.fullName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                  <span className="text-sm text-white font-medium truncate">
-                    {user.fullName}
-                  </span>
-                </div>
-                <button
-                  onClick={async () => {
-                    setOpen(false);
-                    await logout();
-                  }}
-                  className="flex items-center gap-1.5 text-sm text-destructive py-1"
-                >
-                  <LogOut size={14} />
-                  Sign Out
-                </button>
-              </div>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 text-sm text-white/80"
+              >
+                <LogOut size={16} /> Sign Out
+              </button>
             ) : (
               <Link
                 to="/login"
-                className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white py-1"
+                className="inline-flex items-center gap-2 text-sm text-white/80"
                 onClick={() => setOpen(false)}
               >
-                <LogIn size={14} />
-                Login
+                <LogIn size={16} /> Login
               </Link>
             )}
           </div>

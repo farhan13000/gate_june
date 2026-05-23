@@ -13,6 +13,18 @@ import {
   approveTheory,
   bulkUpload,
 } from "../controllers/adminController";
+import {
+  getHomeSettings,
+  setProblemOfTheDay,
+  getAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
+  getContestsAdmin,
+  createContest,
+  updateContest,
+  deleteContest,
+} from "../controllers/homeAdminController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = express.Router();
@@ -39,5 +51,19 @@ router.delete("/theories/:id", deleteTheory);
 
 // Bulk Upload
 router.post("/bulk-upload", bulkUpload);
+
+// Home page management
+router.get("/home-settings", getHomeSettings);
+router.put("/home-settings/problem-of-the-day", setProblemOfTheDay);
+
+router.get("/announcements", getAnnouncements);
+router.post("/announcements", createAnnouncement);
+router.put("/announcements/:id", updateAnnouncement);
+router.delete("/announcements/:id", deleteAnnouncement);
+
+router.get("/contests", getContestsAdmin);
+router.post("/contests", createContest);
+router.put("/contests/:id", updateContest);
+router.delete("/contests/:id", deleteContest);
 
 export default router;
