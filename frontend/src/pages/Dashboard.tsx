@@ -284,7 +284,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Top Stats Bar ── */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-6">
         <StatCard label="Total Attempted" value={String(totalAttempted)} sub="all tests" />
         <StatCard label="Correct" value={String(totalCorrect)} sub="answers" />
         <StatCard label="Accuracy" value={`${overallAccuracy}%`} sub="overall" />
@@ -293,21 +293,21 @@ export default function Dashboard() {
         <StatCard label="GATE DA Rating" value={String(rating)} sub={`${globalRank} global`} />
       </div>
 
-      {/* ── Main 2-col layout ── */}
-      <div className="grid md:grid-cols-3 gap-6">
+      {/* ── Main responsive layout ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* ════ LEFT 2/3 ════ */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
 
           {/* Profile Card */}
           <div id="overview" className="bg-card border border-border rounded-sm p-5">
-            <div className="flex items-start gap-5 pb-4 border-b border-border">
+            <div className="flex flex-col sm:flex-row items-start gap-5 pb-4 border-b border-border">
               <div className="w-14 h-14 bg-secondary border border-border rounded-sm flex items-center justify-center shrink-0">
                 <svg viewBox="0 0 64 64" className="w-10 h-10 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <circle cx="32" cy="22" r="10" /><path d="M10 54c0-12 10-20 22-20s22 8 22 20" />
                 </svg>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <h1 className="font-serif text-lg font-bold text-foreground">{dashboard?.profile?.fullName ?? "Student"}</h1>
                   <div className="flex gap-2">
@@ -315,7 +315,7 @@ export default function Dashboard() {
                     <button className="text-muted-foreground hover:text-foreground transition-colors"><UserMinus size={13} /></button>
                   </div>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
                   {[
                     ["Email", dashboard?.profile?.email ?? "—"],
                     ["Role", dashboard?.profile?.role ?? "student"],
@@ -355,7 +355,7 @@ export default function Dashboard() {
             <SectionHeader title="Performance Analytics" sub="Accuracy, attempts, and time analysis across all dimensions" />
 
             {/* Tab bar */}
-            <div className="flex border border-border rounded-sm overflow-hidden mb-5 w-fit text-xs font-mono">
+            <div className="flex flex-wrap border border-border rounded-sm overflow-hidden mb-5 w-full text-xs font-mono">
               {([
                 ["subject", "By Subject"],
                 ["difficulty", "By Difficulty"],
@@ -376,7 +376,7 @@ export default function Dashboard() {
             {perfTab === "subject" && (
               <div className="space-y-4">
                 {/* Radar + bar side-by-side */}
-                <div className="grid grid-cols-2 gap-4 mb-2">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-2">
                   <div>
                     <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Subject Radar</p>
                     <ResponsiveContainer width="100%" height={180}>
@@ -455,7 +455,7 @@ export default function Dashboard() {
 
             {/* Difficulty tab */}
             {perfTab === "difficulty" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Accuracy % by Difficulty</p>
                   <ResponsiveContainer width="100%" height={220}>
@@ -502,7 +502,7 @@ export default function Dashboard() {
             {/* Question Type tab */}
             {perfTab === "type" && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
                     <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Accuracy by Question Format</p>
                     <ResponsiveContainer width="100%" height={200}>
@@ -530,30 +530,32 @@ export default function Dashboard() {
                     </ResponsiveContainer>
                   </div>
                 </div>
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {["Format", "Attempted", "Accuracy", "Avg Time", "Recommended Action"].map(h => (
-                        <th key={h} className="text-left py-2 px-3 text-muted-foreground font-mono font-medium text-[10px] uppercase">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {questionTypePerformanceData.map((q: any) => (
-                      <tr key={q.type} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
-                        <td className="py-2 px-3 font-medium text-foreground">{q.type}</td>
-                        <td className="py-2 px-3 font-mono text-muted-foreground">{q.attempted}</td>
-                        <td className="py-2 px-3">
-                          <span className={`font-mono font-bold ${q.accuracy >= 75 ? "text-primary" : q.accuracy >= 55 ? "text-foreground" : "text-destructive"}`}>{q.accuracy}%</span>
-                        </td>
-                        <td className="py-2 px-3 font-mono text-muted-foreground">{q.avgTime}m</td>
-                        <td className="py-2 px-3 text-[10px] text-muted-foreground">
-                          {q.accuracy < 60 ? "⚠ Practice more — attempt all skipped sets" : q.avgTime > 3 ? "⏱ Work on speed for this type" : "✓ Maintain consistency"}
-                        </td>
+                <div className="overflow-x-auto rounded-sm border border-border/10">
+                  <table className="min-w-[560px] w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border">
+                        {["Format", "Attempted", "Accuracy", "Avg Time", "Recommended Action"].map(h => (
+                          <th key={h} className="text-left py-2 px-3 text-muted-foreground font-mono font-medium text-[10px] uppercase">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {questionTypePerformanceData.map((q: any) => (
+                        <tr key={q.type} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
+                          <td className="py-2 px-3 font-medium text-foreground">{q.type}</td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">{q.attempted}</td>
+                          <td className="py-2 px-3">
+                            <span className={`font-mono font-bold ${q.accuracy >= 75 ? "text-primary" : q.accuracy >= 55 ? "text-foreground" : "text-destructive"}`}>{q.accuracy}%</span>
+                          </td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">{q.avgTime}m</td>
+                          <td className="py-2 px-3 text-[10px] text-muted-foreground">
+                            {q.accuracy < 60 ? "⚠ Practice more — attempt all skipped sets" : q.avgTime > 3 ? "⏱ Work on speed for this type" : "✓ Maintain consistency"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <div className="p-3 bg-primary/5 border border-primary/20 rounded-sm text-xs text-muted-foreground font-mono">
                   💡 <strong className="text-foreground">NAT questions</strong> take the most time (4.2 min avg) and have lowest accuracy (54%). Prioritize NAT practice sets for Optimization and ML.
                 </div>
@@ -574,31 +576,33 @@ export default function Dashboard() {
                     </Bar>
                   </ReBarChart>
                 </ResponsiveContainer>
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {["Test Type", "Taken", "Avg Score", "Avg Acc.", "Best Rank", "Trend"].map(h => (
-                        <th key={h} className="text-left py-2 px-3 text-muted-foreground font-mono font-medium text-[10px] uppercase">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {testTypePerformance.map(t => (
-                      <tr key={t.type} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
-                        <td className="py-2 px-3 font-medium text-foreground">{t.type}</td>
-                        <td className="py-2 px-3 font-mono text-muted-foreground">{t.attempted}</td>
-                        <td className="py-2 px-3 font-mono text-muted-foreground">{t.avgScore}</td>
-                        <td className="py-2 px-3">
-                          <span className={`font-mono font-bold ${t.avgAccuracy >= 75 ? "text-primary" : "text-muted-foreground"}`}>{t.avgAccuracy}%</span>
-                        </td>
-                        <td className="py-2 px-3 font-mono text-muted-foreground">#{t.bestRank}</td>
-                        <td className="py-2 px-3 text-primary text-[10px] font-mono flex items-center gap-0.5">
-                          <TrendingUp size={10} /> +{Math.floor(Math.random() * 5 + 1)}%
-                        </td>
+                <div className="overflow-x-auto rounded-sm border border-border/10">
+                  <table className="min-w-[620px] w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border">
+                        {["Test Type", "Taken", "Avg Score", "Avg Acc.", "Best Rank", "Trend"].map(h => (
+                          <th key={h} className="text-left py-2 px-3 text-muted-foreground font-mono font-medium text-[10px] uppercase">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {testTypePerformance.map(t => (
+                        <tr key={t.type} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
+                          <td className="py-2 px-3 font-medium text-foreground">{t.type}</td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">{t.attempted}</td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">{t.avgScore}</td>
+                          <td className="py-2 px-3">
+                            <span className={`font-mono font-bold ${t.avgAccuracy >= 75 ? "text-primary" : "text-muted-foreground"}`}>{t.avgAccuracy}%</span>
+                          </td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">#{t.bestRank}</td>
+                          <td className="py-2 px-3 text-primary text-[10px] font-mono flex items-center gap-0.5">
+                            <TrendingUp size={10} /> +{Math.floor(Math.random() * 5 + 1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-sm text-xs text-muted-foreground font-mono">
                   ⚠ <strong className="text-foreground">Full Mock performance (65%)</strong> is significantly lower than Chapter Tests (85%). Simulate exam conditions and attempt 2 full mocks per week.
                 </div>
@@ -638,7 +642,7 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-3 text-[10px] font-mono text-muted-foreground">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-[10px] font-mono text-muted-foreground">
               <div className="p-2.5 border border-destructive/25 bg-destructive/5 rounded-sm">
                 <div className="text-destructive font-bold mb-1">🔴 High Priority ({chapterWiseDataData.filter((c: any) => c.priority === "High").length} chapters)</div>
                 {chapterWiseDataData.filter((c: any) => c.priority === "High").map((c: any) => <div key={c.chapter}>· {c.chapter} ({c.subject})</div>)}
@@ -687,7 +691,7 @@ export default function Dashboard() {
           {/* ── Weekly Activity ── */}
           <div className="bg-card border border-border rounded-sm p-5">
             <SectionHeader title="Weekly Activity" sub="Questions solved and time spent this week" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
                 <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Questions / Day</p>
                 <ResponsiveContainer width="100%" height={140}>
