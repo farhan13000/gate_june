@@ -2,14 +2,14 @@ import { BookOpen, Target, Sparkles, Layers } from "lucide-react";
 
 export default function Discuss() {
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10">
-      <div className="mb-8">
+    <div className="w-full">
+      <header className="page-header">
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-mono mb-2">Discuss</p>
-        <h1 className="font-serif text-4xl font-bold text-foreground mb-3">Mathematical-first problem discussion</h1>
-        <p className="text-base text-muted-foreground max-w-3xl">
+        <h1 className="text-4xl">Mathematical-first problem discussion</h1>
+        <p className="text-base max-w-3xl">
           Every topic is broken down from first principles, then translated into exam-style reasoning. This page shows how we build questions, align them with GATE-level rigor, and turn them into hard practice for serious learners.
         </p>
-      </div>
+      </header>
 
       <div className="grid gap-6 md:grid-cols-2 mb-10">
         <div className="bg-card border border-border rounded-sm p-6">

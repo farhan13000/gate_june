@@ -259,7 +259,7 @@ export default function Dashboard() {
   const ratingStarsCount = Math.min(5, Math.max(1, Math.floor(rating / 400)));
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="w-full">
       {/* Breadcrumb */}
       <div className="text-xs text-muted-foreground mb-6 font-mono">
         <span className="text-primary cursor-pointer hover:underline">Home</span>

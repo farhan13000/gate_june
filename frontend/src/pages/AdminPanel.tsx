@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import AdminHomeSection from "@/components/admin/AdminHomeSection";
 import AdminContestSection from "@/components/admin/AdminContestSection";
+import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
+import { SiteContainer, MainPanel } from "@/components/layout";
+import AdminProblemManager from "@/components/admin/AdminProblemManager";
+import AdminTheoryManager from "@/components/admin/AdminTheoryManager";
+import AdminShell from "@/components/admin/AdminShell";
 
 const CREATION_PROTOCOLS = {
   Problem: {
@@ -216,7 +221,19 @@ JSON SCHEME REFERENCE:
   }
 };
 
-type Section = "Overview" | "Home Management" | "User Analytics" | "Content Management" | "Contest Factory" | "Approval Dashboard" | "Content Inventory" | "Problem Bank" | "Platform Logs";
+type Section =
+  | "Overview"
+  | "Taxonomy Manager"
+  | "Problem Manager"
+  | "Theory Manager"
+  | "Home Management"
+  | "User Analytics"
+  | "Content Management"
+  | "Contest Factory"
+  | "Approval Dashboard"
+  | "Content Inventory"
+  | "Problem Bank"
+  | "Platform Logs";
 
 export default function AdminPanel() {
   const { user } = useAuth();
@@ -297,7 +314,7 @@ export default function AdminPanel() {
 
   const fetchProblems = async () => {
     try {
-      const res = await fetch("/api/problems");
+      const res = await fetch("/api/admin/questions", { credentials: "include" });
       if (res.ok) setProblemsStats(await res.json());
     } catch (error) {}
   };
@@ -498,7 +515,20 @@ export default function AdminPanel() {
     }
   };
 
-  const sections: Section[] = ["Overview", "Home Management", "User Analytics", "Content Management", "Problem Bank", "Content Inventory", "Contest Factory", "Approval Dashboard", "Platform Logs"];
+  const sections: Section[] = [
+    "Overview",
+    "Taxonomy Manager",
+    "Problem Manager",
+    "Theory Manager",
+    "Home Management",
+    "User Analytics",
+    "Content Management",
+    "Problem Bank",
+    "Content Inventory",
+    "Contest Factory",
+    "Approval Dashboard",
+    "Platform Logs",
+  ];
 
   // ── Content Inventory State ──
   const [allQuestions, setAllQuestions] = useState<any[]>([]);
@@ -586,33 +616,16 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* ── Secondary Navigation Bar ── */}
-      <div className="bg-card border-b border-border shadow-sm sticky top-0 z-20">
-        <div className="max-w-[1600px] mx-auto px-6 h-12 flex items-center justify-between text-xs font-medium overflow-x-auto">
-          <div className="flex gap-8 min-w-max">
-            {sections.map(sec => (
-              <button
-                key={sec}
-                onClick={() => setActiveSection(sec)}
-                className={`h-12 flex items-center transition-colors whitespace-nowrap ${activeSection === sec ? "text-foreground border-b-2 border-primary font-bold" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {sec === "Overview" ? "Admin Dashboard Overview" : sec}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 pl-6 shrink-0">
-            <span className="px-2 py-1 bg-primary/10 text-primary rounded-sm font-bold tracking-wider">v1.0</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-6 max-w-[1600px] mx-auto mt-2 animate-in fade-in duration-300">
-        
+    <div className="min-h-screen bg-background pb-20 site-main-shell">
+      <SiteContainer className="page-container">
+        <MainPanel className="min-h-[calc(100vh-10rem)] p-0 overflow-hidden animate-in fade-in duration-300">
+          <AdminShell
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+          >
         {/* OVERVIEW SECTION */}
         {activeSection === "Overview" && (
-          <div className="space-y-6 max-w-5xl">
-            <h2 className="text-lg font-bold font-serif text-foreground">Platform Overview</h2>
+          <div className="space-y-6 w-full">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="academic-card p-6 border-l-4 border-l-primary">
                 <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-bold">Total Users</div>
@@ -639,6 +652,10 @@ export default function AdminPanel() {
             </div>
           </div>
         )}
+
+        {activeSection === "Taxonomy Manager" && <AdminTaxonomyManager />}
+        {activeSection === "Problem Manager" && <AdminProblemManager />}
+        {activeSection === "Theory Manager" && <AdminTheoryManager />}
 
         {activeSection === "Home Management" && <AdminHomeSection />}
 
@@ -713,7 +730,7 @@ export default function AdminPanel() {
 
         {/* CONTENT MANAGEMENT SECTION */}
         {activeSection === "Content Management" && (
-          <div className="max-w-4xl mx-auto">
+          <div className="w-full">
             <h2 className="text-lg font-bold font-serif mb-3 text-foreground">Content Creation Factory</h2>
             <div className="academic-card p-6">
               <div className="flex justify-between items-center mb-6 border-b border-border pb-4">
@@ -963,7 +980,7 @@ export default function AdminPanel() {
 
         {/* APPROVAL DASHBOARD SECTION */}
         {activeSection === "Approval Dashboard" && (
-          <div className="max-w-5xl mx-auto">
+          <div className="w-full">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold font-serif text-foreground">Content Approval Queue</h2>
               <span className="text-xs bg-amber-500/10 border border-amber-500/20 text-amber-600 px-2.5 py-1 rounded-sm font-bold">{pendingQuestions.length} Awaiting Review</span>
@@ -1201,13 +1218,15 @@ export default function AdminPanel() {
 
         {/* PLATFORM LOGS SECTION */}
         {activeSection === "Platform Logs" && (
-          <div className="max-w-4xl mx-auto text-center py-20 border border-dashed border-border rounded-md bg-secondary/10">
+          <div className="w-full text-center py-20 border border-dashed border-border rounded-md bg-secondary/10">
             <h2 className="text-xl font-bold font-serif mb-2 text-foreground">Platform Logs</h2>
             <p className="text-sm text-muted-foreground">System audit logs and error tracing will appear here in a future update.</p>
           </div>
         )}
 
-      </div>
+          </AdminShell>
+        </MainPanel>
+      </SiteContainer>
 
       {/* ════ EDIT MODAL ════ */}
       {editItem && (

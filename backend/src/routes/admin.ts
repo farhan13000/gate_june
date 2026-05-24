@@ -26,11 +26,53 @@ import {
   deleteContest,
 } from "../controllers/homeAdminController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
+import {
+  adminGetSubjects,
+  adminCreateSubject,
+  adminUpdateSubject,
+  adminDeleteSubject,
+  adminGetChapters,
+  adminCreateChapter,
+  adminUpdateChapter,
+  adminDeleteChapter,
+  adminGetTopics,
+  adminCreateTopic,
+  adminUpdateTopic,
+  adminDeleteTopic,
+  adminGetSubtopics,
+  adminCreateSubtopic,
+  adminUpdateSubtopic,
+  adminDeleteSubtopic,
+  adminReorderTaxonomy,
+} from "../controllers/taxonomyAdminController";
 
 const router = express.Router();
 
 // All admin routes are protected
 router.use(requireAuth, requireAdmin);
+
+// Taxonomy managers
+router.get("/taxonomy/subjects", adminGetSubjects);
+router.post("/taxonomy/subjects", adminCreateSubject);
+router.put("/taxonomy/subjects/:id", adminUpdateSubject);
+router.delete("/taxonomy/subjects/:id", adminDeleteSubject);
+
+router.get("/taxonomy/chapters", adminGetChapters);
+router.post("/taxonomy/chapters", adminCreateChapter);
+router.put("/taxonomy/chapters/:id", adminUpdateChapter);
+router.delete("/taxonomy/chapters/:id", adminDeleteChapter);
+
+router.get("/taxonomy/topics", adminGetTopics);
+router.post("/taxonomy/topics", adminCreateTopic);
+router.put("/taxonomy/topics/:id", adminUpdateTopic);
+router.delete("/taxonomy/topics/:id", adminDeleteTopic);
+
+router.get("/taxonomy/subtopics", adminGetSubtopics);
+router.post("/taxonomy/subtopics", adminCreateSubtopic);
+router.put("/taxonomy/subtopics/:id", adminUpdateSubtopic);
+router.delete("/taxonomy/subtopics/:id", adminDeleteSubtopic);
+
+router.post("/taxonomy/reorder", adminReorderTaxonomy);
 
 // Users
 router.get("/users", getAllUsers);

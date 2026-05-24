@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { PageContainer } from "@/components/layout";
 import { AuthProvider } from "./contexts/AuthContext";
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -20,10 +21,29 @@ import NotFound from "./pages/NotFound";
 import AdminPanel from "./pages/AdminPanel";
 
 function Layout({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const isAdmin = pathname.startsWith("/admin");
+  const isAuthPage = pathname === "/login" || pathname === "/register";
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      <main>{children}</main>
+      <main className="site-main-shell">
+        {isAdmin ? (
+          children
+        ) : (
+          <PageContainer
+            panelVariant={isAuthPage ? "auth" : "default"}
+            className={
+              isAuthPage
+                ? "flex min-h-[calc(100vh-4rem)] items-center justify-center !py-6"
+                : undefined
+            }
+          >
+            {children}
+          </PageContainer>
+        )}
+      </main>
       <Footer />
     </div>
   );

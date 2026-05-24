@@ -2,12 +2,42 @@ import { Request, Response } from "express";
 import Question from "../models/Question";
 import Theory from "../models/Theory";
 
+function buildQuestionFilter(query: Request["query"]): Record<string, unknown> {
+  const filter: Record<string, unknown> = { status: "approved" };
+  if (query.subjectId) filter.subjectId = query.subjectId;
+  if (query.chapterId) filter.chapterId = query.chapterId;
+  if (query.topicId) filter.topicId = query.topicId;
+  if (query.subtopicId) filter.subtopicId = query.subtopicId;
+  if (query.difficulty) filter.difficulty = query.difficulty;
+  if (query.questionType) filter.questionType = query.questionType;
+  if (query.search) {
+    filter.title = { $regex: String(query.search), $options: "i" };
+  }
+  return filter;
+}
+
 export const getApprovedQuestions = async (req: Request, res: Response): Promise<void> => {
   try {
-    const questions = await Question.find({ status: "approved" })
-      .select("-solution -approvedBy -createdBy")
-      .sort({ createdAt: -1 });
-    res.json(questions);
+    const filter = buildQuestionFilter(req.query);
+    const sort = String(req.query.sort || "newest");
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
+    const skip = (page - 1) * limit;
+
+    let sortOpt: Record<string, 1 | -1> = { createdAt: -1 };
+    if (sort === "difficulty") sortOpt = { difficulty: 1, createdAt: -1 };
+    if (sort === "title") sortOpt = { title: 1 };
+
+    const [questions, total] = await Promise.all([
+      Question.find(filter)
+        .select("-solution -approvedBy -createdBy -auditLog")
+        .sort(sortOpt)
+        .skip(skip)
+        .limit(limit),
+      Question.countDocuments(filter),
+    ]);
+
+    res.json({ questions, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch questions" });
   }
@@ -57,7 +87,15 @@ export const toggleUpvote = async (req: Request, res: Response): Promise<void> =
 
 export const getApprovedTheories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const theories = await Theory.find({ status: "approved" }).sort({ topic: 1, chapterId: 1, sectionId: 1 });
+    const filter: Record<string, unknown> = { status: "approved" };
+    if (req.query.subjectId) filter.subjectId = req.query.subjectId;
+    if (req.query.chapterId) filter.chapterId = req.query.chapterId;
+    if (req.query.topicId) filter.topicId = req.query.topicId;
+    if (req.query.subtopicId) filter.subtopicId = req.query.subtopicId;
+
+    const theories = await Theory.find(filter)
+      .select("-auditLog -createdBy -approvedBy")
+      .sort({ subjectId: 1, chapterId: 1, topicId: 1, subtopicId: 1 });
     res.json(theories);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch theories" });

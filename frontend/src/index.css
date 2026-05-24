@@ -75,6 +75,32 @@
     --sidebar-accent-foreground: 0 0% 13%;
     --sidebar-border: 0 0% 78%;
     --sidebar-ring: 210 85% 45%;
+
+    /* Layout system — AtCoder-style centered container */
+    --layout-max-width: 90rem;
+    /* 1440px */
+    --layout-padding-x: 1rem;
+    --layout-section-gap: 1.5rem;
+    --layout-page-py: 1.5rem;
+    --layout-panel-padding: 1.25rem;
+  }
+
+  @media (min-width: 640px) {
+    :root {
+      --layout-padding-x: 1.25rem;
+      --layout-section-gap: 1.75rem;
+      --layout-page-py: 2rem;
+      --layout-panel-padding: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      --layout-padding-x: 1.5rem;
+      --layout-section-gap: 2rem;
+      --layout-page-py: 2.5rem;
+      --layout-panel-padding: 1.75rem;
+    }
   }
 
   .dark {
@@ -216,5 +242,167 @@
 
   .sidebar-toc-link.active {
     @apply text-primary font-medium;
+  }
+
+  /* ── Global layout system ───────────────────────────────────────────── */
+  .site-container {
+    width: 100%;
+    max-width: var(--layout-max-width);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--layout-padding-x);
+    padding-right: var(--layout-padding-x);
+  }
+
+  /* Gray shell around the centered white panel (AtCoder-style) */
+  .site-main-shell {
+    @apply bg-background flex-1 w-full;
+  }
+
+  .page-container {
+    padding-top: 0.75rem;
+    padding-bottom: 1.25rem;
+  }
+
+  @media (min-width: 640px) {
+    .page-container {
+      padding-top: 1rem;
+      padding-bottom: 1.5rem;
+    }
+  }
+
+  /* Centered white middle section — all page content lives here */
+  .site-main-panel {
+    @apply bg-card border border-border w-full;
+    padding: var(--layout-panel-padding);
+    min-height: calc(100vh - 11rem);
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.04);
+  }
+
+  .site-main-panel-auth {
+    min-height: auto;
+    max-width: 28rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* In-panel section blocks (optional, AtCoder block headers) */
+  .panel-block {
+    @apply border border-border bg-card;
+  }
+
+  .panel-block-header {
+    @apply bg-primary text-primary-foreground px-3 py-2 text-sm font-semibold border-b border-primary;
+  }
+
+  .panel-block-body {
+    @apply p-4;
+  }
+
+  .panel-sidebar {
+    @apply border border-border bg-secondary/30;
+  }
+
+  .page-section {
+    margin-bottom: var(--layout-section-gap);
+  }
+
+  .page-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .layout-sidebar-main {
+    @apply flex flex-col gap-6;
+  }
+
+  @media (min-width: 1024px) {
+    .layout-sidebar-main {
+      @apply flex-row gap-6;
+    }
+
+    .layout-sidebar-main > aside {
+      width: 14rem;
+      flex-shrink: 0;
+    }
+
+    .layout-sidebar-main > .layout-main-col {
+      flex: 1 1 0%;
+      min-width: 0;
+    }
+
+    /* Problems / Theory — wider taxonomy column */
+    .layout-taxonomy-explorer > .layout-taxonomy-aside {
+      width: 17.5rem;
+      max-width: 38vw;
+    }
+
+    .hierarchy-sidebar-panel {
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 8rem);
+      min-height: 28rem;
+      padding: 0.75rem;
+    }
+
+    .taxonomy-tree-scroll {
+      scrollbar-width: thin;
+    }
+  }
+
+  /* Admin panel — sidebar + content */
+  .admin-shell {
+    @apply flex flex-col lg:flex-row min-h-[32rem] border border-border rounded-sm overflow-hidden bg-card;
+  }
+
+  .admin-shell-sidebar {
+    @apply w-full lg:w-56 shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-secondary/25 flex flex-col;
+  }
+
+  .admin-shell-sidebar-head {
+    @apply px-4 py-3 border-b border-border flex flex-col gap-0.5;
+  }
+
+  .admin-shell-nav {
+    @apply flex-1 overflow-y-auto py-2 px-2 space-y-3 max-h-[50vh] lg:max-h-none;
+  }
+
+  .admin-shell-nav-group-title {
+    @apply px-2 py-1 text-[10px] uppercase tracking-wider font-mono text-muted-foreground;
+  }
+
+  .admin-shell-nav-item {
+    @apply w-full flex items-center gap-2 px-2.5 py-2 text-xs rounded-sm text-left text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground;
+  }
+
+  .admin-shell-nav-item-active {
+    @apply bg-primary/10 text-primary font-semibold border border-primary/20 hover:bg-primary/10 hover:text-primary;
+  }
+
+  .admin-shell-sidebar-foot {
+    @apply px-4 py-3 border-t border-border hidden lg:block;
+  }
+
+  .admin-shell-content {
+    @apply flex-1 min-w-0 flex flex-col bg-card;
+  }
+
+  .admin-shell-content-header {
+    @apply shrink-0 px-4 sm:px-6 py-4 border-b border-border bg-secondary/20;
+  }
+
+  .admin-shell-content-body {
+    @apply flex-1 min-w-0 p-4 sm:p-6 overflow-x-auto;
+  }
+
+  .page-header {
+    @apply mb-6;
+  }
+
+  .page-header h1 {
+    @apply font-serif text-3xl font-bold text-foreground mb-1;
+  }
+
+  .page-header p {
+    @apply text-muted-foreground text-sm;
   }
 }

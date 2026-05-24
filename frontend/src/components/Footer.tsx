@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
+import { SiteContainer } from "@/components/layout";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-border mt-12 bg-background text-muted-foreground">
-      <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+    <footer className="border-t border-border mt-0 bg-background text-muted-foreground">
+      <SiteContainer className="py-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
         <div>
           <h4 className="font-semibold text-foreground mb-2">GATE DA</h4>
           <p className="text-sm">Mathematically-driven practice and contests for GATE Data Science & AI aspirants. Focused, rigorous, and exam-aligned.</p>
@@ -59,16 +60,16 @@ export default function Footer() {
             <button type="submit" className="px-3 py-1.5 bg-primary text-primary-foreground rounded-sm text-sm">Send</button>
           </form>
         </div>
-      </div>
+      </SiteContainer>
 
       <div className="border-t border-border/50 mt-4">
-        <div className="max-w-6xl mx-auto px-6 py-4 text-xs text-muted-foreground flex flex-col sm:flex-row justify-between items-center gap-2">
+        <SiteContainer className="py-4 text-xs text-muted-foreground flex flex-col sm:flex-row justify-between items-center gap-2">
           <div>© {new Date().getFullYear()} GATE DA — All rights reserved.</div>
           <div className="flex gap-4">
             <a href="#" className="hover:underline">Privacy</a>
             <a href="#" className="hover:underline">Terms</a>
           </div>
-        </div>
+        </SiteContainer>
       </div>
     </footer>
   );

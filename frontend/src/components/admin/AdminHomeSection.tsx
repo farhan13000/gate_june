@@ -154,7 +154,7 @@ export default function AdminHomeSection() {
   }
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8 w-full">
       <div>
         <h2 className="text-lg font-bold font-serif text-foreground">Home Page Management</h2>
         <p className="text-xs text-muted-foreground mt-1">

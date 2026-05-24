@@ -7,10 +7,23 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
-      screens: { "2xl": "1400px" },
+      padding: "1rem",
+      screens: {
+        sm: "640px",
+        md: "768px",
+        lg: "1024px",
+        xl: "1280px",
+        "2xl": "1440px",
+      },
     },
     extend: {
+      maxWidth: {
+        site: "var(--layout-max-width)",
+      },
+      spacing: {
+        "layout-section": "var(--layout-section-gap)",
+        "layout-page": "var(--layout-page-py)",
+      },
       colors: {
         border: "hsl(var(--border))",
         "border-subtle": "hsl(var(--border-subtle))",

@@ -173,8 +173,8 @@ export default function Index() {
   const optionLabels = ["A", "B", "C", "D"];
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] text-[#111111]">
-      <div className="mx-auto max-w-[1400px] px-6 py-6">
+    <div className="w-full text-[#111111]">
+      <div className="w-full">
         <div className="grid gap-6 lg:grid-cols-[1.65fr_1fr]">
           <div className="space-y-6">
             {/* Problem of the Day */}

@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { Menu, X, LogIn, LogOut, User, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { SiteContainer } from "@/components/layout";
 
 import { toast } from "sonner";
 
@@ -50,7 +51,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#111111] shadow-sm">
-      <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-6">
+      <SiteContainer className="flex h-16 items-center justify-between">
         <Link to="/" className="text-lg font-semibold uppercase tracking-[0.25em] text-white">
           GATE <span className="text-[#2563eb]">DA</span>
         </Link>
@@ -142,10 +143,10 @@ export default function Navbar() {
         >
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>
-      </div>
+      </SiteContainer>
 
       {open && (
-        <div className="lg:hidden border-t border-white/10 bg-[#111111] px-6 py-4">
+        <SiteContainer className="lg:hidden border-t border-white/10 bg-[#111111] py-4">
           {navItems.map((item) => (
             <Link
               key={item.href}
@@ -174,7 +175,7 @@ export default function Navbar() {
               </Link>
             )}
           </div>
-        </div>
+        </SiteContainer>
       )}
     </header>
   );

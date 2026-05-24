@@ -127,7 +127,7 @@ export default function AdminContestSection() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="space-y-8 w-full">
       <div>
         <h2 className="text-lg font-bold font-serif text-foreground">Contest Configuration</h2>
         <p className="text-xs text-muted-foreground mt-1">

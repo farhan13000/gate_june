@@ -8,7 +8,12 @@ export interface IAuditEntry {
 }
 
 export interface IQuestion extends Document {
-  contentId: string; // Meaningful ID e.g. PROB-MCQ-001
+  contentId: string;
+  problemId?: string;
+  subjectId: string;
+  chapterId: string;
+  topicId: string;
+  subtopicId: string;
   title: string;
   topic: string;
   difficulty: "Easy" | "Medium" | "Hard";
@@ -18,6 +23,8 @@ export interface IQuestion extends Document {
   imageUrl?: string;
   solution: any;
   markingScheme: { positive: number; negative: number };
+  tags: string[];
+  estimatedTime: number;
   status: "draft" | "pending_review" | "approved" | "rejected";
   createdBy: mongoose.Types.ObjectId;
   approvedBy?: mongoose.Types.ObjectId;
@@ -41,8 +48,13 @@ const auditEntrySchema = new Schema<IAuditEntry>(
 const questionSchema = new Schema<IQuestion>(
   {
     contentId: { type: String, unique: true, sparse: true },
+    problemId: { type: String, unique: true, sparse: true },
+    subjectId: { type: String, index: true },
+    chapterId: { type: String, index: true },
+    topicId: { type: String, index: true },
+    subtopicId: { type: String, index: true },
     title: { type: String, required: true, trim: true },
-    topic: { type: String, required: true, trim: true },
+    topic: { type: String, trim: true, default: "" },
     difficulty: { type: String, enum: ["Easy", "Medium", "Hard"], required: true },
     statement: { type: String, required: true },
     options: [
@@ -58,6 +70,8 @@ const questionSchema = new Schema<IQuestion>(
       positive: { type: Number, required: true, default: 1 },
       negative: { type: Number, required: true, default: 0 },
     },
+    tags: { type: [String], default: [] },
+    estimatedTime: { type: Number, default: 180 },
     status: {
       type: String,
       enum: ["draft", "pending_review", "approved", "rejected"],
@@ -75,19 +89,20 @@ const questionSchema = new Schema<IQuestion>(
 import crypto from "crypto";
 
 // Auto-generate a meaningful content ID before save
-questionSchema.pre("save", function (next) {
-  if (!this.contentId) {
-    const topicCode = (this.topic || "GEN")
-      .toUpperCase()
-      .replace(/[^A-Z]/g, "")
-      .substring(0, 4)
-      .padEnd(4, "X");
-    const typeCode = this.questionType || "MCQ";
-    
-    // Generate a secure 6-character random hex to guarantee uniqueness
-    const uniqueHash = crypto.randomBytes(3).toString("hex").toUpperCase();
+questionSchema.index({ subjectId: 1, chapterId: 1, topicId: 1, subtopicId: 1, status: 1 });
 
-    this.contentId = `${topicCode}-${typeCode}-${uniqueHash}`;
+questionSchema.pre("save", function (next) {
+  if (!this.problemId && this.subtopicId) {
+    const suffix = crypto.randomBytes(2).toString("hex").toUpperCase();
+    this.problemId = `PROB_${this.subtopicId}_${suffix}`;
+  }
+  if (!this.contentId) {
+    const prefix = this.subtopicId
+      ? this.subtopicId.replace(/^SUBTOPIC_/, "").slice(0, 12)
+      : (this.topic || "GEN").toUpperCase().replace(/[^A-Z]/g, "").substring(0, 4).padEnd(4, "X");
+    const typeCode = this.questionType || "MCQ";
+    const uniqueHash = crypto.randomBytes(3).toString("hex").toUpperCase();
+    this.contentId = `${prefix}-${typeCode}-${uniqueHash}`;
   }
   next();
 });

@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser";
 import passport from "passport";
 
 import connectDB from "./config/db";
+import { ensureTaxonomySeeded } from "./utils/ensureTaxonomy";
 import configurePassport from "./config/passport";
 import authRoutes from "./routes/auth";
 import adminRoutes from "./routes/admin";
@@ -16,6 +17,7 @@ import problemRoutes from "./routes/problems";
 import dashboardRoutes from "./routes/dashboard";
 import leaderboardRoutes from "./routes/leaderboard";
 import homeRoutes from "./routes/home";
+import taxonomyRoutes from "./routes/taxonomy";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +48,7 @@ app.use("/api/problems", problemRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/home", homeRoutes);
+app.use("/api/taxonomy", taxonomyRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -79,6 +82,7 @@ app.use(
 
 const startServer = async () => {
   await connectDB();
+  await ensureTaxonomySeeded();
   app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);

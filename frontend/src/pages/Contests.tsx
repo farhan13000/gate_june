@@ -23,7 +23,7 @@ export default function Contests() {
   const progress = ((3600 - timeLeft.h * 3600 - timeLeft.m * 60 - timeLeft.s) / 10800) * 100;
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
+    <div className="w-full">
       <div className="mb-8 flex items-start justify-between">
         <div>
           <div className="text-xs font-mono text-muted-foreground mb-2">Contest · Active</div>

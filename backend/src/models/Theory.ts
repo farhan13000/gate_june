@@ -8,15 +8,22 @@ export interface IAuditEntry {
 }
 
 export interface ITheory extends Document {
-  contentId: string; // e.g. PROB-TH-001
+  contentId: string;
+  theoryId?: string;
+  subjectId: string;
+  chapterId: string;
+  topicId: string;
+  subtopicId: string;
   title: string;
   topic: string;
-  chapterId: string;
   chapterTitle: string;
   sectionId: string;
   content: string;
   imageUrl?: string;
   examples: string[];
+  formulas: string[];
+  diagrams: string[];
+  highlights: string[];
   status: "draft" | "pending_review" | "approved" | "rejected";
   createdBy: mongoose.Types.ObjectId;
   approvedBy?: mongoose.Types.ObjectId;
@@ -38,14 +45,21 @@ const auditEntrySchema = new Schema<IAuditEntry>(
 const theorySchema = new Schema<ITheory>(
   {
     contentId: { type: String, unique: true, sparse: true },
+    theoryId: { type: String, unique: true, sparse: true },
+    subjectId: { type: String, index: true },
+    chapterId: { type: String, index: true },
+    topicId: { type: String, index: true },
+    subtopicId: { type: String, index: true },
     title: { type: String, required: true, trim: true },
-    topic: { type: String, required: true, trim: true },
-    chapterId: { type: String, required: true },
-    chapterTitle: { type: String, required: true },
-    sectionId: { type: String, required: true },
+    topic: { type: String, trim: true, default: "" },
+    chapterTitle: { type: String, trim: true, default: "" },
+    sectionId: { type: String, trim: true, default: "" },
     content: { type: String, required: true },
     imageUrl: { type: String },
     examples: [{ type: String }],
+    formulas: [{ type: String }],
+    diagrams: [{ type: String }],
+    highlights: [{ type: String }],
     status: {
       type: String,
       enum: ["draft", "pending_review", "approved", "rejected"],
@@ -61,18 +75,19 @@ const theorySchema = new Schema<ITheory>(
 import crypto from "crypto";
 
 // Auto-generate meaningful content ID before save
+theorySchema.index({ subjectId: 1, chapterId: 1, topicId: 1, subtopicId: 1, status: 1 });
+
 theorySchema.pre("save", function (next) {
+  if (!this.theoryId && this.subtopicId) {
+    const suffix = crypto.randomBytes(2).toString("hex").toUpperCase();
+    this.theoryId = `THEORY_${this.subtopicId}_${suffix}`;
+  }
   if (!this.contentId) {
-    const topicCode = (this.topic || "GEN")
-      .toUpperCase()
-      .replace(/[^A-Z]/g, "")
-      .substring(0, 4)
-      .padEnd(4, "X");
-    
-    // Generate a secure 6-character random hex to guarantee uniqueness
+    const prefix = this.subtopicId
+      ? this.subtopicId.replace(/^SUBTOPIC_/, "").slice(0, 12)
+      : (this.topic || "GEN").toUpperCase().replace(/[^A-Z]/g, "").substring(0, 4).padEnd(4, "X");
     const uniqueHash = crypto.randomBytes(3).toString("hex").toUpperCase();
-    
-    this.contentId = `${topicCode}-TH-${uniqueHash}`;
+    this.contentId = `${prefix}-TH-${uniqueHash}`;
   }
   next();
 });

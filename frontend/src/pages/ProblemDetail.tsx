@@ -150,11 +150,11 @@ export default function ProblemDetail() {
   };
 
   if (loading) {
-    return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-muted-foreground">Loading problem...</div>;
+    return <div className="w-full py-20 text-center text-muted-foreground">Loading problem...</div>;
   }
 
   if (!problem) {
-    return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-destructive">Problem not found.</div>;
+    return <div className="w-full py-20 text-center text-destructive">Problem not found.</div>;
   }
 
   const diffClass = problem.difficulty === "Hard"
@@ -168,7 +168,7 @@ export default function ProblemDetail() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="w-full">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
         <Link to="/problems" className="hover:text-foreground flex items-center gap-1 transition-colors">
           <ArrowLeft size={12} /> Problems

@@ -1,255 +1,158 @@
-import { useState, useEffect } from "react";
-import { Bookmark, ChevronRight, ChevronDown, ArrowLeft, BookOpen, Loader2, HardHat } from "lucide-react";
-import LatexRenderer from "../components/LatexRenderer";
-
-const BASE_SUBJECTS = [
-  { id: "Probability", title: "Probability & Statistics", desc: "Foundations of probability, random variables, and hypothesis testing." },
-  { id: "Linear Algebra", title: "Linear Algebra", desc: "Vector spaces, matrices, eigenvalue decomposition, and SVD." },
-  { id: "Machine Learning", title: "Machine Learning", desc: "Supervised and unsupervised learning, SVMs, neural networks." },
-  { id: "Calculus", title: "Calculus & Optimization", desc: "Derivatives, integrals, gradient descent algorithms." },
-  { id: "Databases", title: "Databases & SQL", desc: "Relational algebra, normal forms, and complex queries." },
-  { id: "Computer Architecture", title: "Computer Architecture", desc: "Memory coalescing, bank mapping, and GPU architectures." }
-];
-
-const parseTopics = (topicString?: string) => {
-  if (!topicString) return [];
-  return topicString
-    .split(/\s*(?:[,+&\/])\s*/)
-    .map((topic) => topic.trim())
-    .filter(Boolean);
-};
+import { useEffect, useState, useCallback } from "react";
+import { BookOpen, Loader2, ChevronRight } from "lucide-react";
+import ContentExplorerLayout from "@/components/hierarchy/ContentExplorerLayout";
+import LatexRenderer from "@/components/LatexRenderer";
+import { useTaxonomy, useTaxonomyStats, resolveHierarchyLabels } from "@/hooks/useTaxonomy";
+import type { HierarchySelection } from "@/types/taxonomy";
 
 export default function Theory() {
+  const { tree, loading: treeLoading, error: treeError, refresh: refreshTaxonomy } = useTaxonomy();
+  const [selection, setSelection] = useState<HierarchySelection>({});
+  const { stats, loading: statsLoading } = useTaxonomyStats(selection);
+  const labels = resolveHierarchyLabels(tree, selection);
+
   const [theories, setTheories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTheory, setActiveTheory] = useState<any | null>(null);
 
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  
-  const [bookmarked, setBookmarked] = useState(false);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [coveredTopics, setCoveredTopics] = useState<Record<string, boolean>>({});
+  const fetchTheories = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (selection.subjectId) params.set("subjectId", selection.subjectId);
+    if (selection.chapterId) params.set("chapterId", selection.chapterId);
+    if (selection.topicId) params.set("topicId", selection.topicId);
+    if (selection.subtopicId) params.set("subtopicId", selection.subtopicId);
+
+    try {
+      const res = await fetch(`/api/problems/theories/all?${params}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setTheories(list);
+      if (list.length === 1) setActiveTheory(list[0]);
+      else if (!list.find((t: any) => t._id === activeTheory?._id)) setActiveTheory(null);
+    } catch {
+      setTheories([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selection]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("theory_covered_topics");
-      if (raw) setCoveredTopics(JSON.parse(raw));
-    } catch (e) {
-      // ignore
-    }
-  }, []);
+    fetchTheories();
+  }, [fetchTheories]);
 
-  const toggleCovered = (topicId: string) => {
-    setCoveredTopics(prev => {
-      const next = { ...prev, [topicId]: !prev[topicId] };
-      try { localStorage.setItem("theory_covered_topics", JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const handleBreadcrumb = (level: "subject" | "chapter" | "topic" | "subtopic" | "root") => {
+    setActiveTheory(null);
+    if (level === "root") setSelection({});
+    else if (level === "subject") setSelection({ subjectId: selection.subjectId });
+    else if (level === "chapter")
+      setSelection({ subjectId: selection.subjectId, chapterId: selection.chapterId });
+    else if (level === "topic")
+      setSelection({
+        subjectId: selection.subjectId,
+        chapterId: selection.chapterId,
+        topicId: selection.topicId,
+      });
   };
 
-  useEffect(() => {
-    fetch("/api/problems/theories/all")
-      .then(r => r.json())
-      .then(data => {
-        setTheories(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  const toggle = (id: string) => setCollapsed(p => ({ ...p, [id]: !p[id] }));
-
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-muted-foreground"><Loader2 className="animate-spin mr-2"/> Loading Theory Library...</div>;
-  }
-
-  // Derive Subjects dynamically mixed with Base Subjects
-  const SUBJECTS = BASE_SUBJECTS.map(base => {
-    const matchingTheories = theories.filter(t => parseTopics(t.topic).includes(base.id));
-    const uniqueChapters = new Set(matchingTheories.map(t => t.chapterId));
-    return { ...base, chapters: uniqueChapters.size, hasContent: matchingTheories.length > 0 };
-  });
-
-  // Subject View
-  if (!selectedSubject) {
+  if (activeTheory) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        <div className="mb-8">
-          <h1 className="font-serif text-3xl font-bold text-foreground mb-1">Theory Library</h1>
-          <p className="text-muted-foreground text-sm">Comprehensive academic material organized by subject for the GATE DA syllabus.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {SUBJECTS.map(sub => (
-            <div key={sub.id} className="relative">
-              <button
-                onClick={() => setSelectedSubject(sub.id)}
-                className="academic-card p-6 text-left flex flex-col hover:border-primary/40 hover:shadow-sm transition-all duration-200 group w-full text-left"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
-                  <BookOpen size={20} />
-                </div>
-                <h2 className="font-serif text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{sub.title}</h2>
-                <p className="text-sm text-muted-foreground mb-6 leading-relaxed flex-1">{sub.desc}</p>
-                <div className="text-xs font-mono text-muted-foreground border-t border-border pt-4 mt-auto flex items-center justify-between">
-                  <span>{sub.chapters} Chapters</span>
-                  <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">Read →</span>
-                </div>
-              </button>
-              <div className="absolute top-3 right-3">
-                <button
-                  onClick={() => toggleCovered(sub.id)}
-                  className={`text-xs px-2 py-1 rounded-sm border ${coveredTopics[sub.id] ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border"}`}
-                >
-                  {coveredTopics[sub.id] ? "Covered" : "Mark Covered"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // Article View Setup
-  const subjectTheories = theories.filter(t => parseTopics(t.topic).includes(selectedSubject));
-  
-  // Build dynamic TOC
-  const chapterMap = new Map();
-  subjectTheories.forEach(t => {
-    if (!chapterMap.has(t.chapterId)) {
-      chapterMap.set(t.chapterId, { id: t.chapterId, label: `${t.chapterId}. ${t.chapterTitle}`, level: 1, _id: null });
-    }
-    chapterMap.set(t.sectionId, { id: t.sectionId, label: `${t.sectionId} ${t.title}`, level: 2, _id: t._id });
-  });
-  const toc = Array.from(chapterMap.values()).sort((a: any, b: any) => a.id.localeCompare(b.id, undefined, {numeric: true}));
-
-  const activeTheoryId = activeId || (subjectTheories[0]?._id);
-  const currentTheory = subjectTheories.find(t => t._id === activeTheoryId);
-
-  return (
-    <div className="max-w-6xl mx-auto px-4 py-8 flex gap-8">
-      {/* ToC sidebar */}
-      <aside className="w-56 shrink-0 hidden md:block">
-        <div className="sticky top-20">
-          <button 
-            onClick={() => setSelectedSubject(null)} 
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
-          >
-            <ArrowLeft size={12} /> Back to Library
-          </button>
-          
-          <div className="text-xs font-medium text-muted-foreground mb-4 uppercase tracking-wider">Contents</div>
-          <nav className="space-y-0.5">
-            {toc.map((item: any) => (
-              <button
-                key={item.id}
-                onClick={() => { if (item._id) setActiveId(item._id); }}
-                className={`block w-full text-left py-1 px-2 rounded-sm text-xs transition-colors duration-150 ${
-                  item.level === 2 ? "pl-5" : "font-medium mt-2"
-                } ${
-                  activeTheoryId === item._id 
-                    ? "text-primary bg-primary/8" 
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </aside>
-
-      {/* Article content */}
-      <article className="flex-1 min-w-0 max-w-3xl">
-        {/* Mobile Back Button */}
-        <button 
-          onClick={() => setSelectedSubject(null)} 
-          className="md:hidden text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 mb-6 transition-colors"
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={() => setActiveTheory(null)}
+          className="text-xs text-muted-foreground hover:text-primary mb-6 flex items-center gap-1"
         >
-          <ArrowLeft size={12} /> Back to Library
+          ← Back to library
         </button>
-
-        {currentTheory ? (
-          <div>
-            {/* Article header */}
-            <div className="mb-8 pb-6 border-b border-border">
-              <div className="text-xs font-mono text-muted-foreground mb-2">
-                Theory · {selectedSubject}
-              </div>
-              <div className="flex items-start justify-between">
-                <h1 className="font-serif text-3xl font-bold text-foreground leading-tight">
-                  {currentTheory.sectionId} {currentTheory.title}
-                </h1>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setBookmarked(!bookmarked)}
-                    className={`mt-1 p-1.5 rounded-sm border transition-colors duration-150 ${bookmarked ? "border-primary text-primary bg-primary/8" : "border-border text-muted-foreground hover:text-foreground"}`}
-                  >
-                    <Bookmark size={14} fill={bookmarked ? "currentColor" : "none"} />
-                  </button>
-                  <button
-                    onClick={() => toggleCovered(selectedSubject!)}
-                    className={`mt-1 text-xs px-2 py-1 rounded-sm border ${coveredTopics[selectedSubject!] ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border"}`}
-                  >
-                    {coveredTopics[selectedSubject!] ? "Covered" : "Mark Subject Covered"}
-                  </button>
-                </div>
-              </div>
-              <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                <span>Section {currentTheory.sectionId}</span>
-                <span>·</span>
-                <span>10 min read</span>
-                <span>·</span>
-                <span>GATE DA Syllabus</span>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="prose-academic space-y-8 text-sm leading-relaxed text-foreground/85">
-              {currentTheory.imageUrl && (
-                <div className="mb-6">
-                  <img src={currentTheory.imageUrl} alt={currentTheory.title} className="rounded-sm border border-border max-w-full h-auto object-cover bg-secondary/10" style={{ maxHeight: '400px' }} />
-                </div>
-              )}
-              
-              {/* Dynamic Content via LatexRenderer */}
-              <div>
-                <LatexRenderer latex={currentTheory.content} />
-              </div>
-
-              <div className="border-t border-border-faint my-8" />
-
-              {/* Practice problems (Mockup matching reference) */}
-              <div>
-                <h2 className="font-serif text-xl font-bold text-foreground mb-4">Practice Problems</h2>
-                <div className="space-y-2">
-                  {[
-                    { id: "DA004", title: "Bayes' Theorem Application", diff: "Easy" },
-                    { id: "DA007", title: "Hypothesis Testing — Type II Error", diff: "Hard" },
-                  ].map(p => (
-                    <div key={p.id} className="flex items-center justify-between border border-border p-3 rounded-sm hover:bg-secondary/30 transition-colors duration-150 cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs text-muted-foreground">{p.id}</span>
-                        <span className="text-sm text-foreground">{p.title}</span>
-                      </div>
-                      <span className={p.diff === "Hard" ? "difficulty-hard" : "difficulty-easy"}>{p.diff}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+        <article className="academic-card p-8">
+          <h1 className="font-serif text-2xl font-bold text-foreground mb-4">
+            <LatexRenderer latex={activeTheory.title} />
+          </h1>
+          <div className="prose prose-sm max-w-none text-foreground/90">
+            <LatexRenderer latex={activeTheory.content} />
           </div>
-        ) : (
-            <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-slate-300 rounded-xl bg-slate-50 mt-8">
-              <HardHat size={48} className="text-slate-300 mb-4" />
-              <h3 className="text-xl font-serif font-bold text-slate-700 mb-2">Content Under Construction</h3>
-              <p className="text-slate-500 text-sm max-w-md">
-                The academic material for {selectedSubject} is currently being prepared and verified by our experts. It will be available soon!
-              </p>
+          {activeTheory.formulas?.length > 0 && (
+            <div className="mt-8 border-t border-border pt-6">
+              <h3 className="text-xs uppercase tracking-wider font-mono text-muted-foreground mb-3">
+                Formulas
+              </h3>
+              {activeTheory.formulas.map((f: string, i: number) => (
+                <div key={i} className="mb-2">
+                  <LatexRenderer latex={f} />
+                </div>
+              ))}
+            </div>
+          )}
+          {activeTheory.examples?.length > 0 && (
+            <div className="mt-6 border-t border-border pt-6">
+              <h3 className="text-xs uppercase tracking-wider font-mono text-muted-foreground mb-3">
+                Examples
+              </h3>
+              {activeTheory.examples.map((ex: string, i: number) => (
+                <div key={i} className="mb-3 text-sm">
+                  <LatexRenderer latex={ex} />
+                </div>
+              ))}
             </div>
           )}
         </article>
       </div>
+    );
+  }
+
+  return (
+    <ContentExplorerLayout
+      title="Theory Library"
+      subtitle="Structured academic notes following the same syllabus hierarchy as problems."
+      tree={tree}
+      treeLoading={treeLoading}
+      treeError={treeError}
+      onTreeRefresh={refreshTaxonomy}
+      selection={selection}
+      onSelect={(s) => {
+        setActiveTheory(null);
+        setSelection(s);
+      }}
+      labels={labels}
+      onBreadcrumbNavigate={handleBreadcrumb}
+      stats={stats}
+      statsLoading={statsLoading}
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+          <Loader2 className="animate-spin mr-2" size={16} />
+          Loading theory…
+        </div>
+      ) : theories.length === 0 ? (
+        <div className="academic-card p-12 text-center">
+          <BookOpen className="mx-auto mb-4 text-muted-foreground opacity-40" size={32} />
+          <p className="text-sm text-muted-foreground">
+            No theory articles in this selection yet. Select another node or add content via admin.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {theories.map((t) => (
+            <button
+              key={t._id}
+              type="button"
+              onClick={() => setActiveTheory(t)}
+              className="academic-card w-full p-4 text-left flex items-center justify-between hover:border-primary/30 transition-colors group"
+            >
+              <div>
+                <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
+                  <LatexRenderer latex={t.title} />
+                </h3>
+                <p className="text-xs text-muted-foreground font-mono mt-1">
+                  {t.theoryId || t.contentId}
+                </p>
+              </div>
+              <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary" />
+            </button>
+          ))}
+        </div>
+      )}
+    </ContentExplorerLayout>
   );
 }

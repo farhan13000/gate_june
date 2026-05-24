@@ -53,8 +53,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="w-full max-w-md mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="font-serif font-bold text-2xl text-foreground">
@@ -203,7 +202,6 @@ export default function Login() {
         <p className="text-center text-[10px] text-muted-foreground/60 mt-6 font-mono">
           GATE DA Scholar · Secure Authentication
         </p>
-      </div>
     </div>
   );
 }
