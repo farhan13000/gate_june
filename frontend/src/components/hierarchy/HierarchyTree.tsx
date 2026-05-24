@@ -69,7 +69,7 @@ export default function HierarchyTree({
                 onSelect({ subjectId: subject.subjectId });
               }}
               className={`w-full flex items-start gap-1.5 py-1.5 px-2 rounded-sm transition-colors text-left ${
-                sActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-secondary"
+                sActive ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold" : "text-foreground hover:bg-secondary"
               }`}
               title={subject.name}
             >
@@ -103,7 +103,7 @@ export default function HierarchyTree({
                       }}
                       className={`w-full flex items-start gap-1.5 py-1 px-2 rounded-sm transition-colors text-left ${
                         cActive
-                          ? "bg-primary/10 text-primary font-medium"
+                          ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold"
                           : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                       }`}
                       title={chapter.name}
@@ -134,7 +134,7 @@ export default function HierarchyTree({
                               }}
                               className={`w-full flex items-start gap-1.5 py-1 px-2 rounded-sm transition-colors text-left ${
                                 tActive
-                                  ? "bg-primary/10 text-primary font-medium"
+                                  ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold"
                                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                               }`}
                               title={topic.name}
@@ -173,7 +173,7 @@ export default function HierarchyTree({
                                     }
                                     className={`w-full flex items-start gap-1.5 py-1 px-2 ml-2 rounded-sm transition-colors text-left ${
                                       stActive
-                                        ? "bg-primary/10 text-primary font-medium"
+                                        ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold"
                                         : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                                     }`}
                                     title={st.name}

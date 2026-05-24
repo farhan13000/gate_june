@@ -26,12 +26,14 @@ export default function Problems() {
   const [selection, setSelection] = useState<HierarchySelection>({});
   const { stats, loading: statsLoading } = useTaxonomyStats(selection);
   const labels = resolveHierarchyLabels(tree, selection);
+  const labelList = Object.values(labels).filter(Boolean) as string[];
 
   const [problems, setProblems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [pageSize, setPageSize] = useState(25);
 
   const [difficulty, setDifficulty] = useState("");
   const [questionType, setQuestionType] = useState("");
@@ -50,7 +52,7 @@ export default function Problems() {
     if (search.trim()) params.set("search", search.trim());
     params.set("sort", sort);
     params.set("page", String(page));
-    params.set("limit", "25");
+    params.set("limit", String(pageSize));
 
     try {
       const res = await fetch(`/api/problems?${params}`);
@@ -75,6 +77,11 @@ export default function Problems() {
   useEffect(() => {
     setPage(1);
   }, [selection, difficulty, questionType, sort, search]);
+
+  useEffect(() => {
+    // when pageSize changes, reset to page 1
+    setPage(1);
+  }, [pageSize]);
 
   useEffect(() => {
     fetchProblems();
@@ -164,13 +171,43 @@ export default function Problems() {
       selection={selection}
       onSelect={setSelection}
       labels={labels}
+      hideStats={true}
       onBreadcrumbNavigate={handleBreadcrumb}
       stats={stats}
       statsLoading={statsLoading}
       filters={filters}
     >
+      {/* Top summary cards similar to the mock (QUESTIONS, SOLVED, ATTEMPTS, ACCURACY, DIFFICULTY) */}
+      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="bg-card border border-border rounded-sm p-4 text-center">
+          <div className="text-xs text-muted-foreground">QUESTIONS</div>
+          <div className="font-mono text-2xl font-bold text-foreground">{total}</div>
+        </div>
+        <div className="bg-card border border-border rounded-sm p-4 text-center">
+          <div className="text-xs text-muted-foreground">SOLVED</div>
+          <div className="font-mono text-2xl font-bold text-foreground">{stats?.solved ?? 0}</div>
+        </div>
+        <div className="bg-card border border-border rounded-sm p-4 text-center">
+          <div className="text-xs text-muted-foreground">ATTEMPTS</div>
+          <div className="font-mono text-2xl font-bold text-foreground">{stats?.attempts ?? 0}</div>
+        </div>
+        <div className="bg-card border border-border rounded-sm p-4 text-center">
+          <div className="text-xs text-muted-foreground">ACCURACY</div>
+          <div className="font-mono text-2xl font-bold text-foreground">{stats?.accuracy ? `${stats.accuracy}%` : "—"}</div>
+        </div>
+        <div className="bg-card border border-border rounded-sm p-4 text-center">
+          <div className="text-xs text-muted-foreground">DIFFICULTY</div>
+          <div className="text-[12px] mt-1">
+            <span className="text-emerald-600">E: {stats?.difficulty?.easy ?? 0}</span>
+            <span className="mx-2 text-blue-600">M: {stats?.difficulty?.medium ?? 0}</span>
+            <span className="text-red-600">H: {stats?.difficulty?.hard ?? 0}</span>
+          </div>
+        </div>
+      </div>
+
       <div className="academic-card overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-[760px] w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/40">
               <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">#</th>
@@ -178,23 +215,22 @@ export default function Problems() {
               <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Title</th>
               <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal hidden md:table-cell">Type</th>
               <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Difficulty</th>
-              <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal hidden sm:table-cell">Success Rate</th>
               <th className="text-right py-3 px-4 text-xs text-muted-foreground font-normal">Your Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center text-muted-foreground text-sm">Loading problems…</td>
+                <td colSpan={6} className="py-16 text-center text-muted-foreground text-sm">Loading problems…</td>
               </tr>
             ) : problems.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center text-muted-foreground text-sm">No problems in this selection. Try a broader level or add content via admin.</td>
+                <td colSpan={6} className="py-16 text-center text-muted-foreground text-sm">No problems in this selection. Try a broader level or add content via admin.</td>
               </tr>
             ) : (
               problems.map((p, idx) => (
                 <tr key={p._id} className="problem-row border-b border-border-faint last:border-0">
-                  <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{(page - 1) * 25 + idx + 1}</td>
+                  <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{(page - 1) * pageSize + idx + 1}</td>
                   <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.contentId || p.problemId || String(p._id).slice(-6)}</td>
                   <td className="py-3 px-4">
                     <Link to={`/problems/${p._id}`} className="text-foreground hover:text-primary transition-colors font-medium">
@@ -207,18 +243,6 @@ export default function Problems() {
                   <td className="py-3 px-4">
                     <span className={diffClass(p.difficulty)}>{p.difficulty}</span>
                   </td>
-                  <td className="py-3 px-4 hidden sm:table-cell">
-                    {p.successRate !== undefined ? (
-                      <div className="w-36">
-                        <div className="h-2 bg-border rounded-full overflow-hidden">
-                          <div className="h-2 bg-emerald-600" style={{ width: `${p.successRate}%` }} />
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">{p.successRate}%</div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">—</div>
-                    )}
-                  </td>
                   <td className="py-3 px-4 text-right font-mono text-xs text-muted-foreground">
                     <div className="flex items-center justify-end gap-3">
                       <label className="text-[13px]">Not Solved</label>
@@ -229,34 +253,95 @@ export default function Problems() {
               ))
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {!loading && (
-        <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            Showing {problems.length} of {total} problems
-          </span>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1.5 border border-border rounded-sm hover:bg-secondary disabled:opacity-40"
-            >
-              ←
-            </button>
-            <span className="px-3 py-1.5 border border-border rounded-sm bg-secondary font-medium">
-              {page} / {totalPages || 1}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 border border-border rounded-sm hover:bg-secondary disabled:opacity-40"
-            >
-              →
-            </button>
+        <div className="mt-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-muted-foreground mb-3 gap-3">
+                <span>Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total} problems</span>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground mr-1">Per page:</label>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="px-2 py-1 text-xs border border-border bg-card rounded-sm"
+                  >
+                    {[10, 25, 50, 100].map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <nav aria-label="Pagination" className="ml-2">
+                    <ul className="flex items-center gap-1">
+                      <li>
+                        <button
+                          type="button"
+                          disabled={page <= 1}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          className="px-3 py-1.5 border border-border rounded-sm hover:bg-secondary disabled:opacity-40"
+                        >
+                          ←
+                        </button>
+                      </li>
+                      {/** numeric page buttons: show first, ... window, last **/}
+                      {(() => {
+                        const pages: (number | string)[] = [];
+                        const totalP = totalPages || 1;
+                        const windowSize = 5;
+                        let start = Math.max(1, page - Math.floor(windowSize / 2));
+                        let end = Math.min(totalP, start + windowSize - 1);
+                        if (end - start + 1 < windowSize) start = Math.max(1, end - windowSize + 1);
+                        if (start > 1) {
+                          pages.push(1);
+                          if (start > 2) pages.push("...");
+                        }
+                        for (let i = start; i <= end; i++) pages.push(i);
+                        if (end < totalP) {
+                          if (end < totalP - 1) pages.push("...");
+                          pages.push(totalP);
+                        }
+                        return pages.map((pnum, idx) => (
+                          <li key={String(pnum) + idx}>
+                            {typeof pnum === "number" ? (
+                              <button
+                                type="button"
+                                onClick={() => setPage(pnum)}
+                                className={`px-3 py-1.5 border rounded-sm ${pnum === page ? "bg-primary text-white border-primary" : "border-border hover:bg-secondary"}`}
+                              >
+                                {pnum}
+                              </button>
+                            ) : (
+                              <span className="px-2 text-muted-foreground">{pnum}</span>
+                            )}
+                          </li>
+                        ));
+                      })()}
+                      <li>
+                        <button
+                          type="button"
+                          disabled={page >= (totalPages || 1)}
+                          onClick={() => setPage((p) => Math.min(totalPages || 1, p + 1))}
+                          className="px-3 py-1.5 border border-border rounded-sm hover:bg-secondary disabled:opacity-40"
+                        >
+                          →
+                        </button>
+                      </li>
+                    </ul>
+                  </nav>
+                </div>
+              </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {labelList.map((l) => (
+                <span key={l} className="text-[12px] px-3 py-1 border border-border rounded-full bg-background text-muted-foreground">{l}</span>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">{problems.length} Problems</span>
+              <button className="px-3 py-1.5 border border-border rounded-sm text-xs">Clear Filters</button>
+            </div>
           </div>
         </div>
       )}

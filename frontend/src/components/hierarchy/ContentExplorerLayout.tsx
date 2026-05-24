@@ -19,6 +19,7 @@ interface ContentExplorerLayoutProps {
   statsLoading?: boolean;
   filters?: ReactNode;
   children: ReactNode;
+  hideStats?: boolean;
 }
 
 export default function ContentExplorerLayout({
@@ -36,6 +37,7 @@ export default function ContentExplorerLayout({
   statsLoading,
   filters,
   children,
+  hideStats = false,
 }: ContentExplorerLayoutProps) {
   return (
     <div className="w-full">
@@ -62,7 +64,7 @@ export default function ContentExplorerLayout({
           <div className="mb-4">
             <HierarchyBreadcrumbs labels={labels} onNavigate={onBreadcrumbNavigate} />
           </div>
-          <HierarchyStatsPanel stats={stats ?? null} loading={statsLoading} />
+          {!hideStats && <HierarchyStatsPanel stats={stats ?? null} loading={statsLoading} />}
           {filters}
           {children}
         </div>
