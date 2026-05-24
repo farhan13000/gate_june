@@ -4,6 +4,7 @@ import User from "../models/User";
 import Question from "../models/Question";
 import Theory from "../models/Theory";
 import Contest from "../models/Contest";
+import { invalidateHomeCache } from "../utils/homeCache";
 
 // --- Users ---
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
@@ -25,6 +26,7 @@ export const createQuestion = async (req: Request, res: Response): Promise<void>
       auditLog: [{ action: "Created", performedBy: req.currentUser!._id }],
     });
     await question.save();
+    invalidateHomeCache();
     res.status(201).json(question);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to create question" });
@@ -64,6 +66,7 @@ export const updateQuestion = async (req: Request, res: Response): Promise<void>
     });
 
     await question.save();
+    invalidateHomeCache();
     res.json(question);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to update question" });
@@ -78,6 +81,7 @@ export const deleteQuestion = async (req: Request, res: Response): Promise<void>
       res.status(404).json({ message: "Question not found" });
       return;
     }
+    invalidateHomeCache();
     res.json({ message: "Question deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete question" });
@@ -104,6 +108,7 @@ export const approveQuestion = async (req: Request, res: Response): Promise<void
     });
 
     await question.save();
+    invalidateHomeCache();
     res.json(question);
   } catch (error) {
     res.status(500).json({ message: "Failed to approve question" });
@@ -120,6 +125,7 @@ export const createTheory = async (req: Request, res: Response): Promise<void> =
       auditLog: [{ action: "Created", performedBy: req.currentUser!._id }],
     });
     await theory.save();
+    invalidateHomeCache();
     res.status(201).json(theory);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to create theory" });
@@ -159,6 +165,7 @@ export const updateTheory = async (req: Request, res: Response): Promise<void> =
     });
 
     await theory.save();
+    invalidateHomeCache();
     res.json(theory);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to update theory" });
@@ -173,6 +180,7 @@ export const deleteTheory = async (req: Request, res: Response): Promise<void> =
       res.status(404).json({ message: "Theory not found" });
       return;
     }
+    invalidateHomeCache();
     res.json({ message: "Theory deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete theory" });
@@ -199,6 +207,7 @@ export const approveTheory = async (req: Request, res: Response): Promise<void> 
     });
 
     await theory.save();
+    invalidateHomeCache();
     res.json(theory);
   } catch (error: any) {
     console.error("[approveTheory] Error saving theory:", error);
@@ -244,10 +253,12 @@ export const bulkUpload = async (req: Request, res: Response): Promise<void> => 
     if (type === "Problem") {
       try {
         const docs = await Question.insertMany(itemsToSave, { ordered: false });
+        invalidateHomeCache();
         res.status(201).json({ message: `Successfully added ${docs.length} problems for review` });
       } catch (err: any) {
         const insertedCount = err.insertedDocs ? err.insertedDocs.length : 0;
         const duplicateCount = err.writeErrors ? err.writeErrors.length : itemsToSave.length - insertedCount;
+        invalidateHomeCache();
         res.status(201).json({
           message: `Successfully added ${insertedCount} problems for review${duplicateCount > 0 ? ` (${duplicateCount} items skipped as duplicates)` : ""}`
         });
@@ -255,10 +266,12 @@ export const bulkUpload = async (req: Request, res: Response): Promise<void> => 
     } else if (type === "Theory Article") {
       try {
         const docs = await Theory.insertMany(itemsToSave, { ordered: false });
+        invalidateHomeCache();
         res.status(201).json({ message: `Successfully added ${docs.length} theory articles for review` });
       } catch (err: any) {
         const insertedCount = err.insertedDocs ? err.insertedDocs.length : 0;
         const duplicateCount = err.writeErrors ? err.writeErrors.length : itemsToSave.length - insertedCount;
+        invalidateHomeCache();
         res.status(201).json({
           message: `Successfully added ${insertedCount} theory articles for review${duplicateCount > 0 ? ` (${duplicateCount} items skipped as duplicates)` : ""}`
         });

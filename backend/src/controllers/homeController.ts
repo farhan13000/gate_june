@@ -6,9 +6,16 @@ import User from "../models/User";
 import Announcement from "../models/Announcement";
 import { getOrCreateSettings } from "../models/PlatformSettings";
 import { formatCountdown, formatContestDate, formatAnnouncementDate } from "../utils/countdown";
+import { getCachedHomeData, setCachedHomeData } from "../utils/homeCache";
 
 export const getHomeData = async (_req: Request, res: Response): Promise<void> => {
   try {
+    const cached = getCachedHomeData();
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
     const settings = await getOrCreateSettings();
     const now = new Date();
 
@@ -86,7 +93,7 @@ export const getHomeData = async (_req: Request, res: Response): Promise<void> =
       User.countDocuments(),
     ]);
 
-    res.json({
+    const homeData = {
       problemOfTheDay,
       contests: contestList,
       importantAnnouncements: importantRaw.map(mapAnnouncement),
@@ -98,7 +105,10 @@ export const getHomeData = async (_req: Request, res: Response): Promise<void> =
         users: userCount,
       },
       fetchedAt: new Date().toISOString(),
-    });
+    };
+
+    setCachedHomeData(homeData);
+    res.json(homeData);
   } catch (error) {
     console.error("getHomeData error:", error);
     res.status(500).json({ message: "Failed to load home data" });

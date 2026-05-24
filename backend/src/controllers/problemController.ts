@@ -37,7 +37,7 @@ export const toggleUpvote = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const hasUpvoted = question.upvotedBy.includes(userId);
+    const hasUpvoted = question.upvotedBy.some(id => id.toString() === userId.toString());
 
     if (hasUpvoted) {
       question.upvotedBy = question.upvotedBy.filter(id => id.toString() !== userId.toString());

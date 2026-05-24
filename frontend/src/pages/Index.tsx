@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Award,
@@ -197,7 +197,7 @@ export default function Index() {
                 </div>
               ) : potd ? (
                 <>
-                  <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
+                  <div className={potd.imageUrl ? "grid gap-4 md:grid-cols-[1fr_auto] md:items-start" : "space-y-3"}>
                     <div className="min-w-0 space-y-3">
                       <div className="text-sm leading-relaxed text-[#0f172a]">
                         <LatexRenderer latex={potd.statement} />
@@ -209,19 +209,17 @@ export default function Index() {
                       )}
                     </div>
 
-                    <div className="h-fit shrink-0 self-start rounded-none border border-[#e2e8f0] bg-[#f8fbff] p-2">
-                      <div className="rounded-none border border-[#e2e8f0] bg-white p-2">
-                        {potd.imageUrl ? (
+                    {potd.imageUrl && (
+                      <div className="h-fit shrink-0 self-start rounded-none border border-[#e2e8f0] bg-[#f8fbff] p-2">
+                        <div className="rounded-none border border-[#e2e8f0] bg-white p-2">
                           <img
                             src={potd.imageUrl}
                             alt="Problem illustration"
                             className="max-h-[140px] w-full max-w-[220px] object-contain"
                           />
-                        ) : (
-                          <NormalCurveChart />
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {potd.questionType !== "NAT" && potd.options && potd.options.length > 0 ? (

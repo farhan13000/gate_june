@@ -3,6 +3,7 @@ import Announcement from "../models/Announcement";
 import Contest from "../models/Contest";
 import Question from "../models/Question";
 import { getOrCreateSettings } from "../models/PlatformSettings";
+import { invalidateHomeCache } from "../utils/homeCache";
 
 // ── Problem of the Day ───────────────────────────────────────────────────────
 
@@ -48,6 +49,8 @@ export const setProblemOfTheDay = async (req: Request, res: Response): Promise<v
     settings.problemOfTheDayId = question._id;
     settings.updatedBy = req.currentUser!._id;
     await settings.save();
+
+    invalidateHomeCache();
 
     res.json({
       message: "Problem of the day updated",
@@ -98,6 +101,8 @@ export const createAnnouncement = async (req: Request, res: Response): Promise<v
       publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
       createdBy: req.currentUser!._id,
     });
+    
+    invalidateHomeCache();
     res.status(201).json(item);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to create announcement" });
@@ -120,6 +125,8 @@ export const updateAnnouncement = async (req: Request, res: Response): Promise<v
       res.status(404).json({ message: "Announcement not found" });
       return;
     }
+    
+    invalidateHomeCache();
     res.json(item);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to update announcement" });
@@ -133,6 +140,8 @@ export const deleteAnnouncement = async (req: Request, res: Response): Promise<v
       res.status(404).json({ message: "Announcement not found" });
       return;
     }
+    
+    invalidateHomeCache();
     res.json({ message: "Announcement deleted" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete announcement" });
@@ -172,6 +181,8 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       createdBy: req.currentUser!._id,
       approvedBy: req.currentUser!._id,
     });
+    
+    invalidateHomeCache();
     res.status(201).json(contest);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to create contest" });
@@ -196,6 +207,7 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
     if (status !== undefined) contest.status = status;
 
     await contest.save();
+    invalidateHomeCache();
     res.json(contest);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to update contest" });
@@ -209,6 +221,8 @@ export const deleteContest = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ message: "Contest not found" });
       return;
     }
+    
+    invalidateHomeCache();
     res.json({ message: "Contest deleted" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete contest" });
