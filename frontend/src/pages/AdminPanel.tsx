@@ -476,12 +476,14 @@ export default function AdminPanel() {
       
       const res = await fetch(endpoint, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        toast.success("Content Saved!");
+        toast.success("Saved to pending approvals");
         fetchPendingQuestions();
+        fetchProblems();
       } else {
         toast.error("Submission failed");
       }
@@ -538,22 +540,27 @@ export default function AdminPanel() {
   const parseBulkJson = () => {
     try {
       const data = robustJsonParse(bulkJson);
-      // Support both single object and array format
       const normalizedData = Array.isArray(data) ? data : [data];
       
       if (normalizedData.length === 0) { 
-        setBulkParseError("JSON must contain at least one problem"); 
+        setBulkParseError("JSON must contain at least one item"); 
         return; 
       }
       
-      // Validate that all items are objects
       if (!normalizedData.every(item => typeof item === 'object' && item !== null)) {
-        setBulkParseError("Each problem must be a valid JSON object");
+        setBulkParseError("Each item must be a valid JSON object");
         return;
       }
       
-      // Transform elite protocol format to backend format
-      const transformedData = normalizedData.map(item => transformEliteProtocol(item));
+      const transformedData = normalizedData.map(item =>
+        qForm.type === "Theory Article" ? transformTheoryProtocol(item) : transformEliteProtocol(item)
+      );
+      const validationErrors = transformedData.flatMap((item, index) => validateBulkItem(item, index));
+      if (validationErrors.length > 0) {
+        setBulkParseError(validationErrors.slice(0, 5).join(" | "));
+        setBulkPreview(null);
+        return;
+      }
       
       setBulkParseError("");
       setBulkPreview(transformedData);
@@ -573,11 +580,15 @@ export default function AdminPanel() {
       topic: item.topic || "",
       subtopic: item.subtopic || "",
       difficulty: mapDifficulty(item.difficulty) || "Medium",
-      questionType: item.problem_type || "MCQ",
+      questionType: item.problem_type || item.questionType || "MCQ",
       statement: item.problem_statement || item.statement || "",
       tags: item.concepts || item.tags || [],
       solution: item.solution || {},
-      estimatedTime: item.metadata?.estimated_time_minutes || 180,
+      estimatedTime: item.estimatedTime || ((item.metadata?.estimated_time_minutes || 3) * 60),
+      markingScheme: {
+        positive: item.markingScheme?.positive ?? item.positiveMarks ?? 2,
+        negative: item.markingScheme?.negative ?? item.negativeMarks ?? 0.5,
+      },
     };
 
     // Transform options from {A, B, C, D} format to [{text, isCorrect}] format
@@ -599,6 +610,37 @@ export default function AdminPanel() {
     return transformed;
   };
 
+  const transformTheoryProtocol = (item: any): any => ({
+    title: item.title || item.heading || "Untitled theory article",
+    topic: item.topic || qForm.topic || "",
+    chapterId: item.chapterId || qForm.chapterId || "",
+    chapterTitle: item.chapterTitle || item.chapter || qForm.chapterTitle || "",
+    sectionId: item.sectionId || item.subtopic || qForm.sectionId || "",
+    content: item.content || item.statement || item.body || "",
+    formulas: Array.isArray(item.formulas) ? item.formulas : String(item.formulas || "").split("\n").filter(Boolean),
+    examples: Array.isArray(item.examples) ? item.examples : String(item.examples || "").split("\n").filter(Boolean),
+    highlights: Array.isArray(item.highlights) ? item.highlights : String(item.highlights || "").split("\n").filter(Boolean),
+    imageUrl: item.imageUrl || "",
+  });
+
+  const validateBulkItem = (item: any, index: number) => {
+    const itemNo = index + 1;
+    const errors: string[] = [];
+    if (!item.title || item.title === "Untitled") errors.push(`#${itemNo}: missing title`);
+    if (qForm.type === "Problem") {
+      if (!item.statement) errors.push(`#${itemNo}: missing problem statement`);
+      if (item.questionType !== "NAT" && (!Array.isArray(item.options) || item.options.length < 2)) {
+        errors.push(`#${itemNo}: MCQ/MSQ needs at least 2 options`);
+      }
+      if (item.questionType !== "NAT" && !item.options?.some((opt: any) => opt.isCorrect)) {
+        errors.push(`#${itemNo}: mark at least one correct option`);
+      }
+    } else if (!item.content) {
+      errors.push(`#${itemNo}: missing theory content`);
+    }
+    return errors;
+  };
+
   const mapDifficulty = (difficulty: string): "Easy" | "Medium" | "Hard" => {
     const diff = (difficulty || "").toLowerCase();
     if (diff.includes("foundational") || diff.includes("easy")) return "Easy";
@@ -611,6 +653,7 @@ export default function AdminPanel() {
     try {
       const res = await fetch("/api/admin/bulk-upload", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: qForm.type, data: bulkPreview }),
       });
@@ -618,6 +661,7 @@ export default function AdminPanel() {
       if (res.ok) {
         toast.success(result.message || "Bulk Upload Successful!");
         fetchPendingQuestions();
+        fetchProblems();
         setBulkJson("");
         setBulkPreview(null);
       } else {
@@ -809,6 +853,7 @@ export default function AdminPanel() {
           <AdminShell
             activeSection={activeSection}
             onSectionChange={setActiveSection}
+            pendingCount={pendingQuestions.length}
           >
         {/* OVERVIEW SECTION */}
         {activeSection === "Overview" && (
@@ -917,9 +962,28 @@ export default function AdminPanel() {
 
         {/* CONTENT MANAGEMENT SECTION */}
         {activeSection === "Content Management" && (
-          <div className="w-full">
-            <h2 className="text-lg font-bold font-serif mb-3 text-foreground">Content Creation Factory</h2>
-            <div className="academic-card p-6">
+          <div className="w-full space-y-4">
+            <div className="rounded-sm border border-border bg-card p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="font-serif text-xl font-bold text-foreground">Content Creation Factory</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Create problems and theory manually or parse AI/JSON batches, preview the rendered result, then send everything into the approval queue.
+                  </p>
+                </div>
+                {pendingQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("Approval Dashboard")}
+                    className="inline-flex items-center justify-center gap-2 rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/15"
+                  >
+                    <span className="admin-pending-dot" />
+                    {pendingQuestions.length} pending approvals
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="academic-card p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 border-b border-border pb-4">
                 <h3 className="font-bold text-sm text-foreground">Draft New Problem / Theory</h3>
                 <button onClick={submitQuestion} className="btn-primary px-5 py-2 text-xs w-full sm:w-auto">Save Content to Drafts</button>
@@ -1065,7 +1129,7 @@ export default function AdminPanel() {
                               <div className="text-xs text-foreground space-y-1">
                                 <div className="font-semibold text-muted-foreground">Problem:</div>
                                 <div className="pl-3 border-l-2 border-primary/30 text-xs leading-relaxed">
-                                  <LatexRenderer content={item.statement || "No problem statement"} />
+                                  <LatexRenderer latex={item.statement || item.content || "No content"} />
                                 </div>
                               </div>
                               
@@ -1077,7 +1141,7 @@ export default function AdminPanel() {
                                     {item.options.map((opt: any, oi: number) => (
                                       <div key={oi} className={`text-xs leading-relaxed ${opt.isCorrect ? 'font-bold text-green-700' : ''}`}>
                                         <span className="font-mono text-muted-foreground">{String.fromCharCode(65 + oi)}.</span>{' '}
-                                        <LatexRenderer content={opt.text || "—"} />
+                                        <LatexRenderer latex={opt.text || "—"} />
                                         {opt.isCorrect && <span className="ml-2">✓ Correct</span>}
                                       </div>
                                     ))}
@@ -1094,7 +1158,7 @@ export default function AdminPanel() {
                                   
                                   {typeof item.solution === 'string' ? (
                                     <div className="leading-relaxed text-xs">
-                                      <LatexRenderer content={item.solution} />
+                                      <LatexRenderer latex={item.solution} />
                                     </div>
                                   ) : (
                                     <div className="space-y-2 text-xs">
@@ -1102,7 +1166,7 @@ export default function AdminPanel() {
                                         <div>
                                           <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Overview:</div>
                                           <div className="leading-relaxed pl-2">
-                                            <LatexRenderer content={item.solution.overview} />
+                                            <LatexRenderer latex={item.solution.overview} />
                                           </div>
                                         </div>
                                       )}
@@ -1113,7 +1177,20 @@ export default function AdminPanel() {
                                           <ol className="list-decimal list-inside space-y-1 pl-2">
                                             {item.solution.detailed_steps.map((step: string, si: number) => (
                                               <li key={si} className="leading-relaxed text-xs">
-                                                <LatexRenderer content={step} />
+                                                <LatexRenderer latex={step} />
+                                              </li>
+                                            ))}
+                                          </ol>
+                                        </div>
+                                      )}
+
+                                      {item.solution.steps && Array.isArray(item.solution.steps) && (
+                                        <div>
+                                          <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Steps:</div>
+                                          <ol className="list-decimal list-inside space-y-1 pl-2">
+                                            {item.solution.steps.map((step: string, si: number) => (
+                                              <li key={si} className="leading-relaxed text-xs">
+                                                <LatexRenderer latex={step} />
                                               </li>
                                             ))}
                                           </ol>
@@ -1124,7 +1201,7 @@ export default function AdminPanel() {
                                         <div>
                                           <div className="font-semibold text-amber-700 dark:text-amber-300">Key Observation:</div>
                                           <div className="leading-relaxed pl-2 text-xs">
-                                            <LatexRenderer content={item.solution.key_observation} />
+                                            <LatexRenderer latex={item.solution.key_observation} />
                                           </div>
                                         </div>
                                       )}
@@ -1133,8 +1210,15 @@ export default function AdminPanel() {
                                         <div>
                                           <div className="font-semibold text-amber-700 dark:text-amber-300">Mathematical Insight:</div>
                                           <div className="leading-relaxed pl-2 text-xs">
-                                            <LatexRenderer content={item.solution.mathematical_insight} />
+                                            <LatexRenderer latex={item.solution.mathematical_insight} />
                                           </div>
+                                        </div>
+                                      )}
+
+                                      {(item.solution.finalAnswer || item.solution.final_answer) && (
+                                        <div className="rounded-sm border border-green-500/20 bg-green-500/10 p-2">
+                                          <span className="font-semibold text-green-700">Final answer: </span>
+                                          <LatexRenderer latex={item.solution.finalAnswer || item.solution.final_answer} />
                                         </div>
                                       )}
                                     </div>
@@ -1209,13 +1293,36 @@ export default function AdminPanel() {
                           <textarea rows={4} value={qForm.solution} onChange={e=>setQForm({...qForm, solution: e.target.value})} className="w-full px-3 py-3 text-xs bg-background border border-border rounded-sm outline-none resize-y font-mono focus:border-primary leading-relaxed" />
                         </div>
 
-                        {/* Options & Marking Scheme Row */}
                         <div className="grid grid-cols-12 gap-6 border-t border-border pt-6 mt-6">
-                          <div className="col-span-12 md:col-span-6 space-y-4">
-                            <label className="block text-xs font-bold text-foreground">Option 1 (LaTeX)</label>
-                            <input value={qForm.options[0].text} onChange={e=>{const o=[...qForm.options]; o[0].text=e.target.value; setQForm({...qForm, options: o})}} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary" />
-                            <label className="block text-xs font-bold text-foreground">Option 2 (LaTeX)</label>
-                            <input value={qForm.options[1].text} onChange={e=>{const o=[...qForm.options]; o[1].text=e.target.value; setQForm({...qForm, options: o})}} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary" />
+                          <div className="col-span-12 md:col-span-6 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <label className="block text-xs font-bold text-foreground">Options (LaTeX)</label>
+                              <span className="text-[10px] text-muted-foreground">Tick correct answer(s)</span>
+                            </div>
+                            {qForm.options.map((option, index) => (
+                              <div key={index} className="grid grid-cols-[auto_1fr] items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={option.isCorrect}
+                                  onChange={(e) => {
+                                    const options = [...qForm.options];
+                                    options[index] = { ...options[index], isCorrect: e.target.checked };
+                                    setQForm({ ...qForm, options });
+                                  }}
+                                  className="accent-primary"
+                                />
+                                <input
+                                  value={option.text}
+                                  placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                                  onChange={(e) => {
+                                    const options = [...qForm.options];
+                                    options[index] = { ...options[index], text: e.target.value };
+                                    setQForm({ ...qForm, options });
+                                  }}
+                                  className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary"
+                                />
+                              </div>
+                            ))}
                           </div>
                           
                           <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-4">
@@ -1251,6 +1358,59 @@ export default function AdminPanel() {
                           </div>
                         </div>
                       </>
+                    )}
+
+                    {(qForm.title || qForm.statement || qForm.solution) && (
+                      <div className="rounded-sm border border-border bg-secondary/10 p-4">
+                        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Rendered preview before saving</div>
+                          <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                            <span className="rounded-sm border border-border bg-background px-2 py-1">{qForm.type}</span>
+                            {qForm.type === "Problem" && (
+                              <>
+                                <span className="rounded-sm border border-border bg-background px-2 py-1">{qForm.questionType}</span>
+                                <span className="rounded-sm border border-border bg-background px-2 py-1">{qForm.difficulty}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          {qForm.title && (
+                            <h4 className="font-serif text-base font-bold text-foreground">
+                              <LatexRenderer latex={qForm.title} />
+                            </h4>
+                          )}
+                          {qForm.statement && (
+                            <div className="rounded-sm border border-border bg-card p-3 text-sm">
+                              <LatexRenderer latex={qForm.statement} />
+                            </div>
+                          )}
+                          {qForm.type === "Problem" && qForm.questionType !== "NAT" && (
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                              {qForm.options.filter((option) => option.text.trim()).map((option, index) => (
+                                <div
+                                  key={index}
+                                  className={`rounded-sm border p-3 text-xs ${
+                                    option.isCorrect
+                                      ? "border-green-500/30 bg-green-500/10 text-green-700"
+                                      : "border-border bg-card"
+                                  }`}
+                                >
+                                  <span className="mr-2 font-mono font-bold">{String.fromCharCode(65 + index)}.</span>
+                                  <LatexRenderer latex={option.text} />
+                                  {option.isCorrect && <span className="ml-2 font-semibold">Correct</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {qForm.solution && (
+                            <div className="rounded-sm border border-amber-500/20 bg-amber-500/5 p-3 text-sm">
+                              <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-amber-700">Solution preview</div>
+                              <EditorialRenderer solution={qForm.solution} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

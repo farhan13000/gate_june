@@ -437,6 +437,15 @@
     @apply bg-primary/10 text-primary font-semibold border border-primary/20 hover:bg-primary/10 hover:text-primary;
   }
 
+  .admin-pending-dot {
+    @apply relative inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 shadow-[0_0_0_3px_hsl(var(--background)),0_0_12px_rgba(245,158,11,0.9)];
+  }
+
+  .admin-pending-dot::after {
+    content: "";
+    @apply absolute inset-0 rounded-full bg-amber-400 animate-ping opacity-70;
+  }
+
   .admin-shell-sidebar-foot {
     @apply px-4 py-3 border-t border-border hidden lg:block;
   }

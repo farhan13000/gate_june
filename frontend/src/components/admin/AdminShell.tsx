@@ -65,6 +65,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
 interface AdminShellProps {
   activeSection: AdminSectionId;
   onSectionChange: (section: AdminSectionId) => void;
+  pendingCount?: number;
   children: React.ReactNode;
 }
 
@@ -73,7 +74,7 @@ export function getAdminSectionTitle(section: AdminSectionId): string {
   return section;
 }
 
-export default function AdminShell({ activeSection, onSectionChange, children }: AdminShellProps) {
+export default function AdminShell({ activeSection, onSectionChange, pendingCount = 0, children }: AdminShellProps) {
   return (
     <div className="admin-shell">
       <aside className="admin-shell-sidebar">
@@ -99,6 +100,11 @@ export default function AdminShell({ activeSection, onSectionChange, children }:
                   >
                     <Icon size={14} className="shrink-0 opacity-80" />
                     <span className="truncate">{item.label}</span>
+                    {item.id === "Approval Dashboard" && pendingCount > 0 && (
+                      <span className="admin-pending-dot ml-auto" title={`${pendingCount} pending approvals`}>
+                        <span className="sr-only">{pendingCount} pending approvals</span>
+                      </span>
+                    )}
                   </button>
                 );
               })}
