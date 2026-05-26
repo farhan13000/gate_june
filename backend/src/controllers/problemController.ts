@@ -28,16 +28,34 @@ export const getApprovedQuestions = async (req: Request, res: Response): Promise
     if (sort === "difficulty") sortOpt = { difficulty: 1, createdAt: -1 };
     if (sort === "title") sortOpt = { title: 1 };
 
-    const [questions, total] = await Promise.all([
+    const [questions, total, difficultyRows] = await Promise.all([
       Question.find(filter)
         .select("-solution -approvedBy -createdBy -auditLog")
         .sort(sortOpt)
         .skip(skip)
         .limit(limit),
       Question.countDocuments(filter),
+      Question.aggregate([
+        { $match: filter },
+        { $group: { _id: "$difficulty", count: { $sum: 1 } } },
+      ]),
     ]);
 
-    res.json({ questions, total, page, limit, totalPages: Math.ceil(total / limit) });
+    const difficultyDistribution = { Easy: 0, Medium: 0, Hard: 0 };
+    difficultyRows.forEach((row: { _id: "Easy" | "Medium" | "Hard"; count: number }) => {
+      if (row._id in difficultyDistribution) {
+        difficultyDistribution[row._id] = row.count;
+      }
+    });
+
+    res.json({
+      questions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      difficultyDistribution,
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch questions" });
   }

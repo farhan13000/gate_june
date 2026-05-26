@@ -12,6 +12,28 @@ const sortOptions = [
   { value: "title", label: "Title" },
   { value: "difficulty", label: "Difficulty" },
 ];
+const emptyDifficultyCounts = { easy: 0, medium: 0, hard: 0 };
+
+function countProblemDifficulties(items: Array<Record<string, unknown>>) {
+  return items.reduce(
+    (counts, item) => {
+      if (item.difficulty === "Easy") counts.easy += 1;
+      if (item.difficulty === "Medium") counts.medium += 1;
+      if (item.difficulty === "Hard") counts.hard += 1;
+      return counts;
+    },
+    { ...emptyDifficultyCounts }
+  );
+}
+
+function normalizeDifficultyDistribution(distribution?: ProblemsListResponse["difficultyDistribution"]) {
+  if (!distribution) return null;
+  return {
+    easy: distribution.Easy ?? 0,
+    medium: distribution.Medium ?? 0,
+    hard: distribution.Hard ?? 0,
+  };
+}
 
 function diffClass(difficulty: string) {
   if (difficulty === "Easy") {
@@ -43,6 +65,7 @@ export default function Problems() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [pageSize, setPageSize] = useState(25);
+  const [problemDifficultyCounts, setProblemDifficultyCounts] = useState(emptyDifficultyCounts);
 
   const [difficulty, setDifficulty] = useState("");
   const [questionType, setQuestionType] = useState("");
@@ -71,15 +94,21 @@ export default function Problems() {
         setProblems(response.questions as any[]);
         setTotal(response.total);
         setTotalPages(response.totalPages);
+        setProblemDifficultyCounts(
+          normalizeDifficultyDistribution(response.difficultyDistribution) ||
+            countProblemDifficulties(response.questions)
+        );
       } else if (Array.isArray(data)) {
         setProblems(data);
         setTotal(data.length);
         setTotalPages(1);
+        setProblemDifficultyCounts(countProblemDifficulties(data));
       }
     } catch {
       setProblems([]);
       setTotal(0);
       setTotalPages(1);
+      setProblemDifficultyCounts(emptyDifficultyCounts);
     } finally {
       setLoading(false);
     }
@@ -110,11 +139,7 @@ export default function Problems() {
   const extendedStats = stats as any;
   const solved = extendedStats?.solved ?? extendedStats?.solvedCount ?? 0;
   const attempts = extendedStats?.attempts ?? 0;
-  const difficultyCounts = extendedStats?.difficulty ?? {
-    easy: stats?.difficultyDistribution?.Easy ?? 0,
-    medium: stats?.difficultyDistribution?.Medium ?? 0,
-    hard: stats?.difficultyDistribution?.Hard ?? 0,
-  };
+  const difficultyCounts = problemDifficultyCounts;
   const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const showingTo = Math.min(page * pageSize, total);
 

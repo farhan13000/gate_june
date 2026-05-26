@@ -57,4 +57,5 @@ export interface ProblemsListResponse {
   page: number;
   limit: number;
   totalPages: number;
+  difficultyDistribution?: { Easy: number; Medium: number; Hard: number };
 }

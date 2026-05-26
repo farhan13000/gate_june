@@ -22,6 +22,7 @@ interface ContentExplorerLayoutProps {
   filters?: ReactNode;
   children: ReactNode;
   hideStats?: boolean;
+  resetLabel?: string;
 }
 
 export default function ContentExplorerLayout({
@@ -40,6 +41,7 @@ export default function ContentExplorerLayout({
   filters,
   children,
   hideStats = false,
+  resetLabel = "All problems",
 }: ContentExplorerLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -145,7 +147,7 @@ export default function ContentExplorerLayout({
                   className="inline-flex items-center gap-2 rounded-sm border border-border bg-card px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary"
                 >
                   <RotateCcw size={13} />
-                  All problems
+                  {resetLabel}
                 </button>
               )}
               {!sidebarOpen && (
