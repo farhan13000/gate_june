@@ -14,7 +14,6 @@ import {
   MessageCircle,
   PieChart,
   Sigma,
-  Sparkles,
   Trophy,
   TrendingUp,
   Users,
@@ -295,41 +294,7 @@ export default function Index() {
               )}
             </section>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              <section className="rounded-none border border-[#e2e8f0] bg-white p-5 shadow-sm">
-                <h2 className="text-sm font-semibold text-[#0f172a]">Your Progress</h2>
-                <div className="mt-5 space-y-5">
-                  {[
-                    { label: "Problems Solved", value: "342 / 1200", percent: 28, color: "bg-[#2563eb]" },
-                    { label: "Accuracy", value: "78.6%", percent: 79, color: "bg-[#22c55e]" },
-                    { label: "Mock Score (Avg.)", value: "62.4 / 100", percent: 62, color: "bg-[#2563eb]" },
-                  ].map((item) => (
-                    <div key={item.label} className="space-y-2">
-                      <div className="flex items-center justify-between text-xs text-[#64748b]">
-                        <span>{item.label}</span>
-                        <span className="font-semibold text-[#0f172a]">{item.value}</span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-none bg-[#e2e8f0]">
-                        <div className={`h-full rounded-none ${item.color}`} style={{ width: `${item.percent}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex items-center gap-3 rounded-none border border-[#e2e8f0] bg-[#f8fbff] px-3 py-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-none bg-[#eff6ff] text-[#2563eb]">
-                      <Sparkles size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-[#0f172a]">Current Streak</p>
-                      <p className="text-sm text-[#475569]">
-                        <Link to="/dashboard" className="text-[#2563eb] hover:underline">
-                          View on Dashboard
-                        </Link>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
+            <div className="grid gap-6">
               <section className="rounded-none border border-[#e2e8f0] bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-2">
                   <h2 className="text-sm font-semibold text-[#0f172a]">Topic Navigator</h2>
@@ -337,7 +302,7 @@ export default function Index() {
                     View All
                   </Link>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {topicCards.map((topic) => {
                     const Icon = topic.icon;
                     return (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, BookOpen, Layers, FileText, Hash } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Hash, Layers } from "lucide-react";
 import type { HierarchySelection, SubjectNode } from "@/types/taxonomy";
 
 interface HierarchyTreeProps {
@@ -7,24 +7,30 @@ interface HierarchyTreeProps {
   selection: HierarchySelection;
   onSelect: (selection: HierarchySelection) => void;
   loading?: boolean;
-  /** When true, all nodes start expanded */
   defaultExpanded?: boolean;
-  /** Toggle key to force expand/collapse all */
   expandAllKey?: string;
 }
 
 function buildExpandedMap(tree: SubjectNode[], expanded: boolean): Record<string, boolean> {
   const map: Record<string, boolean> = {};
-  for (const s of tree) {
-    map[s.subjectId] = expanded;
-    for (const c of s.chapters) {
-      map[c.chapterId] = expanded;
-      for (const t of c.topics) {
-        map[t.topicId] = expanded;
+  for (const subject of tree) {
+    map[subject.subjectId] = expanded;
+    for (const chapter of subject.chapters) {
+      map[chapter.chapterId] = expanded;
+      for (const topic of chapter.topics) {
+        map[topic.topicId] = expanded;
       }
     }
   }
   return map;
+}
+
+function ProgressPill() {
+  return (
+    <span className="rounded-sm border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+      0%
+    </span>
+  );
 }
 
 export default function HierarchyTree({
@@ -41,147 +47,142 @@ export default function HierarchyTree({
     setExpanded(buildExpandedMap(tree, defaultExpanded));
   }, [tree, defaultExpanded, expandAllKey]);
 
-  const toggle = (key: string) => setExpanded((p) => ({ ...p, [key]: !p[key] }));
-  const isExp = (key: string) => expanded[key] !== false;
+  const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  const isExpanded = (key: string) => expanded[key] !== false;
 
   if (loading) {
-    return (
-      <div className="py-8 text-center text-xs text-muted-foreground font-mono">Loading hierarchy…</div>
-    );
+    return <div className="py-8 text-center text-xs text-muted-foreground font-mono">Loading hierarchy...</div>;
   }
 
-  if (tree.length === 0) {
-    return null;
-  }
+  if (tree.length === 0) return null;
 
   return (
-    <nav className="text-xs space-y-0.5 pr-1" aria-label="Content hierarchy">
+    <nav className="text-sm" aria-label="Content hierarchy">
       {tree.map((subject) => {
-        const sKey = subject.subjectId;
-        const sActive = selection.subjectId === subject.subjectId && !selection.chapterId;
+        const subjectActive = selection.subjectId === subject.subjectId && !selection.chapterId;
         const chapterCount = subject.chapters.length;
+
         return (
-          <div key={sKey} className="mb-1">
+          <div key={subject.subjectId} className="hierarchy-subject">
             <button
               type="button"
               onClick={() => {
-                toggle(sKey);
+                toggle(subject.subjectId);
                 onSelect({ subjectId: subject.subjectId });
               }}
-              className={`w-full flex items-start gap-1.5 py-1.5 px-2 rounded-sm transition-colors text-left ${
-                sActive ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold" : "text-foreground hover:bg-secondary"
+              className={`w-full grid grid-cols-[1rem_2rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left transition-colors ${
+                subjectActive ? "bg-primary/10 text-primary" : "text-foreground hover:bg-secondary/50"
               }`}
               title={subject.name}
             >
-              <span className="shrink-0 mt-0.5">
-                {isExp(sKey) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <span className="text-foreground">
+                {isExpanded(subject.subjectId) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </span>
-              <BookOpen size={12} className="shrink-0 opacity-60 mt-0.5" />
-              <span className="flex-1 min-w-0">
-                <span className="block leading-snug break-words">{subject.name}</span>
-                <span className="font-mono text-[9px] text-muted-foreground">
-                  {subject.code} · {chapterCount} ch
+              <span className="h-8 w-8 rounded-sm border border-border bg-secondary/40 text-muted-foreground flex items-center justify-center">
+                <BookOpen size={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold leading-tight text-foreground">
+                  {subject.name}
+                </span>
+                <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
+                  {subject.code} - {chapterCount} {chapterCount === 1 ? "chapter" : "chapters"}
                 </span>
               </span>
+              <ProgressPill />
             </button>
 
-            {isExp(sKey) &&
+            {isExpanded(subject.subjectId) &&
               subject.chapters.map((chapter) => {
-                const cKey = chapter.chapterId;
-                const cActive =
-                  selection.chapterId === chapter.chapterId && !selection.topicId;
+                const chapterActive = selection.chapterId === chapter.chapterId && !selection.topicId;
+
                 return (
-                  <div key={cKey} className="ml-2 border-l border-border pl-1.5">
+                  <div key={chapter.chapterId} className="ml-5 border-l border-border pl-2">
                     <button
                       type="button"
                       onClick={() => {
-                        toggle(cKey);
-                        onSelect({
-                          subjectId: subject.subjectId,
-                          chapterId: chapter.chapterId,
-                        });
+                        toggle(chapter.chapterId);
+                        onSelect({ subjectId: subject.subjectId, chapterId: chapter.chapterId });
                       }}
-                      className={`w-full flex items-start gap-1.5 py-1 px-2 rounded-sm transition-colors text-left ${
-                        cActive
-                          ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold"
-                          : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      className={`w-full grid grid-cols-[1rem_1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-2 text-left transition-colors ${
+                        chapterActive
+                          ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                          : "text-foreground hover:bg-secondary/50"
                       }`}
                       title={chapter.name}
                     >
-                      <span className="shrink-0 mt-0.5">
-                        {isExp(cKey) ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                      <span>
+                        {isExpanded(chapter.chapterId) ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                       </span>
-                      <Layers size={11} className="shrink-0 opacity-50 mt-0.5" />
-                      <span className="flex-1 min-w-0 leading-snug break-words">{chapter.name}</span>
+                      <Layers size={16} className="text-primary" />
+                      <span className="min-w-0 truncate text-xs font-semibold sm:text-sm">{chapter.name}</span>
+                      <ProgressPill />
                     </button>
 
-                    {isExp(cKey) &&
+                    {isExpanded(chapter.chapterId) &&
                       chapter.topics.map((topic) => {
-                        const tKey = topic.topicId;
-                        const tActive =
-                          selection.topicId === topic.topicId && !selection.subtopicId;
+                        const topicActive = selection.topicId === topic.topicId && !selection.subtopicId;
+
                         return (
-                          <div key={tKey} className="ml-2 border-l border-border-faint pl-1.5">
+                          <div key={topic.topicId} className="ml-4 border-l border-dashed border-border pl-2">
                             <button
                               type="button"
                               onClick={() => {
-                                toggle(tKey);
+                                toggle(topic.topicId);
                                 onSelect({
                                   subjectId: subject.subjectId,
                                   chapterId: chapter.chapterId,
                                   topicId: topic.topicId,
                                 });
                               }}
-                              className={`w-full flex items-start gap-1.5 py-1 px-2 rounded-sm transition-colors text-left ${
-                                tActive
-                                  ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold"
-                                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                              className={`w-full grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                                topicActive
+                                  ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                                  : "text-foreground hover:bg-secondary/50"
                               }`}
                               title={topic.name}
                             >
-                              <span className="shrink-0 mt-0.5">
+                              <span>
                                 {topic.subtopics.length > 0 ? (
-                                  isExp(tKey) ? (
-                                    <ChevronDown size={10} />
+                                  isExpanded(topic.topicId) ? (
+                                    <ChevronDown size={12} />
                                   ) : (
-                                    <ChevronRight size={10} />
+                                    <ChevronRight size={12} />
                                   )
                                 ) : (
-                                  <span className="w-[10px] inline-block" />
+                                  <span className="inline-block w-[12px]" />
                                 )}
                               </span>
-                              <FileText size={10} className="shrink-0 opacity-50 mt-0.5" />
-                              <span className="flex-1 min-w-0 leading-snug break-words">
-                                {topic.name}
-                              </span>
+                              <span className="min-w-0 truncate text-xs">{topic.name}</span>
+                              <ProgressPill />
                             </button>
 
-                            {isExp(tKey) &&
-                              topic.subtopics.map((st) => {
-                                const stActive = selection.subtopicId === st.subtopicId;
+                            {isExpanded(topic.topicId) &&
+                              topic.subtopics.map((subtopic) => {
+                                const subtopicActive = selection.subtopicId === subtopic.subtopicId;
+
                                 return (
                                   <button
-                                    key={st.subtopicId}
+                                    key={subtopic.subtopicId}
                                     type="button"
                                     onClick={() =>
                                       onSelect({
                                         subjectId: subject.subjectId,
                                         chapterId: chapter.chapterId,
                                         topicId: topic.topicId,
-                                        subtopicId: st.subtopicId,
+                                        subtopicId: subtopic.subtopicId,
                                       })
                                     }
-                                    className={`w-full flex items-start gap-1.5 py-1 px-2 ml-2 rounded-sm transition-colors text-left ${
-                                      stActive
-                                        ? "bg-primary/20 ring-1 ring-primary/30 text-primary font-semibold"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                                    className={`ml-5 w-[calc(100%-1.25rem)] grid grid-cols-[0.875rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                                      subtopicActive
+                                        ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                                        : "text-foreground hover:bg-secondary/50"
                                     }`}
-                                    title={st.name}
+                                    title={subtopic.name}
                                   >
-                                    <Hash size={9} className="shrink-0 opacity-40 mt-0.5" />
-                                    <span className="flex-1 min-w-0 leading-snug break-words">
-                                      {st.name}
-                                    </span>
+                                    <Hash size={11} className="text-primary" />
+                                    <span className="min-w-0 truncate text-xs">{subtopic.name}</span>
+                                    <ProgressPill />
                                   </button>
                                 );
                               })}

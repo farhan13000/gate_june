@@ -123,7 +123,7 @@ export default function AdminTaxonomyManager() {
         <button
           type="button"
           onClick={loadItems}
-          className="ml-auto px-3 py-1.5 text-xs border border-border rounded-sm hover:bg-secondary flex items-center gap-1"
+          className="w-full sm:w-auto sm:ml-auto px-3 py-1.5 text-xs border border-border rounded-sm hover:bg-secondary flex items-center justify-center gap-1"
         >
           <RefreshCw size={12} /> Refresh
         </button>
@@ -138,7 +138,7 @@ export default function AdminTaxonomyManager() {
               setParentChapterId("");
               setParentTopicId("");
             }}
-            className="px-3 py-2 text-xs border border-border rounded-sm bg-card"
+            className="w-full sm:w-auto px-3 py-2 text-xs border border-border rounded-sm bg-card"
           >
             <option value="">Parent subject</option>
             {subjects.map((s) => (
@@ -152,7 +152,7 @@ export default function AdminTaxonomyManager() {
               placeholder="Parent chapter ID"
               value={parentChapterId}
               onChange={(e) => setParentChapterId(e.target.value)}
-              className="px-3 py-2 text-xs border border-border rounded-sm bg-card font-mono flex-1 min-w-[200px]"
+              className="w-full px-3 py-2 text-xs border border-border rounded-sm bg-card font-mono flex-1 min-w-0 sm:min-w-[200px]"
             />
           ) : null}
           {level === "subtopics" ? (
@@ -160,7 +160,7 @@ export default function AdminTaxonomyManager() {
               placeholder="Parent topic ID"
               value={parentTopicId}
               onChange={(e) => setParentTopicId(e.target.value)}
-              className="px-3 py-2 text-xs border border-border rounded-sm bg-card font-mono flex-1 min-w-[200px]"
+              className="w-full px-3 py-2 text-xs border border-border rounded-sm bg-card font-mono flex-1 min-w-0 sm:min-w-[200px]"
             />
           ) : null}
         </div>
@@ -211,7 +211,7 @@ export default function AdminTaxonomyManager() {
         <button
           type="button"
           onClick={handleCreate}
-          className="btn-primary px-4 py-2 text-xs flex items-center gap-1"
+          className="btn-primary px-4 py-2 text-xs flex items-center justify-center gap-1 w-full sm:w-auto"
         >
           <Plus size={14} /> Create
         </button>

@@ -16,141 +16,269 @@ import AdminShell from "@/components/admin/AdminShell";
 const CREATION_PROTOCOLS = {
   Problem: {
     title: "GATE DA Advanced Problem Generation Protocol",
-    description: "Use this comprehensive, multi-criteria AI prompt to generate highly authentic, mathematically rigorous GATE Data Science & AI problems, including interdisciplinary topics, diagrams, and multiple question formats (MCQ, MSQ, NAT) with full LaTeX support.",
-    promptTemplate: `You are an expert, highly distinguished designer of the GATE (Graduate Aptitude Test in Engineering) Data Science & Artificial Intelligence (DA) exam.
-Your mission is to generate a high-fidelity, mathematically rigorous, and syllabus-aligned GATE exam question in standard JSON format.
+    description: "Elite multi-layer problem generation protocol: IIT/IISc/TIFR/Olympiad-inspired mathematics with strict JSON safety, LaTeX validation, academic rigor, and concept fusion.",
+    promptTemplate: `==================================================
+ELITE MATHEMATICAL PROBLEM GENERATION PROTOCOL
+==================================================
 
-SYLLABUS & TOPIC COVERAGE:
-Ensure the problem is strictly mapped to one or more of the following official syllabus domains:
-1. PROBABILITY & STATISTICS (e.g., Bayes theorem, joint distributions, covariance, Correlation, CLT, parameter estimation, MLE/MAP, hypothesis testing (z-test, t-test, chi-square), random variables, distributions (Binomial, Poisson, Normal, Exponential)).
-2. LINEAR ALGEBRA (e.g., Vector spaces, basis, dimension, eigenvalues, eigenvectors, symmetric matrices, SVD, systems of linear equations).
-3. CALCULUS & OPTIMIZATION (e.g., Maxima/minima, partial derivatives, gradient, Hessian, convex sets/functions, gradient descent updates, constrained optimization).
-4. PROGRAMMING, DATA STRUCTURES & ALGORITHMS (e.g., Python implementation, binary heaps, BSTs, sorting/searching, graph traversals, greedy/dynamic programming, Big-O complexity).
-5. DATABASE MANAGEMENT & WAREHOUSING (e.g., Relational algebra, SQL, normalization (BCNF/3NF), indexing (B/B+ trees), transactions & ACID properties).
-6. MACHINE LEARNING (e.g., Linear/logistic regression, SVM decision boundary, decision trees, k-NN complexity, Random Forest, k-means, PCA math, ROC/AUC, Bias-Variance tradeoff).
-7. ARTIFICIAL INTELLIGENCE (e.g., A* search, adversarial minimax, alpha-beta pruning, MDP, Q-learning).
+You are an elite problem designer for:
+- GATE Data Science & AI (DA)
+- Indian Institute of Technology entrance rigor
+- Indian Institute of Science analytical depth
+- Tata Institute of Fundamental Research (TIFR)
+- International Mathematical Olympiad (IMO)
+- ACM algorithmic thinking
+- Advanced research-oriented mathematics
 
-DIFFICULTY LEVEL STANDARDS:
-- Easy: Basic conceptual comprehension, direct single-formula applications.
-- Medium: Multi-step analytical calculations, standard derivation, or applying concepts to structured scenarios.
-- Hard: Deeply rigorous, mathematically intensive problems testing core theoretical limits, or interdisciplinary (hybrid) questions combining concepts across multiple domains.
+==================================================
+CORE GENERATION PHILOSOPHY
+==================================================
 
-INTERDISCIPLINARY / MIXTURE OF TOPICS:
-Where appropriate, design high-quality "hybrid" questions that fuse topics. Examples:
-- Linear Algebra + Machine Learning (e.g., computing projection of data using PCA eigenvectors, low-rank approximations via SVD).
-- Calculus + Machine Learning (e.g., analytical derivation of gradient updates for custom loss functions like Huber loss, MSE, or cross-entropy).
-- Probability + Machine Learning (e.g., Bayesian decision boundary computation, MLE/MAP derivations for regression coefficients).
-- Programming + Machine Learning/Math (e.g., computational complexity of executing a k-NN search or training a decision tree).
+Generate ORIGINAL, mathematically deep problems that:
 
-QUESTION FORMATS & SCHEMES:
-1. MCQ (Multiple Choice Question): Exactly 4 choices. Provide 1 correct option and 3 plausible distractors based on common student errors (e.g., sign errors, off-by-one errors, missing division terms).
-2. MSQ (Multiple Select Question): Exactly 4 choices. One or more choices can be correct (can be 1, 2, 3, or all 4). Clearly state that it is an MSQ in the description. No partial marking is awarded.
-3. NAT (Numerical Answer Type): No options are provided (set "options" to an empty array []). The statement must specify rounding requirements (e.g., "Round to two decimal places"). The correct answer must be a single real number or integer. The final correct value MUST be explicitly stated at the end of the solution (e.g., "Final Answer: 0.23").
+✓ Test deep understanding (NOT formula recall)
+✓ Require multi-step analytical reasoning
+✓ Involve hidden mathematical observations
+✓ Fuse multiple concepts naturally
+✓ Encourage mathematical abstraction & modeling
+✓ Reward analytical maturity
+✓ Avoid memory-based thinking
+✓ Contain elegant mathematical structure
 
-DIAGRAMS & STRUCTURAL DESCRIPTIONS:
-- For questions involving architectures, search trees, database tables, or matrices:
-  - Use elegant LaTeX matrices (\\\\begin{pmatrix} ... \\\\end{pmatrix}) or mathematical tables for matrices or transition tables.
-  - For structural diagrams (like neural networks or state diagrams), provide a clean, descriptive ASCII representation or a detailed LaTeX array representation within the statement.
+PROBLEMS SHOULD FEEL INSPIRED BY:
+- IIT entrance rigor and concept fusion
+- IISc analytical screening complexity
+- TIFR mathematical maturity
+- IMO creative problem design
+- ACM algorithmic thinking
 
-CRITICAL LATEX FORMATTING RULES:
-1. NEVER write any mathematical variable, constant, equation, fraction, subscript, superscript, matrix, parameter, or math symbol as plain text!
-   - BAD (Never do this): "mu_MAP = [ (n/sigma^2)*x_bar + (1/tau^2)*mu_0 ] / [ (n/sigma^2) + (1/tau^2) ]"
-   - BAD (Never do this): "mu_0 = 2", "tau^2 = 1", "x_bar = 4", "n = 3", "sigma^2 = 4"
-   - BAD (Never do this): "A = A^T", "lambda = 1 and 3"
-   - GOOD (Always do this): "\\\\( \\\\mu_{\\\\text{MAP}} = \\\\frac{\\\\frac{n}{\\\\sigma^2}\\\\bar{x} + \\\\frac{1}{\\\\tau^2}\\\\mu_0}{\\\\frac{n}{\\\\sigma^2} + \\\\frac{1}{\\\\tau^2}} \\\\)"
-   - GOOD (Always do this): "\\\\( \\\\mu_0 = 2 \\\\)", "\\\\( \\\\tau^2 = 1 \\\\)", "\\\\( \\\\bar{x} = 4 \\\\)", "\\\\( n = 3 \\\\)", "\\\\( \\\\sigma^2 = 4 \\\\)"
-   - GOOD (Always do this): "\\\\( A = A^T \\\\)", "\\\\( \\\\lambda = 1 \\\\text{ and } 3 \\\\)"
-2. All LaTeX formulas inside the JSON string must have double-escaped backslashes.
-   - For inline formulas, wrap them in: "\\\\( ... \\\\)"
-   - For block equations, wrap them in: "\\\\[ ... \\\\]"
-   - For bold textbook-style text inside LaTeX, use "\\\\mathbf{...}" or "\\\\text{...}".
-   - For fractions, use "\\\\frac{numerator}{denominator}".
-   - For derivatives, use "\\\\frac{\\\\partial y}{\\\\partial x}".
-   - For greek letters, use "\\\\lambda", "\\\\sigma", "\\\\tau", "\\\\mu", "\\\\theta", "\\\\alpha", "\\\\beta".
-3. Check and verify that EVERY equation in the question "statement", "options", and "solution" conforms to this rule. No mathematical characters should be naked in the plain text.
+PROBLEMS SHOULD AVOID FEELING LIKE:
+- Coaching institute memory questions
+- Direct formula substitution exercises
+- Template-based coaching MCQs
+- Repetitive PYQ clones
+- Surface-level numericals
 
-OUTPUT REQUIREMENTS:
-1. You MUST respond with ONLY a valid, parsable raw JSON array. Do NOT wrap it in markdown block quotes (e.g. do not use \`\`\`json).
-2. All LaTeX math backslashes MUST be properly double-escaped for JSON. For inline math use "\\\\( ... \\\\)" and for block equations use "\\\\[ ... \\\\]".
-3. The "solution" field MUST be a structured, semantic editorial JSON object (NOT a plain string) matching this exact format:
-   {
-     "type": "editorial",
-     "blocks": [
-       { "type": "intro", "content": "We are given binary logistic regression with:" },
-       { "type": "parameterGrid", "headers": ["Parameter vector", "Training example", "Learning rate"], "rows": [["\\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\)", "\\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, y = 1 \\\\)", "\\\\( \\\\eta = 0.1 \\\\)"]] },
-       { "type": "step", "number": "❶", "title": "Compute the linear score z", "equation": "\\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = 1 \\\\)" },
-       { "type": "finalAnswer", "content": "1.054 (rounded to three decimal places)" }
-     ]
-   }
-   Allowed block types: intro, concept, theorem, derivation, proof, parameterGrid, matrixBlock, equationBlock, step, observation, intuition, warning, pitfall, hint, algorithm, pseudocode, complexityAnalysis, graphExplanation, table, finalAnswer, summary.
-4. Keep the language academic, direct, precise, and highly rigorous.
+==================================================
+SYLLABUS DOMAINS (GATE DA)
+==================================================
 
-JSON SCHEME REFERENCE:
-[
-  {
-    "title": "Gradient Descent Update in Logistic Regression",
-    "topic": "Calculus & Optimization + Machine Learning",
-    "difficulty": "Medium",
-    "questionType": "NAT",
-    "statement": "Consider binary logistic regression with parameter vector... Round your answer to three decimal places.",
-    "solution": {
-      "type": "editorial",
-      "blocks": [
-        {
-          "type": "intro",
-          "content": "We are given binary logistic regression with:"
-        },
-        {
-          "type": "parameterGrid",
-          "headers": ["Parameter vector", "Training example", "Learning rate"],
-          "rows": [
-            [
-              "\\\\( \\\\mathbf{w}^{(0)} = \\\\begin{pmatrix} 1 \\\\\\\\ -1 \\\\end{pmatrix} \\\\)",
-              "\\\\( \\\\mathbf{x} = \\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix}, \\\\, y = 1 \\\\)",
-              "\\\\( \\\\eta = 0.1 \\\\)"
-            ]
-          ]
-        },
-        {
-          "type": "step",
-          "number": "❶",
-          "title": "Compute the linear score z",
-          "equation": "\\\\( z = \\\\mathbf{w}^T \\\\mathbf{x} = (1)(2) + (-1)(1) = 2 - 1 = 1 \\\\)"
-        },
-        {
-          "type": "step",
-          "number": "❷",
-          "title": "Compute the prediction",
-          "equation": "\\\\( \\\\sigma(z) = \\\\frac{1}{1 + e^{-z}} = \\\\frac{1}{1 + e^{-1}} \\\\approx 0.7311 \\\\)"
-        },
-        {
-          "type": "step",
-          "number": "❸",
-          "title": "Compute the gradient",
-          "equation": "\\\\( \\\\nabla J(\\\\mathbf{w}) = (\\\\sigma(z) - y)\\\\mathbf{x} = (0.7311 - 1)\\\\begin{pmatrix} 2 \\\\\\\\ 1 \\\\end{pmatrix} = \\\\begin{pmatrix} -0.5378 \\\\\\\\ -0.2689 \\\\end{pmatrix} \\\\)"
-        },
-        {
-          "type": "step",
-          "number": "❹",
-          "title": "Perform gradient descent update",
-          "equation": "\\\\( w_1^{new} = 1 - 0.1(-0.5378) = 1.05378 \\\\)"
-        },
-        {
-          "type": "finalAnswer",
-          "content": "1.054 (rounded to three decimal places)"
-        }
-      ]
-    },
-    "positiveMarks": 2,
-    "negativeMarks": 0,
-    "options": []
+1. PROBABILITY & STATISTICS
+   Bayes theorem, distributions, MLE/MAP, hypothesis testing, Bayesian inference
+
+2. LINEAR ALGEBRA
+   Eigenvalues, SVD, matrix decomposition, spectral theory, geometric intuition
+
+3. CALCULUS & OPTIMIZATION
+   Gradients, Hessian, convex analysis, constrained optimization, asymptotic behavior
+
+4. MACHINE LEARNING
+   Regression, classification, dimensionality reduction, kernel theory, probabilistic models
+
+5. ALGORITHMS & DATA STRUCTURES
+   Complexity analysis, graph theory, dynamic programming, randomized algorithms
+
+6. DATABASES & SQL
+   Relational algebra, normalization, indexing, transaction processing, query optimization
+
+7. ARTIFICIAL INTELLIGENCE
+   Search algorithms, game theory, MDPs, reinforcement learning, adversarial reasoning
+
+==================================================
+DIFFICULTY SPECIFICATIONS
+==================================================
+
+FOUNDATIONAL (Easy):
+- Conceptual clarity with direct concept application
+- Single-step or dual-step calculations
+- Standard theorem/formula application
+- Low cognitive overhead
+
+ADVANCED (Medium):
+- Multi-step analytical reasoning (3-5 steps)
+- Probability insight or algebraic transformation
+- Graph interpretation or recursive decomposition
+- Constraint propagation and logical deduction
+- Requires both concept knowledge and calculation
+
+ELITE HARD (Challenging):
+- Asymptotic reasoning and hidden invariants
+- Optimization insights and Bayesian interpretation
+- Spectral intuition and recursive structure
+- Adversarial edge cases and proof-like reasoning
+- Theorem derivation or rigorous proof
+- Multi-domain concept fusion (2+ domains)
+- Deep theoretical foundations
+- Elegant mathematical structure with subtlety
+
+==================================================
+CONCEPT FUSION REQUIREMENTS
+==================================================
+
+Problems SHOULD combine 2+ domains:
+
+- Linear Algebra + Machine Learning (PCA, SVD, projection)
+- Probability + Optimization (Bayesian optimization, MAP estimation)
+- Calculus + ML (gradient derivation, loss landscape analysis)
+- Graph Theory + Algorithms (spectral clustering, network flow)
+- Statistics + Information Theory (entropy, KL divergence)
+- Algorithms + Probability (randomized algorithms, Markov chains)
+
+==================================================
+MATHEMATICAL DEPTH CHARACTERISTICS
+==================================================
+
+Problems SHOULD include:
+
+- Asymptotic reasoning (limits, big-O, convergence)
+- Hidden invariants (conserved quantities, monotonicity)
+- Probabilistic insight (expectation tricks, tail bounds)
+- Optimization strategy (duality, gradient flow)
+- Graph interpretation (connectivity, spectral properties)
+- Algebraic transformation (substitution, decomposition)
+- Recursive structure (divide-and-conquer, dynamic programming)
+- Bayesian interpretation (prior/posterior, inference)
+- Geometric insight (projections, manifolds)
+- Generating functions (closed forms, asymptotics)
+
+==================================================
+STRICT OUTPUT FORMAT RULES
+==================================================
+
+OUTPUT MUST BE:
+1. ONLY valid JSON (no markdown, no explanations)
+2. SINGLE object (not array)
+3. Exactly this structure:
+
+{
+  "title": "Problem Title (Clear & Concise)",
+  "topic": "Primary GATE DA Domain",
+  "subtopic": "Specific Subtopic",
+  "difficulty": "Foundational|Advanced|Elite Hard",
+  "concepts": ["Concept1", "Concept2", "..."],
+  "problem_type": "MCQ",
+  "problem_statement": "Statement with LaTeX using only \\\\frac, \\\\sigma, \\\\lambda, etc.",
+  "options": {
+    "A": "Option A with \\\\LaTeX",
+    "B": "Option B with \\\\LaTeX",
+    "C": "Option C with \\\\LaTeX",
+    "D": "Option D with \\\\LaTeX"
+  },
+  "correct_answer": "A",
+  "solution": {
+    "overview": "Solution strategy summary",
+    "detailed_steps": [
+      "Step 1 with full LaTeX: \\\\frac{a}{b}",
+      "Step 2 with insight",
+      "..."
+    ],
+    "key_observation": "Hidden mathematical insight or elegant observation",
+    "mathematical_insight": "Theoretical principle or abstract reasoning",
+    "common_traps": ["Distractor 1 logic", "Distractor 2 logic"],
+    "complexity_or_reasoning": "Time complexity or proof technique"
+  },
+  "metadata": {
+    "exam_style": "GATE DA / IISc / TIFR",
+    "difficulty_score": 8.5,
+    "estimated_time_minutes": 4,
+    "mathematical_maturity": "Asymptotic reasoning, proof intuition",
+    "algorithmic_depth": "Decomposition, state-space reasoning",
+    "originality_level": "Novel concept fusion"
   }
-]`,
+}
+
+==================================================
+STRICT LATEX RULES
+==================================================
+
+USE ONLY:
+- Double-escaped backslashes: \\\\ (becomes single \ in JSON)
+- Compact math: \\\\frac{a}{b}, \\\\sigma, \\\\lambda, \\\\mathbf{v}
+- Subscripts: \\\\mu_0, w_1, x_i
+- Superscripts: A^T, e^{-x}, w^{(t)}
+
+FORBIDDEN:
+- Single backslash: \\
+- Dollar signs: $ or $$
+- Markdown: backticks, ##, **
+- Mixed delimiters
+- Unsupported LaTeX commands
+
+VALIDATE:
+✓ All math is LaTeX (NO plain text: mu, sigma, lambda)
+✓ All backslashes doubled (\\\\)
+✓ All quotes escaped ("string with \\" quote")
+✓ JSON is parsable
+✓ No markdown pollution
+
+==================================================
+JSON SAFETY VALIDATION
+==================================================
+
+BEFORE FINALIZING:
+✓ Entire output is valid JSON
+✓ All LaTeX backslashes double-escaped (\\\\)
+✓ All quotes properly escaped
+✓ No trailing commas
+✓ All braces/brackets matched
+✓ No explanations outside JSON
+✓ No markdown syntax
+
+PARSE CHECK:
+- Can be parsed by JSON.parse()
+- No syntax errors
+- All required fields present
+- LaTeX renders without escape artifacts
+
+==================================================
+PROHIBITED PATTERNS
+==================================================
+
+DO NOT GENERATE:
+- Direct theorem recall questions
+- Standard PYQ clones or repetitions
+- Simple one-step computation
+- Trivial matrix calculations
+- Memory-based recall
+- Coaching institute style templates
+- Surface-level numericals
+- Obvious elimination in options
+
+DO GENERATE:
+- Concept fusion requiring synthesis
+- Hidden mathematical observations
+- Multi-step analytical decomposition
+- Elegant mathematical structures
+- Problems with high cognitive depth
+- Research-oriented framing
+- Originality in problem design
+
+==================================================
+QUALITY CHECKSUM
+==================================================
+
+The problem is high-quality if:
+✓ Concept fusion (2+ domains) OR advanced reasoning
+✓ No direct formula substitution path
+✓ Distractors exploit common mathematical errors
+✓ Solution involves insight, not just computation
+✓ Problem statement is unambiguous & rigorous
+✓ Mathematical notation is consistent & precise
+✓ Problem feels suitable for IIT/IISc/TIFR level
+✓ JSON is 100% valid and parsable
+
+==================================================
+RETURN ONLY VALID JSON (NO PREAMBLE)
+==================================================`,
     rules: [
-      "The response must be a 100% valid JSON array containing properly double-escaped LaTeX equations.",
-      "Integrate interdisciplinary concepts (e.g., combining linear algebra and ML) to match premium GATE standards.",
-      "Strictly ensure options contain clever distractors for MCQs, multiple correct options for MSQs, and empty option arrays for NATs.",
-      "Verify that positive/negative marking conforms to standard GATE norms (+2/-0.66, +1/-0.33, or no negative marks for MSQ/NAT)."
+      "CRITICAL: Return ONLY valid JSON (single object). No markdown, no explanations, no code blocks.",
+      "Enforce elite-level academic standards: IIT/IISc/TIFR rigor with concept fusion and mathematical depth.",
+      "LaTeX SAFETY: Use ONLY double-escaped backslashes (\\\\frac, \\\\sigma). NO dollar signs, NO single backslash, NO markdown.",
+      "JSON SAFETY: All quotes escaped, all braces matched, no trailing commas, parsable by JSON.parse().",
+      "CONCEPT FUSION: Problems MUST combine 2+ GATE DA domains (e.g., Linear Algebra + Probability + Optimization).",
+      "MATHEMATICAL DEPTH: Include asymptotic reasoning, hidden invariants, optimization insights, or proof intuition.",
+      "QUALITY: No formula substitution shortcuts, no memory-based questions, no coaching institute templates.",
+      "VALIDATION: Before output, verify JSON syntax, LaTeX escaping, and mathematical rigor."
     ]
   },
   "Theory Article": {
@@ -410,13 +538,72 @@ export default function AdminPanel() {
   const parseBulkJson = () => {
     try {
       const data = robustJsonParse(bulkJson);
-      if (!Array.isArray(data)) { setBulkParseError("JSON must be an array [ ... ]"); return; }
+      // Support both single object and array format
+      const normalizedData = Array.isArray(data) ? data : [data];
+      
+      if (normalizedData.length === 0) { 
+        setBulkParseError("JSON must contain at least one problem"); 
+        return; 
+      }
+      
+      // Validate that all items are objects
+      if (!normalizedData.every(item => typeof item === 'object' && item !== null)) {
+        setBulkParseError("Each problem must be a valid JSON object");
+        return;
+      }
+      
+      // Transform elite protocol format to backend format
+      const transformedData = normalizedData.map(item => transformEliteProtocol(item));
+      
       setBulkParseError("");
-      setBulkPreview(data);
+      setBulkPreview(transformedData);
     } catch(e: any) {
       setBulkParseError("Invalid JSON: " + e.message);
       setBulkPreview(null);
     }
+  };
+
+  const transformEliteProtocol = (item: any): any => {
+    // Handle both elite protocol format and legacy format
+    // Elite protocol: problem_statement, options{A/B/C/D}, difficulty{Foundational|Advanced|Elite Hard}
+    // Backend format: statement, options[{text, isCorrect}], difficulty{Easy|Medium|Hard}
+    
+    const transformed: any = {
+      title: item.title || "Untitled",
+      topic: item.topic || "",
+      subtopic: item.subtopic || "",
+      difficulty: mapDifficulty(item.difficulty) || "Medium",
+      questionType: item.problem_type || "MCQ",
+      statement: item.problem_statement || item.statement || "",
+      tags: item.concepts || item.tags || [],
+      solution: item.solution || {},
+      estimatedTime: item.metadata?.estimated_time_minutes || 180,
+    };
+
+    // Transform options from {A, B, C, D} format to [{text, isCorrect}] format
+    if (item.options && typeof item.options === 'object' && !Array.isArray(item.options)) {
+      const optionsArray = [];
+      const correctAnswer = item.correct_answer?.toUpperCase();
+      for (const [key, value] of Object.entries(item.options)) {
+        optionsArray.push({
+          text: String(value),
+          isCorrect: key.toUpperCase() === correctAnswer
+        });
+      }
+      transformed.options = optionsArray;
+    } else if (Array.isArray(item.options)) {
+      // Already in array format
+      transformed.options = item.options;
+    }
+
+    return transformed;
+  };
+
+  const mapDifficulty = (difficulty: string): "Easy" | "Medium" | "Hard" => {
+    const diff = (difficulty || "").toLowerCase();
+    if (diff.includes("foundational") || diff.includes("easy")) return "Easy";
+    if (diff.includes("elite") || diff.includes("hard")) return "Hard";
+    return "Medium"; // Default for "Advanced" and anything else
   };
 
   const submitBulk = async () => {
@@ -643,7 +830,7 @@ export default function AdminPanel() {
             
             <div className="academic-card p-6 mt-8">
               <h3 className="font-bold text-sm mb-4">Quick Actions</h3>
-              <div className="flex flex-wrap gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                 <button onClick={() => setActiveSection("Home Management")} className="btn-primary px-4 py-2 text-xs">Home & Announcements</button>
                 <button onClick={() => setActiveSection("Content Management")} className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Create Content</button>
                 <button onClick={() => setActiveSection("Approval Dashboard")} className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Review Queue</button>
@@ -666,13 +853,13 @@ export default function AdminPanel() {
             <div className="lg:col-span-8">
               <h2 className="text-lg font-bold font-serif mb-3 text-foreground">User Directory & Details</h2>
               <div className="academic-card">
-                <div className="p-3 border-b border-border flex gap-3 bg-secondary/30">
+                <div className="p-3 border-b border-border flex flex-col sm:flex-row gap-3 bg-secondary/30">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
                     <input placeholder="Search users by name or email..." className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-sm focus:outline-none focus:border-primary" />
                   </div>
-                  <select className="px-3 py-1.5 text-xs bg-background border border-border rounded-sm outline-none"><option>All Roles</option></select>
-                  <button className="btn-primary px-4 py-1.5 text-xs">Search</button>
+                  <select className="w-full sm:w-auto px-3 py-1.5 text-xs bg-background border border-border rounded-sm outline-none"><option>All Roles</option></select>
+                  <button className="btn-primary px-4 py-1.5 text-xs w-full sm:w-auto">Search</button>
                 </div>
                 <table className="w-full text-xs text-left">
                   <thead className="bg-secondary/10 border-b border-border text-muted-foreground">
@@ -733,9 +920,9 @@ export default function AdminPanel() {
           <div className="w-full">
             <h2 className="text-lg font-bold font-serif mb-3 text-foreground">Content Creation Factory</h2>
             <div className="academic-card p-6">
-              <div className="flex justify-between items-center mb-6 border-b border-border pb-4">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 border-b border-border pb-4">
                 <h3 className="font-bold text-sm text-foreground">Draft New Problem / Theory</h3>
-                <button onClick={submitQuestion} className="btn-primary px-5 py-2 text-xs">Save Content to Drafts</button>
+                <button onClick={submitQuestion} className="btn-primary px-5 py-2 text-xs w-full sm:w-auto">Save Content to Drafts</button>
               </div>
 
               <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
@@ -744,14 +931,14 @@ export default function AdminPanel() {
                 <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1.5">Content Type</label>
-                    <div className="flex gap-4 p-2.5 bg-primary/5 border border-primary/20 rounded-sm w-max">
+                    <div className="flex flex-wrap gap-4 p-2.5 bg-primary/5 border border-primary/20 rounded-sm w-full sm:w-max">
                       <label className="flex items-center gap-2 text-xs font-medium cursor-pointer"><input type="radio" checked={qForm.type==='Problem'} onChange={() => setQForm({...qForm, type: 'Problem'})} className="accent-primary"/> Problem</label>
                       <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground cursor-pointer"><input type="radio" checked={qForm.type==='Theory Article'} onChange={() => setQForm({...qForm, type: 'Theory Article'})} className="accent-primary"/> Theory Article</label>
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1.5">Input Method</label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button type="button" onClick={() => setUploadMethod("Manual")} className={`px-4 py-2 text-xs rounded-sm border transition-colors ${uploadMethod === "Manual" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}>Manual Entry</button>
                       <button type="button" onClick={() => setUploadMethod("Bulk")} className={`px-4 py-2 text-xs rounded-sm border transition-colors ${uploadMethod === "Bulk" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}>Bulk JSON Upload</button>
                     </div>
@@ -816,7 +1003,7 @@ export default function AdminPanel() {
                     {/* Step 2: Paste & Parse */}
                     {!bulkPreview && (
                       <div className="space-y-3">
-                        <div className="flex justify-between items-center mb-1">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-1">
                           <label className="block text-xs font-bold text-foreground">Step 1 — Paste JSON Array</label>
                           <button
                             type="button"
@@ -838,7 +1025,7 @@ export default function AdminPanel() {
                           <div className="text-xs text-red-500 bg-red-500/10 border border-red-200 px-3 py-2 rounded-sm font-mono">{bulkParseError}</div>
                         )}
                         <div className="flex justify-end">
-                          <button type="button" onClick={parseBulkJson} disabled={!bulkJson.trim()} className="btn-primary px-6 py-2 text-xs disabled:opacity-50">Parse &amp; Preview →</button>
+                          <button type="button" onClick={parseBulkJson} disabled={!bulkJson.trim()} className="btn-primary px-6 py-2 text-xs disabled:opacity-50 w-full sm:w-auto">Parse &amp; Preview →</button>
                         </div>
                       </div>
                     )}
@@ -846,28 +1033,122 @@ export default function AdminPanel() {
                     {/* Step 3: Preview before upload */}
                     {bulkPreview && (
                       <div className="space-y-3 animate-in fade-in">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <span className="text-xs font-bold text-foreground">Step 2 — Preview ({bulkPreview.length} items)</span>
                           <button type="button" onClick={() => { setBulkPreview(null); }} className="text-xs text-muted-foreground hover:text-foreground underline">← Back to Edit</button>
                         </div>
-                        <div className="border border-border rounded-sm overflow-hidden">
-                          <div className="bg-secondary/30 px-4 py-2 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider grid grid-cols-3 gap-2">
-                            <span>#</span><span>Title</span><span>Topic / Section</span>
-                          </div>
-                          <div className="divide-y divide-border max-h-60 overflow-y-auto">
-                            {bulkPreview.map((item, i) => (
-                              <div key={i} className="px-4 py-2.5 grid grid-cols-3 gap-2 text-xs hover:bg-secondary/10">
-                                <span className="font-mono text-muted-foreground">{i + 1}</span>
-                                <span className="font-medium text-foreground truncate">{item.title || "—"}</span>
-                                <span className="text-muted-foreground truncate">{item.topic}{item.sectionId ? ` · §${item.sectionId}` : ""}</span>
-                              </div>
-                            ))}
-                          </div>
+                        <div className="p-2.5 bg-green-500/10 border border-green-500/20 rounded-sm text-xs text-green-700 flex items-center gap-2">
+                          <span>✓</span>
+                          <span><strong>Format detected & transformed:</strong> Elite protocol JSON automatically converted to compatible format</span>
                         </div>
+                        
+                        {/* Full Problem Preview */}
+                        <div className="space-y-2 max-h-96 overflow-y-auto border border-border rounded-sm p-4 bg-background/50">
+                          {bulkPreview.map((item, i) => (
+                            <div key={i} className="space-y-3 pb-4 border-b border-border last:border-b-0 last:pb-0">
+                              {/* Problem Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded">#{i + 1}</span>
+                                    <h4 className="font-bold text-sm text-foreground">{item.title || "Untitled"}</h4>
+                                  </div>
+                                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                    <span>📍 {item.topic || "—"}</span>
+                                    <span>📊 {item.difficulty || "—"}</span>
+                                    <span>⏱️ {item.estimatedTime || 180} min</span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Problem Statement */}
+                              <div className="text-xs text-foreground space-y-1">
+                                <div className="font-semibold text-muted-foreground">Problem:</div>
+                                <div className="pl-3 border-l-2 border-primary/30 text-xs leading-relaxed">
+                                  <LatexRenderer content={item.statement || "No problem statement"} />
+                                </div>
+                              </div>
+                              
+                              {/* Options (if MCQ/MSQ) */}
+                              {item.options && item.options.length > 0 && (
+                                <div className="text-xs text-foreground space-y-1">
+                                  <div className="font-semibold text-muted-foreground">Options:</div>
+                                  <div className="pl-3 space-y-1">
+                                    {item.options.map((opt: any, oi: number) => (
+                                      <div key={oi} className={`text-xs leading-relaxed ${opt.isCorrect ? 'font-bold text-green-700' : ''}`}>
+                                        <span className="font-mono text-muted-foreground">{String.fromCharCode(65 + oi)}.</span>{' '}
+                                        <LatexRenderer content={opt.text || "—"} />
+                                        {opt.isCorrect && <span className="ml-2">✓ Correct</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Solution */}
+                              {item.solution && (
+                                <div className="text-xs text-foreground space-y-2 bg-amber-50/30 dark:bg-amber-950/20 border border-amber-200/30 dark:border-amber-900/30 rounded-sm p-3">
+                                  <div className="font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                                    <span>💡</span> Solution
+                                  </div>
+                                  
+                                  {typeof item.solution === 'string' ? (
+                                    <div className="leading-relaxed text-xs">
+                                      <LatexRenderer content={item.solution} />
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-2 text-xs">
+                                      {item.solution.overview && (
+                                        <div>
+                                          <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Overview:</div>
+                                          <div className="leading-relaxed pl-2">
+                                            <LatexRenderer content={item.solution.overview} />
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {item.solution.detailed_steps && Array.isArray(item.solution.detailed_steps) && (
+                                        <div>
+                                          <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Steps:</div>
+                                          <ol className="list-decimal list-inside space-y-1 pl-2">
+                                            {item.solution.detailed_steps.map((step: string, si: number) => (
+                                              <li key={si} className="leading-relaxed text-xs">
+                                                <LatexRenderer content={step} />
+                                              </li>
+                                            ))}
+                                          </ol>
+                                        </div>
+                                      )}
+                                      
+                                      {item.solution.key_observation && (
+                                        <div>
+                                          <div className="font-semibold text-amber-700 dark:text-amber-300">Key Observation:</div>
+                                          <div className="leading-relaxed pl-2 text-xs">
+                                            <LatexRenderer content={item.solution.key_observation} />
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {item.solution.mathematical_insight && (
+                                        <div>
+                                          <div className="font-semibold text-amber-700 dark:text-amber-300">Mathematical Insight:</div>
+                                          <div className="leading-relaxed pl-2 text-xs">
+                                            <LatexRenderer content={item.solution.mathematical_insight} />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        
                         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-sm text-xs text-amber-700">
                           ⚠️ All {bulkPreview.length} items will be saved as <strong>pending_review</strong>. You must approve them in the Approval Dashboard before they appear to students.
                         </div>
-                        <div className="flex justify-end gap-3 border-t border-border pt-3">
+                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 border-t border-border pt-3">
                           <button type="button" onClick={() => setBulkPreview(null)} className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Cancel</button>
                           <button type="button" onClick={submitBulk} className="btn-primary px-6 py-2 text-xs">✓ Confirm &amp; Upload {bulkPreview.length} Items</button>
                         </div>
@@ -877,7 +1158,7 @@ export default function AdminPanel() {
                 ) : (
                   <div className="space-y-5 animate-in fade-in">
                     {/* Title & Topic */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1.5">Title</label>
                     <input value={qForm.title} onChange={e=>setQForm({...qForm, title: e.target.value})} placeholder="e.g. Eigenvalue Decomposition" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" />
@@ -903,7 +1184,7 @@ export default function AdminPanel() {
 
                     {/* Theory Specific Fields */}
                     {qForm.type === "Theory Article" && (
-                      <div className="grid grid-cols-3 gap-4 border-t border-border pt-6 mt-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-border pt-6 mt-6">
                         <div>
                           <label className="block text-xs font-bold text-foreground mb-1.5">Chapter ID</label>
                           <input value={qForm.chapterId} onChange={e=>setQForm({...qForm, chapterId: e.target.value})} placeholder="e.g. 1" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" />
@@ -937,7 +1218,7 @@ export default function AdminPanel() {
                             <input value={qForm.options[1].text} onChange={e=>{const o=[...qForm.options]; o[1].text=e.target.value; setQForm({...qForm, options: o})}} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary" />
                           </div>
                           
-                          <div className="col-span-6 md:col-span-3 space-y-4">
+                          <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-4">
                             <div>
                               <label className="block text-xs font-bold text-foreground mb-1.5">Difficulty Level</label>
                               <select value={qForm.difficulty} onChange={e=>setQForm({...qForm, difficulty: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none">
@@ -952,7 +1233,7 @@ export default function AdminPanel() {
                             </div>
                           </div>
 
-                          <div className="col-span-6 md:col-span-3 space-y-4">
+                          <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-4">
                             <div>
                               <label className="block text-xs font-bold text-foreground mb-1.5">Marking Scheme (+ / -)</label>
                               <div className="flex gap-2">
@@ -981,15 +1262,15 @@ export default function AdminPanel() {
         {/* APPROVAL DASHBOARD SECTION */}
         {activeSection === "Approval Dashboard" && (
           <div className="w-full">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
               <h2 className="text-lg font-bold font-serif text-foreground">Content Approval Queue</h2>
               <span className="text-xs bg-amber-500/10 border border-amber-500/20 text-amber-600 px-2.5 py-1 rounded-sm font-bold">{pendingQuestions.length} Awaiting Review</span>
             </div>
 
             {selectedIds.size > 0 && (
-              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 mb-4 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
                   <button onClick={() => handleBulkApprove("rejected")} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Bulk Reject</button>
                   <button onClick={() => handleBulkApprove("approved")} className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-sm font-medium transition-colors">Bulk Approve</button>
@@ -1055,18 +1336,18 @@ export default function AdminPanel() {
         {/* ── CONTENT INVENTORY SECTION ── */}
         {activeSection === "Content Inventory" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
               <h2 className="text-lg font-bold font-serif text-foreground">Content Inventory</h2>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-1 sm:flex gap-2 w-full sm:w-auto">
                 <button onClick={() => setInventoryTab("problems")} className={`px-4 py-2 text-xs rounded-sm border transition-colors ${inventoryTab==="problems" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}>Problems Database</button>
                 <button onClick={() => setInventoryTab("theories")} className={`px-4 py-2 text-xs rounded-sm border transition-colors ${inventoryTab==="theories" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}>Theory Database</button>
               </div>
             </div>
 
             {selectedIds.size > 0 && (
-              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
                   <button onClick={() => handleBulkDelete(inventoryTab === "problems" ? allQuestions : allTheories)} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
                 </div>
@@ -1165,9 +1446,9 @@ export default function AdminPanel() {
             <h2 className="text-lg font-bold font-serif text-foreground">Problem Bank — Approved & Live</h2>
             
             {selectedIds.size > 0 && (
-              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+              <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
                   <button onClick={() => handleBulkDelete(allQuestions.filter(q => q.status === "approved"))} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
                 </div>
@@ -1230,9 +1511,9 @@ export default function AdminPanel() {
 
       {/* ════ EDIT MODAL ════ */}
       {editItem && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-card border border-border rounded-md shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            <div className="bg-secondary/80 px-5 py-4 flex justify-between items-center border-b border-border sticky top-0">
+            <div className="bg-secondary/80 px-4 sm:px-5 py-4 flex justify-between items-start gap-3 border-b border-border sticky top-0">
               <div>
                 <span className="text-sm font-bold text-foreground">Edit Content</span>
                 <span className="ml-3 font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{editItem.contentId || editItem._id?.substring(0,8).toUpperCase()}</span>
@@ -1240,7 +1521,7 @@ export default function AdminPanel() {
               <button onClick={() => setEditItem(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><label className="text-xs font-bold text-foreground block mb-1.5">Title</label>
                   <input value={editItem.title || ""} onChange={e => setEditItem({...editItem, title: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
                 <div><label className="text-xs font-bold text-foreground block mb-1.5">Topic</label>
@@ -1248,7 +1529,7 @@ export default function AdminPanel() {
               </div>
               {editItem.chapterId !== undefined ? (
                 <>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">Chapter ID</label>
                       <input value={editItem.chapterId} onChange={e => setEditItem({...editItem, chapterId: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">Chapter Title</label>
@@ -1265,7 +1546,7 @@ export default function AdminPanel() {
                     <textarea rows={5} value={editItem.statement} onChange={e => setEditItem({...editItem, statement: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary" /></div>
                   <div><label className="text-xs font-bold text-foreground block mb-1.5">Solution (LaTeX)</label>
                     <textarea rows={4} value={editItem.solution} onChange={e => setEditItem({...editItem, solution: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary" /></div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">Difficulty</label>
                       <select value={editItem.difficulty} onChange={e => setEditItem({...editItem, difficulty: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none">
                         <option>Easy</option><option>Medium</option><option>Hard</option></select></div>
@@ -1280,7 +1561,7 @@ export default function AdminPanel() {
                 <input value={editItem.imageUrl || ""} onChange={e => setEditItem({...editItem, imageUrl: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary" /></div>
               <div><label className="text-xs font-bold text-foreground block mb-1.5">Edit Note (for audit log)</label>
                 <input value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="e.g. Fixed LaTeX typo in statement" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-border">
                 <button onClick={() => setEditItem(null)} className="px-5 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Cancel</button>
                 <button onClick={handleSaveEdit} className="btn-primary px-6 py-2 text-xs">Save Changes</button>
               </div>
@@ -1291,9 +1572,9 @@ export default function AdminPanel() {
 
       {/* ════ HISTORY MODAL ════ */}
       {historyItem && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-card border border-border rounded-md shadow-xl w-full max-w-lg animate-in zoom-in-95 duration-200">
-            <div className="bg-secondary/80 px-5 py-4 flex justify-between items-center border-b border-border">
+            <div className="bg-secondary/80 px-4 sm:px-5 py-4 flex justify-between items-start gap-3 border-b border-border">
               <div>
                 <span className="text-sm font-bold text-foreground">Audit History</span>
                 <span className="ml-3 font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{historyItem.contentId || historyItem._id?.substring(0,8).toUpperCase()}</span>
@@ -1331,9 +1612,9 @@ export default function AdminPanel() {
 
       {/* User Details Modal Overlay */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-md shadow-lg w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-secondary/80 px-5 py-4 flex justify-between items-center border-b border-border">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-md shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            <div className="bg-secondary/80 px-4 sm:px-5 py-4 flex justify-between items-start gap-3 border-b border-border sticky top-0 z-10">
               <span className="text-sm font-bold text-foreground">Complete Details for {selectedUser.fullName}</span>
               <button onClick={() => setSelectedUser(null)} className="text-muted-foreground hover:text-foreground">✕</button>
             </div>
@@ -1355,7 +1636,8 @@ export default function AdminPanel() {
               </div>
               <div className="flex-1">
                 <div className="font-bold text-xs text-foreground mb-3 uppercase tracking-wide">Activity History</div>
-                <table className="w-full text-xs text-left mb-6 border border-border">
+                <div className="overflow-x-auto mb-6">
+                <table className="w-full min-w-[20rem] text-xs text-left border border-border">
                   <thead className="bg-secondary/30 text-muted-foreground"><tr><th className="py-2 px-3">Metric</th><th className="py-2 px-3">Count</th></tr></thead>
                   <tbody className="divide-y divide-border">
                     <tr><td className="py-2 px-3">Problems Solved</td><td className="py-2 px-3 font-mono">0</td></tr>
@@ -1363,8 +1645,9 @@ export default function AdminPanel() {
                     <tr><td className="py-2 px-3">Contest Participation</td><td className="py-2 px-3 font-mono">0</td></tr>
                   </tbody>
                 </table>
+                </div>
                 <div className="font-bold text-xs text-foreground mb-3 uppercase tracking-wide">Account Actions</div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button className="text-center px-2 py-2 text-xs border border-border rounded-sm hover:bg-secondary transition-colors">Reset Password</button>
                   <button className="text-center px-2 py-2 text-xs border border-amber-500/30 text-amber-500 rounded-sm hover:bg-amber-500/10 transition-colors">Suspend User</button>
                   <button className="col-span-2 text-center px-2 py-2 text-xs bg-destructive text-destructive-foreground rounded-sm hover:bg-destructive/90 transition-colors flex items-center justify-center gap-2"><Trash2 size={12}/> Permanently Delete Account</button>
@@ -1377,10 +1660,10 @@ export default function AdminPanel() {
 
       {/* ════ PREVIEW MODAL ════ */}
       {previewItem && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-card border border-border rounded-md shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            <div className="bg-secondary/80 px-5 py-4 flex justify-between items-center border-b border-border sticky top-0 z-10">
-              <div className="flex items-center gap-3">
+            <div className="bg-secondary/80 px-4 sm:px-5 py-4 flex justify-between items-start gap-3 border-b border-border sticky top-0 z-10">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="text-sm font-bold text-foreground">Content Preview</span>
                 <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{previewItem.contentId || previewItem._id?.substring(0,8).toUpperCase()}</span>
                 <span className={`px-1.5 py-0.5 rounded-sm border text-[10px] font-bold uppercase ${
@@ -1490,7 +1773,7 @@ export default function AdminPanel() {
 
               {/* NAT answer placeholder */}
               {previewItem.questionType === "NAT" && (
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-sm text-xs flex justify-between items-center">
+                <div className="p-3 bg-primary/5 border border-primary/20 rounded-sm text-xs flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                   <span className="text-muted-foreground">Question Format:</span>
                   <span className="font-bold text-primary font-mono uppercase">Numerical Answer Type (NAT)</span>
                 </div>
@@ -1509,7 +1792,7 @@ export default function AdminPanel() {
               )}
 
               {/* Action Buttons inside Preview */}
-              <div className="flex justify-end gap-3 pt-5 border-t border-border">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-5 border-t border-border">
                 <button onClick={() => setPreviewItem(null)} className="px-5 py-2 text-xs border border-border rounded-sm hover:bg-secondary">
                   Close
                 </button>

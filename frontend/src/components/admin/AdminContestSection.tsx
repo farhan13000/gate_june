@@ -197,13 +197,13 @@ export default function AdminContestSection() {
           Show on home page (Upcoming Contests)
         </label>
 
-        <div className="flex justify-end gap-3 border-t border-border pt-4">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 border-t border-border pt-4">
           {editingId && (
             <button type="button" onClick={resetForm} className="px-4 py-2 text-xs border border-border rounded-sm">
               Cancel
             </button>
           )}
-          <button type="submit" className="btn-primary px-6 py-2 text-xs flex items-center gap-1">
+          <button type="submit" className="btn-primary px-6 py-2 text-xs flex items-center justify-center gap-1">
             <Plus size={14} />
             {editingId ? "Update Contest" : "Save Contest"}
           </button>

@@ -182,11 +182,11 @@ export default function AdminHomeSection() {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col md:flex-row gap-3">
           <select
             value={selectedQuestionId}
             onChange={(e) => setSelectedQuestionId(e.target.value)}
-            className="flex-1 px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary"
+            className="flex-1 min-w-0 px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary"
           >
             <option value="">Select an approved problem…</option>
             {approvedQuestions.map((q) => (
@@ -198,7 +198,7 @@ export default function AdminHomeSection() {
           <button
             type="button"
             onClick={() => setProblemOfTheDay(selectedQuestionId || null)}
-            className="btn-primary px-4 py-2 text-xs shrink-0"
+            className="btn-primary px-4 py-2 text-xs shrink-0 w-full md:w-auto"
           >
             Set as Problem of the Day
           </button>
@@ -209,7 +209,7 @@ export default function AdminHomeSection() {
                 setSelectedQuestionId("");
                 setProblemOfTheDay(null);
               }}
-              className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary flex items-center gap-1 shrink-0"
+              className="px-4 py-2 text-xs border border-border rounded-sm hover:bg-secondary flex items-center justify-center gap-1 shrink-0 w-full md:w-auto"
             >
               <StarOff size={14} /> Clear
             </button>
@@ -280,7 +280,7 @@ export default function AdminHomeSection() {
             </label>
           </div>
           <div className="sm:col-span-2 flex justify-end">
-            <button type="submit" className="btn-primary px-6 py-2 text-xs">
+            <button type="submit" className="btn-primary px-6 py-2 text-xs w-full sm:w-auto">
               Publish Announcement
             </button>
           </div>

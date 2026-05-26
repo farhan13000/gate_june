@@ -33,23 +33,91 @@ export default function AdminProblemManager() {
   });
 
   const buildPrompt = () => {
-    return `Create a GATE DA level ${form.questionType} problem for:
+    return `You are an elite mathematical problem designer for GATE DA, IIT, IISc, TIFR, and Olympiad-inspired computational mathematics.
 
-Subject: ${labels.subject || hierarchy.subjectId}
-Chapter: ${labels.chapter || hierarchy.chapterId}
-Topic: ${labels.topic || hierarchy.topicId}
-Subtopic: ${labels.subtopic || hierarchy.subtopicId}
+TARGET PARAMETERS:
+- Subject: ${labels.subject || hierarchy.subjectId}
+- Topic: ${labels.topic || hierarchy.topicId}
+- Subtopic: ${labels.subtopic || hierarchy.subtopicId}
+- Difficulty Level: ${form.difficulty}
+- Question Type: ${form.questionType}
+- Exam Style: GATE DA + IISc Analytical
 
-Difficulty: ${form.difficulty}
-Question Type: ${form.questionType}
+CORE PHILOSOPHY:
+Generate ORIGINAL, mathematically deep, algorithmically rigorous problems that:
+- Test deep understanding (not formula recall)
+- Require multi-step analytical reasoning
+- Involve hidden mathematical observations or elegant structure
+- Fuse multiple concepts naturally
+- Reward mathematical maturity
+- Encourage abstraction and modeling
 
-Requirements:
-- Conceptual clarity aligned with GATE DA syllabus
-- Numerical reasoning where applicable
-- Single correct answer for MCQ; multiple for MSQ; numeric for NAT
-- Detailed solution with double-escaped LaTeX
-- Marks: +${form.positiveMarks} / -${form.negativeMarks}
-- Estimated time: ${form.estimatedTime} seconds`;
+DEPTH REQUIREMENTS (${form.difficulty} level):
+${form.difficulty === "Hard" ? `
+ELITE HARD: Asymptotic reasoning, hidden invariants, optimization insights, Bayesian interpretation, spectral intuition, recursive structure, adversarial edge cases, proof-like reasoning.
+` : form.difficulty === "Medium" ? `
+ADVANCED MEDIUM: Multi-step reasoning, probabilistic insight, algebraic transformation, graph interpretation, recursive decomposition, constraint propagation.
+` : `
+FOUNDATIONAL: Conceptual clarity with computational practice, single-step to dual-step reasoning, direct concept application.
+`}
+
+MATHEMATICAL RIGOR RULES:
+1. Use ONLY this JSON output format (no markdown, no explanations outside JSON):
+{
+  "title": "Problem Title",
+  "topic": "${labels.topic || hierarchy.topicId}",
+  "subtopic": "${labels.subtopic || hierarchy.subtopicId}",
+  "difficulty": "${form.difficulty}",
+  "questionType": "${form.questionType}",
+  "statement": "Problem statement with LaTeX formulas using double backslashes: \\\\frac{a}{b}, \\\\sigma, \\\\lambda, etc.",
+  "solution": {
+    "overview": "Brief solution strategy",
+    "steps": ["Step 1 with LaTeX", "Step 2 with LaTeX", "..."],
+    "keyObservation": "Hidden insight or elegant observation",
+    "finalAnswer": "Answer with precision specification"
+  },
+  "options": {
+    "A": "Option A text with \\\\LaTeX",
+    "B": "Option B text with \\\\LaTeX",
+    "C": "Option C text with \\\\LaTeX",
+    "D": "Option D text with \\\\LaTeX"
+  },
+  "correctAnswer": "A"
+}
+
+2. STRICT LATEX RULES:
+- Use ONLY escaped backslashes: \\\\frac, \\\\sigma, \\\\lambda, \\\\mathbf, \\\\text
+- NO dollar signs ($)
+- NO single backslash (always double: \\\\)
+- NO unsupported LaTeX commands
+- NO markdown in output
+- Compact notation: \\\\mu_{MAP}, \\\\sigma^2, \\\\nabla J
+
+3. DO NOT GENERATE:
+- Direct theorem recall
+- Standard PYQ clones
+- Simple one-step computation
+- Trivial matrix calculations
+- Coaching-style memory questions
+
+4. DO GENERATE:
+- Concept fusion (e.g., Linear Algebra + Probability + Optimization)
+- Hidden mathematical observations
+- Elegant symmetric structures
+- Multi-step analytical decomposition
+- Problems with high cognitive depth
+
+VALIDATION BEFORE OUTPUT:
+✓ JSON is 100% parsable
+✓ All backslashes are double-escaped (\\\\)
+✓ All quotes are properly escaped
+✓ No markdown pollution
+✓ No explanations outside JSON
+✓ LaTeX syntax is valid
+✓ Problem has exactly one correct answer
+✓ Distractors are high-quality (not trivial)
+
+Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
   };
 
   const copyPrompt = () => {
@@ -115,7 +183,7 @@ Requirements:
             <Copy size={12} /> Copy prompt
           </button>
         </div>
-        <pre className="text-[11px] font-mono text-muted-foreground bg-secondary/30 p-3 rounded-sm whitespace-pre-wrap border border-border">
+        <pre className="text-[11px] font-mono text-muted-foreground bg-secondary/30 p-3 rounded-sm whitespace-pre-wrap border border-border max-h-80 overflow-auto">
           {buildPrompt()}
         </pre>
       </div>
@@ -128,7 +196,7 @@ Requirements:
           onChange={(e) => setForm({ ...form, title: e.target.value })}
           className="w-full px-3 py-2 text-xs border border-border rounded-sm"
         />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
           <select
             value={form.difficulty}
             onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
@@ -170,7 +238,7 @@ Requirements:
         />
         {form.questionType !== "NAT" &&
           form.options.map((opt, i) => (
-            <div key={i} className="flex gap-2 items-center">
+            <div key={i} className="flex gap-2 items-center min-w-0">
               <input
                 type="checkbox"
                 checked={opt.isCorrect}
@@ -188,7 +256,7 @@ Requirements:
                   opts[i] = { ...opts[i], text: e.target.value };
                   setForm({ ...form, options: opts });
                 }}
-                className="flex-1 px-3 py-2 text-xs border border-border rounded-sm"
+                className="flex-1 min-w-0 px-3 py-2 text-xs border border-border rounded-sm"
               />
             </div>
           ))}
@@ -205,7 +273,7 @@ Requirements:
             <LatexRenderer latex={form.title} />
           </div>
         )}
-        <button type="button" onClick={handleSubmit} className="btn-primary px-4 py-2 text-xs flex items-center gap-1">
+        <button type="button" onClick={handleSubmit} className="btn-primary px-4 py-2 text-xs flex items-center justify-center gap-1 w-full sm:w-auto">
           <Plus size={14} /> Submit for review
         </button>
       </div>

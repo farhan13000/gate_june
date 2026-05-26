@@ -332,8 +332,9 @@
 
     /* Problems / Theory — wider taxonomy column */
     .layout-taxonomy-explorer > .layout-taxonomy-aside {
-      width: 17.5rem;
-      max-width: 38vw;
+      width: min(var(--taxonomy-sidebar-width, 22rem), 42vw);
+      max-width: 42vw;
+      min-width: 15rem;
     }
 
     .hierarchy-sidebar-panel {
@@ -341,11 +342,68 @@
       flex-direction: column;
       max-height: calc(100vh - 8rem);
       min-height: 28rem;
-      padding: 0.75rem;
+      padding: 0;
+      overflow: hidden;
     }
 
     .taxonomy-tree-scroll {
       scrollbar-width: thin;
+    }
+
+    .taxonomy-resize-handle {
+      position: absolute;
+      top: 0;
+      right: -0.75rem;
+      width: 0.75rem;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+    }
+
+    .taxonomy-resize-handle::after {
+      content: "";
+      position: absolute;
+      top: 0.25rem;
+      bottom: 0.25rem;
+      left: 0.3125rem;
+      width: 1px;
+      background: hsl(var(--border));
+      opacity: 0;
+      transition: opacity 150ms ease;
+    }
+
+    .taxonomy-resize-handle:hover::after {
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .hierarchy-sidebar-panel {
+      max-height: min(72vh, 42rem);
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .taxonomy-resize-handle {
+      display: none;
+    }
+  }
+
+  .problems-card-list {
+    display: none;
+  }
+
+  .problems-table-view {
+    display: block;
+  }
+
+  @media (max-width: 767px) {
+    .problems-card-list {
+      display: block;
+    }
+
+    .problems-table-view {
+      display: none;
     }
   }
 
@@ -363,7 +421,8 @@
   }
 
   .admin-shell-nav {
-    @apply flex-1 overflow-y-auto py-2 px-2 space-y-3 max-h-[50vh] lg:max-h-none;
+    @apply flex overflow-x-auto gap-3 py-2 px-2 lg:block lg:flex-1 lg:overflow-y-auto lg:space-y-3 lg:max-h-none;
+    scrollbar-width: thin;
   }
 
   .admin-shell-nav-group-title {
@@ -371,7 +430,7 @@
   }
 
   .admin-shell-nav-item {
-    @apply w-full flex items-center gap-2 px-2.5 py-2 text-xs rounded-sm text-left text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground;
+    @apply w-max lg:w-full flex items-center gap-2 px-2.5 py-2 text-xs rounded-sm text-left text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground whitespace-nowrap;
   }
 
   .admin-shell-nav-item-active {
@@ -391,7 +450,55 @@
   }
 
   .admin-shell-content-body {
-    @apply flex-1 min-w-0 p-4 sm:p-6 overflow-x-auto;
+    @apply flex-1 min-w-0 p-3 sm:p-5 lg:p-6 overflow-x-hidden;
+  }
+
+  .admin-shell-content-body .academic-card {
+    max-width: 100%;
+  }
+
+  .admin-shell-content-body .academic-card:has(> table) {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .admin-shell-content-body table {
+    min-width: 44rem;
+  }
+
+  .admin-shell-content-body th,
+  .admin-shell-content-body td {
+    white-space: nowrap;
+  }
+
+  .admin-shell-content-body td {
+    vertical-align: top;
+  }
+
+  @media (max-width: 639px) {
+    .admin-shell-sidebar-head {
+      @apply px-3 py-2;
+    }
+
+    .admin-shell-content-header {
+      @apply px-3 py-3;
+    }
+
+    .admin-shell-content-header h2 {
+      @apply text-base;
+    }
+
+    .admin-shell-nav {
+      max-height: none;
+    }
+
+    .admin-shell-nav-group {
+      @apply shrink-0 min-w-[9rem];
+    }
+
+    .admin-shell-content-body table {
+      min-width: 40rem;
+    }
   }
 
   .page-header {
