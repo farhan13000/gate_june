@@ -13,6 +13,24 @@ const subjectsList = [
   "Calculus"
 ];
 
+const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+
+const buildRatingHistory = (currentRating: number) => {
+  const baseRating = 1500;
+  const diff = Math.max(0, currentRating - baseRating);
+  const now = new Date();
+
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    const progress = index / 5;
+    const rating = index === 5 ? currentRating : Math.round(baseRating + diff * progress);
+    return {
+      date: monthFormatter.format(date),
+      rating,
+    };
+  });
+};
+
 const getSubjectsForTopic = (topic: string): string[] => {
   const matched: string[] = [];
   const cleanTopic = (topic || "").toLowerCase();
@@ -262,18 +280,8 @@ export const getDashboard = async (req: Request, res: Response) => {
       };
     });
 
-    // Rating History Graph
-    const baseRating = 1500;
     const currentRating = user.rating || 0;
-    const diff = Math.max(0, currentRating - baseRating);
-    const ratingData = [
-      { date: "Oct", rating: baseRating },
-      { date: "Nov", rating: Math.round(baseRating + diff * 0.2) },
-      { date: "Dec", rating: Math.round(baseRating + diff * 0.4) },
-      { date: "Jan", rating: Math.round(baseRating + diff * 0.6) },
-      { date: "Feb", rating: Math.round(baseRating + diff * 0.8) },
-      { date: "Mar", rating: currentRating },
-    ];
+    const ratingData = buildRatingHistory(currentRating);
 
     const dashboard = {
       profile: user.toProfile(),

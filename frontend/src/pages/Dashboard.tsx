@@ -12,14 +12,57 @@ import { useEffect, useState } from "react";
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
-const ratingData = [
-  { date: "Oct", rating: 1420 },
-  { date: "Nov", rating: 1580 },
-  { date: "Dec", rating: 1510 },
-  { date: "Jan", rating: 1720 },
-  { date: "Feb", rating: 1890 },
-  { date: "Mar", rating: 2041 },
-];
+const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+const today = new Date();
+const currentMonthLabel = monthFormatter.format(today);
+const currentWeekOfMonth = Math.ceil(today.getDate() / 7);
+
+const formatDateOffset = (daysFromToday: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromToday);
+  return `${monthFormatter.format(date)} ${date.getDate()}`;
+};
+
+const toLocalDate = (dateString: string) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const getWeekMonthLabel = (
+  currentWeek: { date: string; count: number }[],
+  previousWeek?: { date: string; count: number }[]
+) => {
+  const previousLast = previousWeek?.[previousWeek.length - 1];
+  let previousDate = previousLast ? toLocalDate(previousLast.date) : null;
+
+  for (const day of currentWeek) {
+    const currentDate = toLocalDate(day.date);
+    const monthChanged =
+      !previousDate ||
+      currentDate.getMonth() !== previousDate.getMonth() ||
+      currentDate.getFullYear() !== previousDate.getFullYear();
+
+    if (monthChanged) return monthFormatter.format(currentDate);
+    previousDate = currentDate;
+  }
+
+  return "";
+};
+
+const buildFallbackRatingData = (currentRating = 2041) => {
+  const ratings = [1420, 1580, 1510, 1720, 1890, currentRating];
+  const now = new Date();
+
+  return ratings.map((rating, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (ratings.length - 1 - index), 1);
+    return {
+      date: monthFormatter.format(date),
+      rating,
+    };
+  });
+};
+
+const ratingData = buildFallbackRatingData();
 
 const subjectPerformance = [
   { subject: "Statistics", attempted: 62, correct: 48, accuracy: 77, avgTime: 2.1, weak: false },
@@ -83,7 +126,7 @@ const radarData = subjectPerformance.slice(0, 6).map(s => ({
 
 const generateHeatmap = () => {
   const days: { date: string; count: number }[] = [];
-  const now = new Date(2026, 2, 4);
+  const now = new Date();
   for (let i = 180; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
@@ -93,7 +136,6 @@ const generateHeatmap = () => {
   return days;
 };
 const heatmapData = generateHeatmap();
-const months = ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
 const dayLabels = ["Mon", "", "Wed", "", "Fri", "", "Sun"];
 const weeks: { date: string; count: number }[][] = [];
 let week: { date: string; count: number }[] = [];
@@ -294,10 +336,10 @@ export default function Dashboard() {
       </div>
 
       {/* ── Main responsive layout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] xl:gap-6">
 
         {/* ════ LEFT 2/3 ════ */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 space-y-6">
 
           {/* Profile Card */}
           <div id="overview" className="bg-card border border-border rounded-sm p-5">
@@ -351,7 +393,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Performance Analytics Tabs ── */}
-          <div id="performance" className="bg-card border border-border rounded-sm p-5">
+          <div id="performance" className="bg-card border border-border rounded-sm p-4 sm:p-5">
             <SectionHeader title="Performance Analytics" sub="Accuracy, attempts, and time analysis across all dimensions" />
 
             {/* Tab bar */}
@@ -376,8 +418,8 @@ export default function Dashboard() {
             {perfTab === "subject" && (
               <div className="space-y-4">
                 {/* Radar + bar side-by-side */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-2">
-                  <div>
+                <div className="grid grid-cols-1 gap-4 mb-2 lg:grid-cols-2">
+                  <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Subject Radar</p>
                     <ResponsiveContainer width="100%" height={180}>
                       {radarData && radarData.length > 0 ? (
@@ -391,7 +433,7 @@ export default function Dashboard() {
                       )}
                     </ResponsiveContainer>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Accuracy by Subject</p>
                     <ResponsiveContainer width="100%" height={180}>
                       <ReBarChart data={subjectPerformanceData} layout="vertical" margin={{ left: 5, right: 20 }}>
@@ -455,8 +497,8 @@ export default function Dashboard() {
 
             {/* Difficulty tab */}
             {perfTab === "difficulty" && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <div className="min-w-0">
                   <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Accuracy % by Difficulty</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <ReBarChart data={difficultyPerformanceData} margin={{ top: 10, bottom: 5 }}>
@@ -472,7 +514,7 @@ export default function Dashboard() {
                     </ReBarChart>
                   </ResponsiveContainer>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Attempted vs Correct</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <ReBarChart data={difficultyPerformanceData} margin={{ top: 10, bottom: 5 }}>
@@ -486,7 +528,7 @@ export default function Dashboard() {
                     </ReBarChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 xl:grid-cols-3">
                   {difficultyPerformanceData.map((d: any) => (
                     <div key={d.level} className="p-3 border border-border rounded-sm bg-secondary/20">
                       <div className="text-xs font-semibold text-foreground mb-1">{d.level}</div>
@@ -502,8 +544,8 @@ export default function Dashboard() {
             {/* Question Type tab */}
             {perfTab === "type" && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div>
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Accuracy by Question Format</p>
                     <ResponsiveContainer width="100%" height={200}>
                       <ReBarChart data={questionTypePerformanceData} margin={{ bottom: 5 }}>
@@ -517,7 +559,7 @@ export default function Dashboard() {
                       </ReBarChart>
                     </ResponsiveContainer>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground font-mono mb-3 uppercase tracking-wide">Avg Time per Format (min)</p>
                     <ResponsiveContainer width="100%" height={200}>
                       <ReBarChart data={questionTypePerformanceData} margin={{ bottom: 5 }}>
@@ -659,14 +701,14 @@ export default function Dashboard() {
           </div>
 
           {/* ── Heatmap ── */}
-          <div id="activity" className="bg-card border border-border rounded-sm p-5">
-            <div className="flex items-center justify-between mb-4">
+          <div id="activity" className="bg-card border border-border rounded-sm p-4 sm:p-5">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <SectionHeader title="Submissions Heat Map" sub="Daily activity over last 6 months" />
-              <select className="text-xs border border-border bg-background text-foreground px-2 py-1 rounded-sm font-mono">
+              <select className="w-full rounded-sm border border-border bg-background px-2 py-1 text-xs font-mono text-foreground sm:w-auto">
                 <option>Last 6 Months</option><option>Last 1 Year</option>
               </select>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto pb-1">
               <div className="flex gap-1 min-w-max">
                 <div className="flex flex-col gap-1 mr-1">
                   <div className="h-4" />
@@ -676,7 +718,9 @@ export default function Dashboard() {
                 </div>
                 {weeks.map((w, wi) => (
                   <div key={wi} className="flex flex-col gap-1">
-                    <div className="h-4 text-[9px] text-muted-foreground font-mono">{wi % 4 === 0 ? months[Math.floor(wi / 4)] ?? "" : ""}</div>
+                    <div className="h-4 text-[9px] text-muted-foreground font-mono">
+                      {getWeekMonthLabel(w, weeks[wi - 1])}
+                    </div>
                     {w.map((d, di) => (
                       <div key={di} title={`${d.date}: ${d.count} submissions`} className="w-3 h-3 rounded-sm transition-colors" style={{
                         background: d.count === 0 ? "hsl(var(--secondary))" : d.count === 1 ? "hsl(var(--primary) / 0.25)" : d.count === 2 ? "hsl(var(--primary) / 0.45)" : d.count === 3 ? "hsl(var(--primary) / 0.65)" : "hsl(var(--primary))",
@@ -689,10 +733,10 @@ export default function Dashboard() {
           </div>
 
           {/* ── Weekly Activity ── */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div className="bg-card border border-border rounded-sm p-4 sm:p-5">
             <SectionHeader title="Weekly Activity" sub="Questions solved and time spent this week" />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Questions / Day</p>
                 <ResponsiveContainer width="100%" height={140}>
                   <ReBarChart data={weeklyActivityData}>
@@ -703,7 +747,7 @@ export default function Dashboard() {
                   </ReBarChart>
                 </ResponsiveContainer>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] text-muted-foreground font-mono mb-2 uppercase tracking-wide">Time Spent (min)</p>
                 <ResponsiveContainer width="100%" height={140}>
                   <LineChart data={weeklyActivityData}>
@@ -718,9 +762,9 @@ export default function Dashboard() {
           </div>
 
           {/* ── Rating Graph ── */}
-          <div className="bg-card border border-border rounded-sm p-5">
+          <div className="bg-card border border-border rounded-sm p-4 sm:p-5">
             <SectionHeader title="Rating Graph" sub="Contest performance history" />
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex border border-border rounded-sm overflow-hidden w-fit">
                 {(["current", "old"] as const).map(tab => (
                   <button key={tab} onClick={() => setRatingTab(tab)} className={`text-xs px-4 py-1.5 font-mono transition-colors border-r last:border-r-0 border-border ${ratingTab === tab ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}>
@@ -761,7 +805,7 @@ export default function Dashboard() {
         </div>
 
         {/* ════ RIGHT SIDEBAR ════ */}
-        <div id="quick-panel" className="space-y-5">
+        <div id="quick-panel" className="min-w-0 space-y-5">
 
           {/* Rating card */}
           <div className="bg-card border border-border rounded-sm p-5 text-center">
@@ -837,7 +881,7 @@ export default function Dashboard() {
           {/* Study Plan Tracker */}
           <div className="bg-card border border-border rounded-sm p-4">
             <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide flex items-center gap-1.5">
-              <Target size={11} className="text-primary" /> Study Plan (Mar Week 1)
+              <Target size={11} className="text-primary" /> Study Plan ({currentMonthLabel} Week {currentWeekOfMonth})
             </h3>
             <div className="space-y-1.5 text-[10px] font-mono">
               {[
@@ -869,9 +913,9 @@ export default function Dashboard() {
             <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide">Upcoming Contests</h3>
             <div className="space-y-2">
               {[
-                { name: "Statistics Sprint #8", date: "Mar 5", registered: true },
-                { name: "Linear Algebra Weekly", date: "Mar 9", registered: false },
-                { name: "Full Mock #13", date: "Mar 15", registered: false },
+                { name: "Statistics Sprint #8", date: formatDateOffset(2), registered: true },
+                { name: "Linear Algebra Weekly", date: formatDateOffset(6), registered: false },
+                { name: "Full Mock #13", date: formatDateOffset(12), registered: false },
               ].map(c => (
                 <div key={c.name} className="flex items-center justify-between text-xs border-b border-border pb-2 last:border-0 last:pb-0">
                   <div>
