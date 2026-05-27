@@ -3,6 +3,7 @@ import { Copy, Plus } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 import LatexRenderer from "@/components/LatexRenderer";
+import { buildSelectedTaxonomyPrompt } from "@/utils/taxonomyPrompt";
 
 const emptyHierarchy: HierarchyPickerValue = {
   subjectId: "",
@@ -22,18 +23,21 @@ export default function AdminTheoryManager() {
     highlights: "",
   });
 
-  const buildPrompt = () => `Create GATE DA theory notes for:
+  const buildPrompt = () => `Create GATE DA theory notes for the exact current taxonomy target below.
 
-Subject: ${labels.subject || hierarchy.subjectId}
-Chapter: ${labels.chapter || hierarchy.chapterId}
-Topic: ${labels.topic || hierarchy.topicId}
-Subtopic: ${labels.subtopic || hierarchy.subtopicId}
+TAXONOMY TARGET:
+${buildSelectedTaxonomyPrompt({ ...hierarchy, ...labels })}
 
 Requirements:
+- Return JSON matching this mapping exactly: subjectId, chapterId, topicId, subtopicId, topic, chapterTitle, sectionId, title, content, formulas, examples, highlights.
+- Do not invent taxonomy IDs or use old/free-text syllabus names.
+- Set sectionId to the selected subtopicId.
 - Textbook-quality explanations with double-escaped LaTeX
 - Include key formulas and worked examples
 - Use Theorem:, Example:, GATE Example: block prefixes where appropriate
-- Markdown structure with clear headings`;
+- Markdown structure with clear headings
+
+Return only valid JSON, no markdown wrapper.`;
 
   const copyPrompt = () => {
     navigator.clipboard.writeText(buildPrompt());

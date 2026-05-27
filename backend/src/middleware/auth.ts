@@ -48,6 +48,31 @@ export const requireAuth = async (
 };
 
 /**
+ * Middleware: Attaches req.currentUser when a valid JWT cookie exists.
+ * Public routes can use this to personalize responses without requiring login.
+ */
+export const optionalAuth = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const token = req.cookies?.token;
+    if (!token) {
+      next();
+      return;
+    }
+
+    const { userId } = verifyToken(token);
+    const user = await User.findById(userId);
+    if (user) req.currentUser = user;
+  } catch {
+    // Public route: ignore invalid or expired tokens.
+  }
+  next();
+};
+
+/**
  * Middleware: Requires the authenticated user to have role "admin".
  * Must be used AFTER requireAuth.
  */

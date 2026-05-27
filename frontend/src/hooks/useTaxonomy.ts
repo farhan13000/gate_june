@@ -46,7 +46,7 @@ export function useTaxonomyStats(selection: HierarchySelection) {
     }
 
     setLoading(true);
-    fetch(`/api/taxonomy/stats?${params}`)
+    fetch(`/api/taxonomy/stats?${params}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then(setStats)
       .catch(() => setStats(null))

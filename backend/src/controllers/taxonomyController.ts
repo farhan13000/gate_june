@@ -5,6 +5,7 @@ import Topic from "../models/Topic";
 import Subtopic from "../models/Subtopic";
 import Question from "../models/Question";
 import Theory from "../models/Theory";
+import Submission from "../models/Submission";
 
 /** GET /api/taxonomy/tree — full hierarchy for navigation */
 export const getTaxonomyTree = async (_req: Request, res: Response): Promise<void> => {
@@ -107,7 +108,7 @@ export const getTaxonomyStats = async (req: Request, res: Response): Promise<voi
     }
 
     const [questions, theories] = await Promise.all([
-      Question.find(qFilter).select("difficulty questionType").lean(),
+      Question.find(qFilter).select("_id difficulty questionType").lean(),
       Theory.find(tFilter).select("_id").lean(),
     ]);
 
@@ -122,11 +123,35 @@ export const getTaxonomyStats = async (req: Request, res: Response): Promise<voi
       }
     }
 
+    let attempts = 0;
+    let solvedCount = 0;
+    if (req.currentUser && questions.length > 0) {
+      const rows = await Submission.aggregate([
+        {
+          $match: {
+            userId: req.currentUser._id,
+            questionId: { $in: questions.map((question) => question._id) },
+          },
+        },
+        {
+          $group: {
+            _id: "$questionId",
+            attempts: { $sum: 1 },
+            solved: { $max: { $cond: ["$isCorrect", 1, 0] } },
+          },
+        },
+      ]);
+      attempts = rows.reduce((sum, row) => sum + row.attempts, 0);
+      solvedCount = rows.filter((row) => row.solved > 0).length;
+    }
+
     res.json({
       questionCount: questions.length,
       theoryCount: theories.length,
       difficultyDistribution: difficultyDist,
       questionTypeDistribution: typeDist,
+      solvedCount,
+      attempts,
     });
   } catch {
     res.status(500).json({ message: "Failed to fetch taxonomy stats" });

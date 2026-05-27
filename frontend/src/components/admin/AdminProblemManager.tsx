@@ -3,6 +3,7 @@ import { Copy, Plus } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 import LatexRenderer from "@/components/LatexRenderer";
+import { buildSelectedTaxonomyPrompt } from "@/utils/taxonomyPrompt";
 
 const emptyHierarchy: HierarchyPickerValue = {
   subjectId: "",
@@ -32,93 +33,56 @@ export default function AdminProblemManager() {
     ],
   });
 
-  const buildPrompt = () => {
-    return `You are an elite mathematical problem designer for GATE DA, IIT, IISc, TIFR, and Olympiad-inspired computational mathematics.
+  const buildPrompt = () => `Create one original GATE DA problem as valid JSON only.
 
-TARGET PARAMETERS:
-- Subject: ${labels.subject || hierarchy.subjectId}
-- Topic: ${labels.topic || hierarchy.topicId}
-- Subtopic: ${labels.subtopic || hierarchy.subtopicId}
-- Difficulty Level: ${form.difficulty}
-- Question Type: ${form.questionType}
-- Exam Style: GATE DA + IISc Analytical
+TAXONOMY TARGET
+${buildSelectedTaxonomyPrompt({ ...hierarchy, ...labels })}
 
-CORE PHILOSOPHY:
-Generate ORIGINAL, mathematically deep, algorithmically rigorous problems that:
-- Test deep understanding (not formula recall)
-- Require multi-step analytical reasoning
-- Involve hidden mathematical observations or elegant structure
-- Fuse multiple concepts naturally
-- Reward mathematical maturity
-- Encourage abstraction and modeling
+SETTINGS
+difficulty: ${form.difficulty}
+questionType: ${form.questionType}
+style: analytical, original, syllabus-aligned, non-template
 
-DEPTH REQUIREMENTS (${form.difficulty} level):
-${form.difficulty === "Hard" ? `
-ELITE HARD: Asymptotic reasoning, hidden invariants, optimization insights, Bayesian interpretation, spectral intuition, recursive structure, adversarial edge cases, proof-like reasoning.
-` : form.difficulty === "Medium" ? `
-ADVANCED MEDIUM: Multi-step reasoning, probabilistic insight, algebraic transformation, graph interpretation, recursive decomposition, constraint propagation.
-` : `
-FOUNDATIONAL: Conceptual clarity with computational practice, single-step to dual-step reasoning, direct concept application.
-`}
+RULES
+- Use the exact taxonomy IDs above. Do not invent taxonomy.
+- Return only parsable JSON, no markdown wrapper.
+- Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
+- Write the solution as polished paragraphs, not a long numbered list.
+- Put diagrams in structured JSON only when useful.
 
-MATHEMATICAL RIGOR RULES:
-1. Use ONLY this JSON output format (no markdown, no explanations outside JSON):
+OUTPUT SHAPE
 {
   "title": "Problem Title",
+  "subjectId": "${hierarchy.subjectId}",
+  "chapterId": "${hierarchy.chapterId}",
+  "topicId": "${hierarchy.topicId}",
+  "subtopicId": "${hierarchy.subtopicId}",
   "topic": "${labels.topic || hierarchy.topicId}",
   "subtopic": "${labels.subtopic || hierarchy.subtopicId}",
   "difficulty": "${form.difficulty}",
   "questionType": "${form.questionType}",
-  "statement": "Problem statement with LaTeX formulas using double backslashes: \\\\frac{a}{b}, \\\\sigma, \\\\lambda, etc.",
+  "statement": "Clear statement with double-escaped LaTeX.",
   "solution": {
-    "overview": "Brief solution strategy",
-    "steps": ["Step 1 with LaTeX", "Step 2 with LaTeX", "..."],
-    "keyObservation": "Hidden insight or elegant observation",
-    "finalAnswer": "Answer with precision specification"
+    "overview": "One short strategy paragraph.",
+    "narrative": [
+      "Paragraph 1 of reasoning with LaTeX.",
+      "Paragraph 2 connecting the calculation to the answer."
+    ],
+    "equations": ["\\\\[ important equation \\\\]"],
+    "keyInsight": "Main idea behind the solution.",
+    "finalAnswer": "Final answer with units/precision if needed."
   },
-  "options": {
-    "A": "Option A text with \\\\LaTeX",
-    "B": "Option B text with \\\\LaTeX",
-    "C": "Option C text with \\\\LaTeX",
-    "D": "Option D text with \\\\LaTeX"
-  },
-  "correctAnswer": "A"
-}
-
-2. STRICT LATEX RULES:
-- Use ONLY escaped backslashes: \\\\frac, \\\\sigma, \\\\lambda, \\\\mathbf, \\\\text
-- NO dollar signs ($)
-- NO single backslash (always double: \\\\)
-- NO unsupported LaTeX commands
-- NO markdown in output
-- Compact notation: \\\\mu_{MAP}, \\\\sigma^2, \\\\nabla J
-
-3. DO NOT GENERATE:
-- Direct theorem recall
-- Standard PYQ clones
-- Simple one-step computation
-- Trivial matrix calculations
-- Coaching-style memory questions
-
-4. DO GENERATE:
-- Concept fusion (e.g., Linear Algebra + Probability + Optimization)
-- Hidden mathematical observations
-- Elegant symmetric structures
-- Multi-step analytical decomposition
-- Problems with high cognitive depth
-
-VALIDATION BEFORE OUTPUT:
-✓ JSON is 100% parsable
-✓ All backslashes are double-escaped (\\\\)
-✓ All quotes are properly escaped
-✓ No markdown pollution
-✓ No explanations outside JSON
-✓ LaTeX syntax is valid
-✓ Problem has exactly one correct answer
-✓ Distractors are high-quality (not trivial)
-
-Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
-  };
+  "options": [
+    { "text": "Option A", "isCorrect": true },
+    { "text": "Option B", "isCorrect": false },
+    { "text": "Option C", "isCorrect": false },
+    { "text": "Option D", "isCorrect": false }
+  ],
+  "tags": ["concept-1", "concept-2"],
+  "diagrams": [
+    { "type": "mermaid", "title": "Optional diagram", "code": "graph TD\\\\nA-->B" }
+  ]
+}`;
 
   const copyPrompt = () => {
     navigator.clipboard.writeText(buildPrompt());
@@ -163,44 +127,44 @@ Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-muted-foreground mb-2">
-        Add problems mapped to subject → chapter → topic → subtopic.
+      <p className="mb-2 text-xs text-muted-foreground">
+        Add problems mapped to subject - chapter - topic - subtopic.
       </p>
 
-      <div className="academic-card p-4 space-y-4">
+      <div className="academic-card space-y-4 p-4">
         <div className="text-xs font-medium text-foreground">1. Taxonomy placement</div>
         <HierarchyPicker value={hierarchy} onChange={setHierarchy} onLabelsChange={setLabels} />
       </div>
 
-      <div className="academic-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-medium text-foreground">Structured creation prompt</div>
+      <div className="academic-card space-y-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs font-medium text-foreground">Compact JSON creation prompt</div>
           <button
             type="button"
             onClick={copyPrompt}
-            className="text-xs flex items-center gap-1 px-2 py-1 border border-border rounded-sm hover:bg-secondary"
+            className="flex items-center gap-1 rounded-sm border border-border px-2 py-1 text-xs hover:bg-secondary"
           >
             <Copy size={12} /> Copy prompt
           </button>
         </div>
-        <pre className="text-[11px] font-mono text-muted-foreground bg-secondary/30 p-3 rounded-sm whitespace-pre-wrap border border-border max-h-80 overflow-auto">
+        <pre className="max-h-72 overflow-auto rounded-sm border border-border bg-secondary/30 p-3 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
           {buildPrompt()}
         </pre>
       </div>
 
-      <div className="academic-card p-4 space-y-4">
+      <div className="academic-card space-y-4 p-4">
         <div className="text-xs font-medium text-foreground">2. Problem details</div>
         <input
           placeholder="Title"
           value={form.title}
           onChange={(e) => setForm({ ...form, title: e.target.value })}
-          className="w-full px-3 py-2 text-xs border border-border rounded-sm"
+          className="w-full rounded-sm border border-border px-3 py-2 text-xs"
         />
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <select
             value={form.difficulty}
             onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
-            className="px-3 py-2 text-xs border border-border rounded-sm"
+            className="rounded-sm border border-border px-3 py-2 text-xs"
           >
             <option>Easy</option>
             <option>Medium</option>
@@ -209,7 +173,7 @@ Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
           <select
             value={form.questionType}
             onChange={(e) => setForm({ ...form, questionType: e.target.value })}
-            className="px-3 py-2 text-xs border border-border rounded-sm"
+            className="rounded-sm border border-border px-3 py-2 text-xs"
           >
             <option>MCQ</option>
             <option>MSQ</option>
@@ -220,13 +184,13 @@ Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
             placeholder="Est. time (s)"
             value={form.estimatedTime}
             onChange={(e) => setForm({ ...form, estimatedTime: +e.target.value })}
-            className="px-3 py-2 text-xs border border-border rounded-sm"
+            className="rounded-sm border border-border px-3 py-2 text-xs"
           />
           <input
             placeholder="Tags (comma)"
             value={form.tags}
             onChange={(e) => setForm({ ...form, tags: e.target.value })}
-            className="px-3 py-2 text-xs border border-border rounded-sm"
+            className="rounded-sm border border-border px-3 py-2 text-xs"
           />
         </div>
         <textarea
@@ -234,11 +198,11 @@ Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
           value={form.statement}
           onChange={(e) => setForm({ ...form, statement: e.target.value })}
           rows={4}
-          className="w-full px-3 py-2 text-xs border border-border rounded-sm font-mono"
+          className="w-full rounded-sm border border-border px-3 py-2 font-mono text-xs"
         />
         {form.questionType !== "NAT" &&
           form.options.map((opt, i) => (
-            <div key={i} className="flex gap-2 items-center min-w-0">
+            <div key={i} className="flex min-w-0 items-center gap-2">
               <input
                 type="checkbox"
                 checked={opt.isCorrect}
@@ -256,24 +220,24 @@ Return ONLY the JSON object. No preamble, no explanation, no markdown.`;
                   opts[i] = { ...opts[i], text: e.target.value };
                   setForm({ ...form, options: opts });
                 }}
-                className="flex-1 min-w-0 px-3 py-2 text-xs border border-border rounded-sm"
+                className="min-w-0 flex-1 rounded-sm border border-border px-3 py-2 text-xs"
               />
             </div>
           ))}
         <textarea
-          placeholder="Solution (LaTeX or JSON editorial)"
+          placeholder='Solution JSON, e.g. {"overview":"...","narrative":["..."],"equations":["\\\\[...\\\\]"],"finalAnswer":"..."}'
           value={form.solution}
           onChange={(e) => setForm({ ...form, solution: e.target.value })}
           rows={4}
-          className="w-full px-3 py-2 text-xs border border-border rounded-sm font-mono"
+          className="w-full rounded-sm border border-border px-3 py-2 font-mono text-xs"
         />
         {form.title && (
           <div className="border-t border-border pt-3 text-xs">
-            <span className="text-muted-foreground font-mono">Preview: </span>
+            <span className="font-mono text-muted-foreground">Preview: </span>
             <LatexRenderer latex={form.title} />
           </div>
         )}
-        <button type="button" onClick={handleSubmit} className="btn-primary px-4 py-2 text-xs flex items-center justify-center gap-1 w-full sm:w-auto">
+        <button type="button" onClick={handleSubmit} className="btn-primary flex w-full items-center justify-center gap-1 px-4 py-2 text-xs sm:w-auto">
           <Plus size={14} /> Submit for review
         </button>
       </div>

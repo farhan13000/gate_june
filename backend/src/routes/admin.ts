@@ -44,7 +44,9 @@ import {
   adminUpdateSubtopic,
   adminDeleteSubtopic,
   adminReorderTaxonomy,
+  adminBulkTaxonomyJson,
 } from "../controllers/taxonomyAdminController";
+import { getPlatformLogs } from "../controllers/platformLogController";
 
 const router = express.Router();
 
@@ -73,6 +75,10 @@ router.put("/taxonomy/subtopics/:id", adminUpdateSubtopic);
 router.delete("/taxonomy/subtopics/:id", adminDeleteSubtopic);
 
 router.post("/taxonomy/reorder", adminReorderTaxonomy);
+router.post("/taxonomy/bulk-json", adminBulkTaxonomyJson);
+
+// Platform logs
+router.get("/logs", getPlatformLogs);
 
 // Users
 router.get("/users", getAllUsers);

@@ -24,6 +24,165 @@ interface EditorialRendererProps {
   solution: string | EditorialData | any;
 }
 
+type GenericSolution = Record<string, any>;
+
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function asText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value, null, 2);
+}
+
+function humanizeKey(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getFirstDefined(obj: GenericSolution, keys: string[]) {
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null && obj[key] !== "") return obj[key];
+  }
+  return undefined;
+}
+
+function normalizeList(value: unknown): string[] {
+  const parsed = parseMaybeJson(value);
+  if (Array.isArray(parsed)) return parsed.map(asText).filter(Boolean);
+  if (typeof parsed === "string") {
+    return parsed
+      .split(/\n+/)
+      .map((item) => item.replace(/^[-*]\s*/, "").trim())
+      .filter(Boolean);
+  }
+  return parsed ? [asText(parsed)] : [];
+}
+
+function renderTextBlock(title: string, value: unknown, icon?: React.ReactNode) {
+  const text = asText(parseMaybeJson(value));
+  if (!text) return null;
+  return (
+    <section key={title} className="border-l-2 border-border pl-4">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        {icon}
+        <span>{title}</span>
+      </div>
+      <div className="text-sm leading-[1.85] text-foreground/85">
+        <LatexRenderer latex={text} />
+      </div>
+    </section>
+  );
+}
+
+function renderParagraphListBlock(title: string, value: unknown) {
+  const list = normalizeList(value);
+  if (list.length === 0) return null;
+  return (
+    <section key={title} className="space-y-3">
+      <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{title}</div>
+      <div className="space-y-3 text-sm leading-[1.85] text-foreground/85">
+        {list.map((item, index) => (
+          <p key={index}>
+            <LatexRenderer latex={item} />
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function renderEquationBlocks(value: unknown) {
+  const equations = normalizeList(value);
+  if (equations.length === 0) return null;
+  return (
+    <section key="Equations" className="space-y-2">
+      {equations.map((equation, index) => (
+        <div key={index} className="overflow-x-auto rounded-sm border border-border bg-secondary/20 px-3 py-2 text-center">
+          <LatexRenderer latex={equation} />
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function renderGenericSolution(solution: GenericSolution) {
+  const knownKeys = new Set([
+    "overview",
+    "summary",
+    "strategy",
+    "detailed_steps",
+    "steps",
+    "solution_steps",
+    "narrative",
+    "paragraphs",
+    "equations",
+    "key_observation",
+    "keyObservation",
+    "keyInsight",
+    "mathematical_insight",
+    "mathematicalInsight",
+    "common_traps",
+    "commonTraps",
+    "complexity_or_reasoning",
+    "complexityOrReasoning",
+    "complexity",
+    "reasoning",
+    "final_answer",
+    "finalAnswer",
+    "answer",
+  ]);
+
+  const blocks: React.ReactNode[] = [];
+  blocks.push(renderTextBlock("Overview", getFirstDefined(solution, ["overview", "summary", "strategy"]), <BookOpen size={13} />));
+  blocks.push(renderParagraphListBlock("Solution", getFirstDefined(solution, ["narrative", "paragraphs", "detailed_steps", "steps", "solution_steps"])));
+  blocks.push(renderEquationBlocks(getFirstDefined(solution, ["equations"])));
+  blocks.push(renderTextBlock("Key Insight", getFirstDefined(solution, ["key_observation", "keyObservation", "keyInsight"]), <Lightbulb size={13} />));
+  blocks.push(renderTextBlock("Mathematical Insight", getFirstDefined(solution, ["mathematical_insight", "mathematicalInsight"]), <BookOpen size={13} />));
+  blocks.push(renderParagraphListBlock("Common Traps", getFirstDefined(solution, ["common_traps", "commonTraps"])));
+  blocks.push(renderTextBlock("Complexity Or Reasoning", getFirstDefined(solution, ["complexity_or_reasoning", "complexityOrReasoning", "complexity", "reasoning"]), <Cpu size={13} />));
+
+  const finalAnswer = getFirstDefined(solution, ["final_answer", "finalAnswer", "answer"]);
+  if (finalAnswer) {
+    blocks.push(
+      <section key="Final Answer" className="rounded-sm border border-primary/20 bg-primary/10 p-4 text-primary">
+        <div className="flex items-start gap-2">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide">Final Answer</div>
+            <div className="text-sm font-semibold">
+              <LatexRenderer latex={asText(finalAnswer)} />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  Object.entries(solution).forEach(([key, value]) => {
+    if (knownKeys.has(key) || value === undefined || value === null || value === "") return;
+    if (Array.isArray(parseMaybeJson(value))) {
+      blocks.push(renderParagraphListBlock(humanizeKey(key), value));
+    } else {
+      blocks.push(renderTextBlock(humanizeKey(key), value));
+    }
+  });
+
+  return <div className="space-y-5">{blocks.filter(Boolean)}</div>;
+}
+
 export default function EditorialRenderer({ solution }: EditorialRendererProps) {
   // If solution is empty or nil
   if (!solution) {
@@ -33,24 +192,25 @@ export default function EditorialRenderer({ solution }: EditorialRendererProps) 
   // Helper to check if solution is a structured editorial object
   let editorial: EditorialData | null = null;
 
-  if (typeof solution === "object" && solution !== null && solution.type === "editorial") {
-    editorial = solution as EditorialData;
-  } else if (typeof solution === "string" && solution.trim().startsWith("{")) {
-    try {
-      const parsed = JSON.parse(solution);
-      if (parsed && parsed.type === "editorial") {
-        editorial = parsed as EditorialData;
-      }
-    } catch (e) {
-      // Fallback to string rendering if parsing fails
-    }
+  const parsedSolution = parseMaybeJson(solution);
+
+  if (typeof parsedSolution === "object" && parsedSolution !== null && (parsedSolution as any).type === "editorial") {
+    editorial = parsedSolution as EditorialData;
+  }
+
+  if (!editorial && typeof parsedSolution === "object" && parsedSolution !== null && !Array.isArray(parsedSolution)) {
+    return renderGenericSolution(parsedSolution as GenericSolution);
+  }
+
+  if (!editorial && Array.isArray(parsedSolution)) {
+    return renderParagraphListBlock("Solution", parsedSolution) || null;
   }
 
   // Fallback: If not structured, render as standard Latex string
   if (!editorial || !Array.isArray(editorial.blocks)) {
-    const rawString = typeof solution === "string" ? solution : JSON.stringify(solution);
+    const rawString = asText(parsedSolution);
     return (
-      <div className="text-foreground/85 leading-[1.8] font-serif">
+      <div className="text-sm text-foreground/85 leading-[1.8]">
         <LatexRenderer latex={rawString} />
       </div>
     );

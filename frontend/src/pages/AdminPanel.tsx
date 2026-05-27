@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle, Info, Clipboard, Eye } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import LatexRenderer from "../components/LatexRenderer";
@@ -12,6 +12,9 @@ import { SiteContainer, MainPanel } from "@/components/layout";
 import AdminProblemManager from "@/components/admin/AdminProblemManager";
 import AdminTheoryManager from "@/components/admin/AdminTheoryManager";
 import AdminShell from "@/components/admin/AdminShell";
+import AdminPlatformLogs from "@/components/admin/AdminPlatformLogs";
+import { useTaxonomy } from "@/hooks/useTaxonomy";
+import { buildTaxonomyPromptContext } from "@/utils/taxonomyPrompt";
 
 const CREATION_PROTOCOLS = {
   Problem: {
@@ -366,6 +369,77 @@ type Section =
 export default function AdminPanel() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { tree: taxonomyTree } = useTaxonomy();
+  const taxonomyPromptContext = useMemo(() => buildTaxonomyPromptContext(taxonomyTree), [taxonomyTree]);
+  const taxonomyCounts = useMemo(() => {
+    const chapters = taxonomyTree.flatMap((subject) => subject.chapters || []);
+    const topics = chapters.flatMap((chapter) => chapter.topics || []);
+    const subtopics = topics.flatMap((topic) => topic.subtopics || []);
+    return {
+      subjects: taxonomyTree.length,
+      chapters: chapters.length,
+      topics: topics.length,
+      subtopics: subtopics.length,
+    };
+  }, [taxonomyTree]);
+
+  const buildSyncedCreationPrompt = () => {
+    const isProblem = qForm.type === "Problem";
+    return `Create ${isProblem ? "GATE DA problems" : "GATE DA theory articles"} as valid JSON only.
+
+CURRENT TAXONOMY
+Use only these IDs. Do not invent taxonomy.
+${taxonomyPromptContext}
+
+OUTPUT MODE
+- Return a JSON array for bulk creation.
+- Every item must include subjectId, chapterId, topicId, and subtopicId.
+- Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
+- No markdown wrapper, no prose outside JSON.
+
+${isProblem ? `PROBLEM ITEM SHAPE
+{
+  "subjectId": "SUBJECT_ID",
+  "chapterId": "CHAPTER_ID",
+  "topicId": "TOPIC_ID",
+  "subtopicId": "SUBTOPIC_ID",
+  "title": "Problem title",
+  "topic": "Exact topic name",
+  "subtopic": "Exact subtopic name",
+  "difficulty": "Easy|Medium|Hard",
+  "questionType": "MCQ|MSQ|NAT",
+  "statement": "Problem statement with double-escaped LaTeX.",
+  "solution": {
+    "overview": "Short strategy paragraph.",
+    "narrative": ["Paragraph reasoning, not tiny numbered steps."],
+    "equations": ["\\\\[ key equation \\\\]"],
+    "keyInsight": "Core idea.",
+    "finalAnswer": "Final answer."
+  },
+  "options": [
+    { "text": "Option A", "isCorrect": true },
+    { "text": "Option B", "isCorrect": false }
+  ],
+  "tags": ["concept"]
+}` : `THEORY ITEM SHAPE
+{
+  "subjectId": "SUBJECT_ID",
+  "chapterId": "CHAPTER_ID",
+  "topicId": "TOPIC_ID",
+  "subtopicId": "SUBTOPIC_ID",
+  "title": "Theory title",
+  "topic": "Exact topic name",
+  "chapterTitle": "Exact chapter name",
+  "sectionId": "SUBTOPIC_ID",
+  "content": "Well-structured article with double-escaped LaTeX.",
+  "formulas": ["\\\\[ formula \\\\]"],
+  "examples": ["Worked example paragraph."],
+  "highlights": ["Key point."],
+  "diagrams": [
+    { "type": "mermaid", "title": "Optional diagram", "code": "graph TD\\\\nA-->B" }
+  ]
+}`}`;
+  };
 
   // Navigation State
   const [activeSection, setActiveSection] = useState<Section>("Overview");
@@ -575,7 +649,11 @@ export default function AdminPanel() {
     // Elite protocol: problem_statement, options{A/B/C/D}, difficulty{Foundational|Advanced|Elite Hard}
     // Backend format: statement, options[{text, isCorrect}], difficulty{Easy|Medium|Hard}
     
-    const transformed: any = {
+      const transformed: any = {
+      subjectId: item.subjectId || "",
+      chapterId: item.chapterId || "",
+      topicId: item.topicId || "",
+      subtopicId: item.subtopicId || "",
       title: item.title || "Untitled",
       topic: item.topic || "",
       subtopic: item.subtopic || "",
@@ -594,7 +672,7 @@ export default function AdminPanel() {
     // Transform options from {A, B, C, D} format to [{text, isCorrect}] format
     if (item.options && typeof item.options === 'object' && !Array.isArray(item.options)) {
       const optionsArray = [];
-      const correctAnswer = item.correct_answer?.toUpperCase();
+      const correctAnswer = (item.correct_answer || item.correctAnswer || "").toUpperCase();
       for (const [key, value] of Object.entries(item.options)) {
         optionsArray.push({
           text: String(value),
@@ -611,9 +689,12 @@ export default function AdminPanel() {
   };
 
   const transformTheoryProtocol = (item: any): any => ({
+    subjectId: item.subjectId || "",
+    chapterId: item.chapterId || qForm.chapterId || "",
+    topicId: item.topicId || "",
+    subtopicId: item.subtopicId || item.sectionId || "",
     title: item.title || item.heading || "Untitled theory article",
     topic: item.topic || qForm.topic || "",
-    chapterId: item.chapterId || qForm.chapterId || "",
     chapterTitle: item.chapterTitle || item.chapter || qForm.chapterTitle || "",
     sectionId: item.sectionId || item.subtopic || qForm.sectionId || "",
     content: item.content || item.statement || item.body || "",
@@ -628,6 +709,9 @@ export default function AdminPanel() {
     const errors: string[] = [];
     if (!item.title || item.title === "Untitled") errors.push(`#${itemNo}: missing title`);
     if (qForm.type === "Problem") {
+      if (!item.subjectId || !item.chapterId || !item.topicId || !item.subtopicId) {
+        errors.push(`#${itemNo}: missing taxonomy IDs (subjectId, chapterId, topicId, subtopicId)`);
+      }
       if (!item.statement) errors.push(`#${itemNo}: missing problem statement`);
       if (item.questionType !== "NAT" && (!Array.isArray(item.options) || item.options.length < 2)) {
         errors.push(`#${itemNo}: MCQ/MSQ needs at least 2 options`);
@@ -635,8 +719,11 @@ export default function AdminPanel() {
       if (item.questionType !== "NAT" && !item.options?.some((opt: any) => opt.isCorrect)) {
         errors.push(`#${itemNo}: mark at least one correct option`);
       }
-    } else if (!item.content) {
-      errors.push(`#${itemNo}: missing theory content`);
+    } else {
+      if (!item.subjectId || !item.chapterId || !item.topicId || !item.subtopicId) {
+        errors.push(`#${itemNo}: missing taxonomy IDs (subjectId, chapterId, topicId, subtopicId)`);
+      }
+      if (!item.content) errors.push(`#${itemNo}: missing theory content`);
     }
     return errors;
   };
@@ -1021,8 +1108,8 @@ export default function AdminPanel() {
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.promptTemplate);
-                        toast.success("AI Prompt Template copied to clipboard!");
+                        navigator.clipboard.writeText(buildSyncedCreationPrompt());
+                        toast.success("Taxonomy-synced AI prompt copied!");
                       }}
                       className="flex items-center gap-1.5 text-[10px] bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1 rounded-sm border border-primary/20 transition-all font-bold self-start sm:self-auto shrink-0"
                     >
@@ -1032,6 +1119,14 @@ export default function AdminPanel() {
                   <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
                     {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.description}
                   </p>
+                  <div className="mb-3 grid grid-cols-2 gap-2 border-y border-primary/10 py-3 sm:grid-cols-4">
+                    {(["subjects", "chapters", "topics", "subtopics"] as const).map((key) => (
+                      <div key={key} className="rounded-sm border border-primary/15 bg-background/70 px-2 py-1.5 text-center">
+                        <div className="font-mono text-sm font-bold text-primary">{taxonomyCounts[key]}</div>
+                        <div className="text-[9px] uppercase tracking-wide text-muted-foreground">{key}</div>
+                      </div>
+                    ))}
+                  </div>
                   <div className="space-y-1.5 border-t border-primary/10 pt-3">
                     <span className="text-[10px] font-bold text-foreground block uppercase tracking-wider mb-1">Strict Rules:</span>
                     {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.rules.map((rule, idx) => (
@@ -1051,14 +1146,24 @@ export default function AdminPanel() {
                       <pre className="text-[10px] text-muted-foreground font-mono bg-background p-3 rounded-sm overflow-x-auto border border-border">
 {qForm.type === 'Problem' ? `[
   {
-    "title": "Problem Title", "topic": "Probability", "statement": "LaTeX...", "solution": "LaTeX...",
+    "subjectId": "SUBJECT_ID_FROM_TAXONOMY",
+    "chapterId": "CHAPTER_ID_FROM_TAXONOMY",
+    "topicId": "TOPIC_ID_FROM_TAXONOMY",
+    "subtopicId": "SUBTOPIC_ID_FROM_TAXONOMY",
+    "title": "Problem Title", "topic": "Exact topic name", "subtopic": "Exact subtopic name",
+    "statement": "LaTeX...", "solution": "LaTeX...",
     "difficulty": "Medium", "questionType": "MCQ", "positiveMarks": 2, "negativeMarks": 0.5,
     "options": [ { "text": "Option A", "isCorrect": true }, { "text": "Option B", "isCorrect": false } ]
   }
 ]` : `[
   {
-    "title": "Section Title", "topic": "Probability", "chapterId": "1",
-    "chapterTitle": "Chapter Name", "sectionId": "1.1", "content": "LaTeX content..."
+    "subjectId": "SUBJECT_ID_FROM_TAXONOMY",
+    "chapterId": "CHAPTER_ID_FROM_TAXONOMY",
+    "topicId": "TOPIC_ID_FROM_TAXONOMY",
+    "subtopicId": "SUBTOPIC_ID_FROM_TAXONOMY",
+    "title": "Section Title", "topic": "Exact topic name",
+    "chapterTitle": "Exact chapter name", "sectionId": "SUBTOPIC_ID_FROM_TAXONOMY",
+    "content": "LaTeX content..."
   }
 ]`}
                       </pre>
@@ -1433,7 +1538,7 @@ export default function AdminPanel() {
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
                   <button onClick={() => handleBulkApprove("rejected")} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Bulk Reject</button>
-                  <button onClick={() => handleBulkApprove("approved")} className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-sm font-medium transition-colors">Bulk Approve</button>
+                  <button onClick={() => handleBulkApprove("approved")} className="admin-approval-glow px-3 py-1.5 text-xs bg-primary hover:bg-red-hover text-primary-foreground border border-primary rounded-sm font-medium transition-colors">Bulk Approve</button>
                 </div>
               </div>
             )}
@@ -1477,7 +1582,7 @@ export default function AdminPanel() {
                         <div className="flex gap-2 justify-end">
                           <button onClick={() => setPreviewItem(q)} className="px-3 py-1.5 text-xs border border-border hover:bg-secondary rounded-sm transition-colors flex items-center gap-1.5"><Eye size={12}/> Preview</button>
                           <button onClick={() => handleApprove(q._id, "rejected", q._contentType)} className="px-3 py-1.5 text-xs border border-border hover:bg-red-500/10 hover:text-red-500 rounded-sm transition-colors">Reject</button>
-                          <button onClick={() => handleApprove(q._id, "approved", q._contentType)} className="btn-primary px-3 py-1.5 text-xs">Approve ✓</button>
+                          <button onClick={() => handleApprove(q._id, "approved", q._contentType)} className="admin-approval-glow btn-primary px-3 py-1.5 text-xs">Approve</button>
                         </div>
                       </td>
                     </tr>
@@ -1659,10 +1764,7 @@ export default function AdminPanel() {
 
         {/* PLATFORM LOGS SECTION */}
         {activeSection === "Platform Logs" && (
-          <div className="w-full text-center py-20 border border-dashed border-border rounded-md bg-secondary/10">
-            <h2 className="text-xl font-bold font-serif mb-2 text-foreground">Platform Logs</h2>
-            <p className="text-sm text-muted-foreground">System audit logs and error tracing will appear here in a future update.</p>
-          </div>
+          <AdminPlatformLogs />
         )}
 
           </AdminShell>
@@ -1972,7 +2074,7 @@ export default function AdminPanel() {
                         handleApprove(previewItem._id, "approved", previewItem._contentType);
                         setPreviewItem(null);
                       }} 
-                      className="btn-primary px-6 py-2 text-xs"
+                      className="admin-approval-glow btn-primary px-6 py-2 text-xs"
                     >
                       Approve ✓
                     </button>

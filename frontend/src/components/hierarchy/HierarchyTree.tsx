@@ -33,6 +33,26 @@ function ProgressPill() {
   );
 }
 
+function GlowDot({ level }: { level: "subject" | "chapter" | "topic" | "subtopic" }) {
+  const cls =
+    level === "subject"
+      ? "bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.75)]"
+      : level === "chapter"
+        ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.75)]"
+        : level === "topic"
+          ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.75)]"
+          : "bg-sky-500 shadow-[0_0_10px_rgba(14,165,233,0.75)]";
+  return <span className={`h-2 w-2 shrink-0 rounded-full ${cls}`} />;
+}
+
+function NumberBadge({ value }: { value: string }) {
+  return (
+    <span className="shrink-0 rounded-sm border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
+      {value}
+    </span>
+  );
+}
+
 export default function HierarchyTree({
   tree,
   selection,
@@ -58,9 +78,10 @@ export default function HierarchyTree({
 
   return (
     <nav className="text-sm" aria-label="Content hierarchy">
-      {tree.map((subject) => {
+      {tree.map((subject, subjectIndex) => {
         const subjectActive = selection.subjectId === subject.subjectId && !selection.chapterId;
         const chapterCount = subject.chapters.length;
+        const subjectNo = String(subjectIndex + 1);
 
         return (
           <div key={subject.subjectId} className="hierarchy-subject">
@@ -82,8 +103,10 @@ export default function HierarchyTree({
                 <BookOpen size={16} />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold leading-tight text-foreground">
-                  {subject.name}
+                <span className="flex min-w-0 items-center gap-2 text-sm font-semibold leading-tight text-foreground">
+                  <GlowDot level="subject" />
+                  <NumberBadge value={subjectNo} />
+                  <span className="truncate">{subject.name}</span>
                 </span>
                 <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
                   {subject.code} - {chapterCount} {chapterCount === 1 ? "chapter" : "chapters"}
@@ -93,8 +116,9 @@ export default function HierarchyTree({
             </button>
 
             {isExpanded(subject.subjectId) &&
-              subject.chapters.map((chapter) => {
+              subject.chapters.map((chapter, chapterIndex) => {
                 const chapterActive = selection.chapterId === chapter.chapterId && !selection.topicId;
+                const chapterNo = `${subjectNo}.${chapterIndex + 1}`;
 
                 return (
                   <div key={chapter.chapterId} className="ml-5 border-l border-border pl-2">
@@ -115,13 +139,18 @@ export default function HierarchyTree({
                         {isExpanded(chapter.chapterId) ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                       </span>
                       <Layers size={16} className="text-primary" />
-                      <span className="min-w-0 truncate text-xs font-semibold sm:text-sm">{chapter.name}</span>
+                      <span className="flex min-w-0 items-center gap-2 text-xs font-semibold sm:text-sm">
+                        <GlowDot level="chapter" />
+                        <NumberBadge value={chapterNo} />
+                        <span className="truncate">{chapter.name}</span>
+                      </span>
                       <ProgressPill />
                     </button>
 
                     {isExpanded(chapter.chapterId) &&
-                      chapter.topics.map((topic) => {
+                      chapter.topics.map((topic, topicIndex) => {
                         const topicActive = selection.topicId === topic.topicId && !selection.subtopicId;
+                        const topicNo = `${chapterNo}.${topicIndex + 1}`;
 
                         return (
                           <div key={topic.topicId} className="ml-4 border-l border-dashed border-border pl-2">
@@ -153,13 +182,18 @@ export default function HierarchyTree({
                                   <span className="inline-block w-[12px]" />
                                 )}
                               </span>
-                              <span className="min-w-0 truncate text-xs">{topic.name}</span>
+                              <span className="flex min-w-0 items-center gap-2 text-xs">
+                                <GlowDot level="topic" />
+                                <NumberBadge value={topicNo} />
+                                <span className="truncate">{topic.name}</span>
+                              </span>
                               <ProgressPill />
                             </button>
 
                             {isExpanded(topic.topicId) &&
-                              topic.subtopics.map((subtopic) => {
+                              topic.subtopics.map((subtopic, subtopicIndex) => {
                                 const subtopicActive = selection.subtopicId === subtopic.subtopicId;
+                                const subtopicNo = `${topicNo}.${subtopicIndex + 1}`;
 
                                 return (
                                   <button
@@ -181,7 +215,11 @@ export default function HierarchyTree({
                                     title={subtopic.name}
                                   >
                                     <Hash size={11} className="text-primary" />
-                                    <span className="min-w-0 truncate text-xs">{subtopic.name}</span>
+                                    <span className="flex min-w-0 items-center gap-2 text-xs">
+                                      <GlowDot level="subtopic" />
+                                      <NumberBadge value={subtopicNo} />
+                                      <span className="truncate">{subtopic.name}</span>
+                                    </span>
                                     <ProgressPill />
                                   </button>
                                 );

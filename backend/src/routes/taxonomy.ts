@@ -7,6 +7,7 @@ import {
   getSubtopics,
   getTaxonomyStats,
 } from "../controllers/taxonomyController";
+import { optionalAuth } from "../middleware/auth";
 
 const router = Router();
 
@@ -15,6 +16,6 @@ router.get("/subjects", getSubjects);
 router.get("/chapters", getChapters);
 router.get("/topics", getTopics);
 router.get("/subtopics", getSubtopics);
-router.get("/stats", getTaxonomyStats);
+router.get("/stats", optionalAuth, getTaxonomyStats);
 
 export default router;

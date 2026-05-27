@@ -3,6 +3,7 @@ import Subject from "../models/Subject";
 import Chapter from "../models/Chapter";
 import Topic from "../models/Topic";
 import Subtopic from "../models/Subtopic";
+import { processBulkTaxonomyJson } from "../utils/taxonomyBulkProcessor";
 
 // ── Subjects ─────────────────────────────────────────────────────────────────
 
@@ -237,5 +238,26 @@ export const adminReorderTaxonomy = async (req: Request, res: Response): Promise
     res.json({ message: "Reorder applied" });
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to reorder" });
+  }
+};
+
+/** POST /api/admin/taxonomy/bulk-json - import nested taxonomy JSON */
+export const adminBulkTaxonomyJson = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { data, mode, dryRun } = req.body as {
+      data?: unknown;
+      mode?: "upsert" | "createOnly";
+      dryRun?: boolean;
+    };
+
+    const result = await processBulkTaxonomyJson(data, {
+      mode: mode || "upsert",
+      dryRun: Boolean(dryRun),
+      performedBy: req.currentUser!._id,
+    });
+
+    res.status(result.summary.failed > 0 ? 207 : 200).json(result);
+  } catch (error: any) {
+    res.status(400).json({ message: error.message || "Failed to process taxonomy JSON" });
   }
 };

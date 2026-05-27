@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import TaxonomyBulkJsonManager from "./TaxonomyBulkJsonManager";
 
 type TaxLevel = "subjects" | "chapters" | "topics" | "subtopics";
 type DraftMap = Record<string, Record<string, string | number | boolean>>;
@@ -290,6 +291,13 @@ export default function AdminTaxonomyManager() {
           </div>
         </div>
       </div>
+
+      <TaxonomyBulkJsonManager
+        onImported={() => {
+          loadSubjects();
+          loadItems();
+        }}
+      />
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {(["subjects", "chapters", "topics", "subtopics"] as TaxLevel[]).map((l) => (

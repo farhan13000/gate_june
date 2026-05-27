@@ -1,3 +1,4 @@
+import { CheckCircle2, Circle, Clock3, RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ContentExplorerLayout from "@/components/hierarchy/ContentExplorerLayout";
@@ -11,6 +12,12 @@ const sortOptions = [
   { value: "newest", label: "Newest" },
   { value: "title", label: "Title" },
   { value: "difficulty", label: "Difficulty" },
+];
+const progressOptions = [
+  { value: "", label: "All" },
+  { value: "unsolved", label: "Unsolved" },
+  { value: "attempted", label: "Attempted" },
+  { value: "solved", label: "Solved" },
 ];
 const emptyDifficultyCounts = { easy: 0, medium: 0, hard: 0 };
 
@@ -36,20 +43,60 @@ function normalizeDifficultyDistribution(distribution?: ProblemsListResponse["di
 }
 
 function diffClass(difficulty: string) {
+  const base = "inline-flex min-w-[4.75rem] items-center justify-center rounded-sm border px-2 py-1 text-[11px] font-semibold";
   if (difficulty === "Easy") {
-    return "bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-sm font-sans font-semibold text-[11px] px-2 py-0.5";
+    return `${base} border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300`;
   }
   if (difficulty === "Medium") {
-    return "bg-blue-50 text-blue-600 border border-blue-100 rounded-sm font-sans font-semibold text-[11px] px-2 py-0.5";
+    return `${base} border-primary/20 bg-primary/10 text-primary`;
   }
-  return "bg-red-50 text-red-600 border border-red-100 rounded-sm font-sans font-semibold text-[11px] px-2 py-0.5";
+  return `${base} border-destructive/20 bg-destructive/10 text-destructive`;
 }
 
 function typeBadge(type: string) {
-  const base = "inline-block text-[12px] px-2 py-0.5 rounded-md font-medium";
-  if (type === "MSQ") return `${base} bg-violet-50 text-violet-700 border border-violet-100`;
-  if (type === "NAT") return `${base} bg-amber-50 text-amber-700 border border-amber-100`;
-  return `${base} bg-sky-50 text-sky-700 border border-sky-100`;
+  const base = "inline-flex min-w-[3.25rem] items-center justify-center rounded-sm border px-2 py-1 text-[11px] font-semibold";
+  if (type === "MSQ") return `${base} border-primary/20 bg-primary/10 text-primary`;
+  if (type === "NAT") return `${base} border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300`;
+  return `${base} border-border bg-secondary/40 text-foreground`;
+}
+
+function statusMeta(problem: any) {
+  if (problem.isSolved) {
+    return {
+      label: "Solved",
+      Icon: CheckCircle2,
+      className: "border-primary/25 bg-primary/10 text-primary shadow-[0_0_12px_hsl(var(--primary)/0.12)]",
+      dotClassName: "bg-primary shadow-[0_0_8px_hsl(var(--primary))]",
+    };
+  }
+  if (problem.attempted) {
+    return {
+      label: "Attempted",
+      Icon: Clock3,
+      className: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      dotClassName: "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.45)]",
+    };
+  }
+  return {
+    label: "Unsolved",
+    Icon: Circle,
+    className: "border-border bg-secondary/30 text-muted-foreground",
+    dotClassName: "bg-muted-foreground/40",
+  };
+}
+
+function ProblemStatusBadge({ problem }: { problem: any }) {
+  const meta = statusMeta(problem);
+  const Icon = meta.Icon;
+  return (
+    <span
+      className={`inline-flex min-w-[6.75rem] items-center justify-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-semibold ${meta.className}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${meta.dotClassName}`} />
+      <Icon size={12} strokeWidth={2} />
+      {meta.label}
+    </span>
+  );
 }
 
 export default function Problems() {
@@ -66,9 +113,11 @@ export default function Problems() {
   const [loading, setLoading] = useState(true);
   const [pageSize, setPageSize] = useState(25);
   const [problemDifficultyCounts, setProblemDifficultyCounts] = useState(emptyDifficultyCounts);
+  const [progressStats, setProgressStats] = useState({ solved: 0, attempts: 0 });
 
   const [difficulty, setDifficulty] = useState("");
   const [questionType, setQuestionType] = useState("");
+  const [progress, setProgress] = useState("");
   const [sort, setSort] = useState("newest");
   const [search, setSearch] = useState("");
 
@@ -81,19 +130,21 @@ export default function Problems() {
     if (selection.subtopicId) params.set("subtopicId", selection.subtopicId);
     if (difficulty) params.set("difficulty", difficulty);
     if (questionType) params.set("questionType", questionType);
+    if (progress) params.set("progress", progress);
     if (search.trim()) params.set("search", search.trim());
     params.set("sort", sort);
     params.set("page", String(page));
     params.set("limit", String(pageSize));
 
     try {
-      const res = await fetch(`/api/problems?${params}`);
+      const res = await fetch(`/api/problems?${params}`, { credentials: "include" });
       const data = await res.json();
       if (data.questions) {
         const response = data as ProblemsListResponse;
         setProblems(response.questions as any[]);
         setTotal(response.total);
         setTotalPages(response.totalPages);
+        setProgressStats({ solved: response.solvedCount || 0, attempts: response.attempts || 0 });
         setProblemDifficultyCounts(
           normalizeDifficultyDistribution(response.difficultyDistribution) ||
             countProblemDifficulties(response.questions)
@@ -102,21 +153,23 @@ export default function Problems() {
         setProblems(data);
         setTotal(data.length);
         setTotalPages(1);
+        setProgressStats({ solved: 0, attempts: 0 });
         setProblemDifficultyCounts(countProblemDifficulties(data));
       }
     } catch {
       setProblems([]);
       setTotal(0);
       setTotalPages(1);
+      setProgressStats({ solved: 0, attempts: 0 });
       setProblemDifficultyCounts(emptyDifficultyCounts);
     } finally {
       setLoading(false);
     }
-  }, [selection, difficulty, questionType, sort, search, page, pageSize]);
+  }, [selection, difficulty, questionType, progress, sort, search, page, pageSize]);
 
   useEffect(() => {
     setPage(1);
-  }, [selection, difficulty, questionType, sort, search, pageSize]);
+  }, [selection, difficulty, questionType, progress, sort, search, pageSize]);
 
   useEffect(() => {
     fetchProblems();
@@ -137,28 +190,42 @@ export default function Problems() {
   };
 
   const extendedStats = stats as any;
-  const solved = extendedStats?.solved ?? extendedStats?.solvedCount ?? 0;
-  const attempts = extendedStats?.attempts ?? 0;
+  const solved = extendedStats?.solved ?? extendedStats?.solvedCount ?? progressStats.solved;
+  const attempts = extendedStats?.attempts ?? progressStats.attempts;
   const difficultyCounts = problemDifficultyCounts;
   const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const showingTo = Math.min(page * pageSize, total);
 
-  const filters = (
-    <div className="mb-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-        <input
-          type="text"
-          placeholder="Search problems by title, ID or keyword..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-        />
+  const clearFilters = () => {
+    setDifficulty("");
+    setQuestionType("");
+    setProgress("");
+    setSort("newest");
+    setSearch("");
+  };
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+  const filters = (
+    <div className="mb-4 space-y-3 rounded-sm border border-border bg-card p-3 shadow-sm">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(16rem,1fr)_minmax(22rem,auto)] xl:items-center">
+        <label className="relative block min-w-0">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            type="text"
+            placeholder="Search title, ID or keyword"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full min-w-0 rounded-sm border border-border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </label>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[28rem]">
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value)}
-            className="w-full rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">All difficulties</option>
             {difficulties.filter(Boolean).map((d) => (
@@ -170,7 +237,7 @@ export default function Problems() {
           <select
             value={questionType}
             onChange={(e) => setQuestionType(e.target.value)}
-            className="w-full rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">All types</option>
             {questionTypes.filter(Boolean).map((t) => (
@@ -182,7 +249,7 @@ export default function Problems() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="w-full rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
           >
             {sortOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -191,6 +258,33 @@ export default function Problems() {
             ))}
           </select>
         </div>
+      </div>
+      <div className="flex flex-col gap-2 border-t border-border pt-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Progress</span>
+          {progressOptions.map((option) => (
+            <button
+              key={option.value || "all"}
+              type="button"
+              onClick={() => setProgress(option.value)}
+              className={`rounded-sm border px-2.5 py-1.5 text-xs transition-colors ${
+                progress === option.value
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-sm border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary lg:w-auto"
+        >
+          <RotateCcw size={13} />
+          Clear all filters
+        </button>
       </div>
     </div>
   );
@@ -212,6 +306,26 @@ export default function Problems() {
       statsLoading={statsLoading}
       filters={filters}
     >
+      {labelList.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-sm border border-border bg-secondary/20 p-3">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Focused On</span>
+          {(["subject", "chapter", "topic", "subtopic"] as const).map((level) => {
+            const label = labels[level];
+            if (!label) return null;
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => handleBreadcrumb(level)}
+                className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:border-primary/30 hover:text-primary"
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-card border border-border border-l-4 border-l-foreground/30 rounded-sm p-4">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Questions</div>
@@ -273,53 +387,63 @@ export default function Problems() {
                         <LatexRenderer latex={problem.title} />
                       </div>
                     </div>
-                    <span className={diffClass(problem.difficulty)}>{problem.difficulty}</span>
+                    <span className="shrink-0">
+                      <span className={diffClass(problem.difficulty)}>{problem.difficulty}</span>
+                    </span>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <span className={typeBadge(problem.questionType)}>{problem.questionType}</span>
-                    <span className="font-mono text-xs text-muted-foreground">Not Solved</span>
+                    <ProblemStatusBadge problem={problem} />
                   </div>
                 </Link>
               ))}
             </div>
 
             <div className="problems-table-view overflow-x-auto">
-              <table className="min-w-[680px] w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-14" />
+                  <col className="w-28" />
+                  <col />
+                  <col className="w-20" />
+                  <col className="w-28" />
+                  <col className="w-32" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-border bg-secondary/40">
-                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">#</th>
-                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">ID</th>
-                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Title</th>
-                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Type</th>
-                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Difficulty</th>
-                    <th className="text-right py-3 px-4 text-xs text-muted-foreground font-normal">Status</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">#</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">ID</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">Title</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">Type</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">Difficulty</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {problems.map((problem, idx) => (
                     <tr key={problem._id} className="problem-row border-b border-border-faint last:border-0">
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
+                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                         {(page - 1) * pageSize + idx + 1}
                       </td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
+                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                         {problem.contentId || problem.problemId || String(problem._id).slice(-6)}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-3 py-3">
                         <Link
                           to={`/problems/${problem._id}`}
-                          className="font-medium text-foreground transition-colors hover:text-primary"
+                          className="line-clamp-2 font-medium text-foreground transition-colors hover:text-primary"
                         >
                           <LatexRenderer latex={problem.title} />
                         </Link>
                       </td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
+                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                         <span className={typeBadge(problem.questionType)}>{problem.questionType}</span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-3 py-3">
                         <span className={diffClass(problem.difficulty)}>{problem.difficulty}</span>
                       </td>
-                      <td className="py-3 px-4 text-right font-mono text-xs text-muted-foreground">
-                        Not Solved
+                      <td className="px-3 py-3 text-right font-mono text-xs">
+                        <ProblemStatusBadge problem={problem} />
                       </td>
                     </tr>
                   ))}
@@ -427,14 +551,10 @@ export default function Problems() {
               <span className="text-xs text-muted-foreground">{problems.length} Problems</span>
               <button
                 type="button"
-                onClick={() => {
-                  setDifficulty("");
-                  setQuestionType("");
-                  setSort("newest");
-                  setSearch("");
-                }}
-                className="rounded-sm border border-border px-3 py-1.5 text-xs hover:bg-secondary"
+                onClick={clearFilters}
+                className="inline-flex items-center gap-2 rounded-sm border border-border px-3 py-1.5 text-xs hover:bg-secondary"
               >
+                <RotateCcw size={13} />
                 Clear Filters
               </button>
             </div>

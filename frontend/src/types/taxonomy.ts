@@ -47,15 +47,19 @@ export interface HierarchySelection {
 export interface TaxonomyStats {
   questionCount: number;
   theoryCount: number;
+  solvedCount?: number;
+  attempts?: number;
   difficultyDistribution: { Easy: number; Medium: number; Hard: number };
   questionTypeDistribution: { MCQ: number; MSQ: number; NAT: number };
 }
 
 export interface ProblemsListResponse {
-  questions: Array<Record<string, unknown>>;
+  questions: Array<Record<string, unknown> & { attempted?: boolean; isSolved?: boolean; attemptCount?: number }>;
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  solvedCount?: number;
+  attempts?: number;
   difficultyDistribution?: { Easy: number; Medium: number; Hard: number };
 }
