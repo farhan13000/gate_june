@@ -214,7 +214,6 @@ export default function Dashboard() {
   const [dashboard, setDashboard] = useState<any | null>(null);
 
   useEffect(() => {
-    console.log("Dashboard: mounting — fetching initial data");
     const fetchDashboard = async () => {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard`, {
@@ -222,10 +221,9 @@ export default function Dashboard() {
         });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const json = await res.json();
-        console.log("Dashboard: initial data received", json);
         setDashboard(json.dashboard);
-      } catch (err) {
-        console.error("Dashboard: failed to fetch initial data", err);
+      } catch {
+        setDashboard(null);
       }
     };
 
@@ -238,23 +236,20 @@ export default function Dashboard() {
       es.addEventListener("dashboard-update", (e: any) => {
         try {
           const data = JSON.parse(e.data);
-          console.log("Dashboard: SSE update", data);
           setDashboard((prev: any) => ({ ...prev, stats: { ...prev?.stats, ...data } }));
-        } catch (err) {
-          console.error("Dashboard: SSE parse error", err);
+        } catch {
+          // Ignore malformed stream events; the next valid event will refresh the state.
         }
       });
-      es.onerror = (ev) => {
-        console.error("Dashboard: SSE error", ev);
+      es.onerror = () => {
         es.close();
       };
 
       return () => {
-        console.log("Dashboard: unmounting — closing SSE");
         es.close();
       };
-    } catch (err) {
-      console.error("Dashboard: SSE setup failed", err);
+    } catch {
+      return undefined;
     }
   }, []);
 

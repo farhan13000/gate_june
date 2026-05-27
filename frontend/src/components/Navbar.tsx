@@ -45,11 +45,9 @@ export default function Navbar() {
   }, [location.pathname]);
 
   const handleLogout = async () => {
-    console.log("[Navbar] Initiating logout...");
     setDropdownOpen(false);
     setOpen(false);
     await logout();
-    console.log("[Navbar] Logout complete.");
     toast.info("Signed Out", {
       description: "You have been successfully signed out.",
     });

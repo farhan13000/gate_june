@@ -26,18 +26,15 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("[Register] Attempting registration for:", email);
     setError("");
 
     if (password !== confirmPassword) {
-      console.warn("[Register] Passwords do not match");
       setError("Passwords do not match");
       toast.error("Validation Error", { description: "Passwords do not match." });
       return;
     }
 
     if (password.length < 6) {
-      console.warn("[Register] Password too short");
       setError("Password must be at least 6 characters");
       toast.error("Validation Error", { description: "Password must be at least 6 characters." });
       return;
@@ -54,13 +51,11 @@ export default function Register() {
     setLoading(false);
 
     if (result.success) {
-      console.log("[Register] Registration successful!", result);
       toast.success("Account created!", {
         description: "Welcome to GATE DA Scholar.",
       });
       navigate("/dashboard", { replace: true });
     } else {
-      console.error("[Register] Registration failed:", result.message);
       setError(result.message);
       toast.error("Registration Failed", {
         description: result.message,

@@ -39,8 +39,8 @@ export default function ProblemDetail() {
         const data = await res.json();
         setSubmissions(data);
       }
-    } catch (err) {
-      console.error("Failed to fetch submissions", err);
+    } catch {
+      setSubmissions([]);
     }
   };
 
@@ -55,8 +55,7 @@ export default function ProblemDetail() {
         }
         setLoading(false);
       })
-      .catch(err => {
-        console.error("Failed to load problem", err);
+      .catch(() => {
         setLoading(false);
       });
 
@@ -138,7 +137,6 @@ export default function ProblemDetail() {
       fetchSubmissions();
     } catch (err: any) {
       toast.error(err.message || "Failed to submit answer");
-      console.error(err);
     } finally {
       setSubmitting(false);
     }

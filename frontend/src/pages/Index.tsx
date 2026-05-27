@@ -141,8 +141,8 @@ export default function Index() {
         const data: HomeData = await res.json();
         setHome(data);
       }
-    } catch (err) {
-      console.error("Failed to load home data", err);
+    } catch {
+      setHome(null);
     } finally {
       setLoading(false);
     }

@@ -29,7 +29,6 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("[Login] Attempting login for email:", email);
     setError("");
     setLoading(true);
 
@@ -37,14 +36,12 @@ export default function Login() {
     setLoading(false);
 
     if (result.success) {
-      console.log("[Login] Login successful!", result);
       toast.success("Welcome back!", {
         description: "You have successfully signed in.",
       });
       const from = (location.state as any)?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
     } else {
-      console.error("[Login] Login failed:", result.message);
       setError(result.message);
       toast.error("Login Failed", {
         description: result.message,

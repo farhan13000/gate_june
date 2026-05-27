@@ -34,8 +34,7 @@ export default function Leaderboard() {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const json = await res.json();
         setLeaders(json.leaderboard || []);
-      } catch (err) {
-        console.error("Leaderboard fetch failed", err);
+      } catch {
         setError("Unable to load leaderboard right now.");
       } finally {
         setLoading(false);
