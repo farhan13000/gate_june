@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import User from "../models/User";
 import Submission from "../models/Submission";
+import RatingHistory from "../models/RatingHistory";
 
 const subjectsList = [
   "Statistics",
@@ -281,13 +282,25 @@ export const getDashboard = async (req: Request, res: Response) => {
     });
 
     const currentRating = user.rating || 0;
-    const ratingData = buildRatingHistory(currentRating);
+    const ratingHistory = await RatingHistory.find({ userId })
+      .populate("contestId", "title")
+      .sort({ appliedAt: 1 })
+      .lean();
+    const ratingData = ratingHistory.length
+      ? ratingHistory.map((item: any) => ({
+          date: new Date(item.appliedAt).toISOString().slice(0, 10),
+          contest: item.contestId?.title || "Contest",
+          rating: item.newRating,
+          delta: item.delta,
+          rank: item.rank,
+        }))
+      : buildRatingHistory(currentRating);
 
     const dashboard = {
       profile: user.toProfile(),
       stats: {
         problemsSolved: statsSummary.problemsSolved,
-        contestsParticipated: Math.max(0, Math.floor(user.rating / 400)),
+        contestsParticipated: ratingHistory.length || Math.max(0, Math.floor(user.rating / 400)),
         currentStreakDays: statsSummary.currentStreakDays,
         overallAccuracy: statsSummary.overallAccuracy,
         rating: currentRating,
@@ -303,7 +316,6 @@ export const getDashboard = async (req: Request, res: Response) => {
       ratingData,
     };
 
-    console.log(`Dashboard: returning live data for user ${user.email}`);
     res.json({ dashboard });
   } catch (error) {
     console.error("getDashboard error:", error);
@@ -325,8 +337,6 @@ export const streamDashboard = async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
-
-    console.log(`SSE: client connected for ${req.currentUser.email}`);
 
     const sendUpdate = async () => {
       try {
@@ -357,7 +367,6 @@ export const streamDashboard = async (req: Request, res: Response) => {
 
     req.on("close", () => {
       clearInterval(iv);
-      console.log(`SSE: client disconnected for ${req.currentUser?.email}`);
     });
   } catch (error) {
     console.error("streamDashboard error:", error);

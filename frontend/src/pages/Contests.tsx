@@ -1,170 +1,478 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { BookOpenCheck, CalendarClock, CheckCircle2, Clock3, Eye, FileQuestion, Lock, LogIn, RefreshCw, ShieldCheck, Trophy, Users } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
-const problems = [
-  { id: "A", title: "Moment Generating Functions", topic: "Statistics", difficulty: "Easy", solves: 0 },
-  { id: "B", title: "Matrix Rank and Nullity", topic: "Linear Algebra", difficulty: "Medium", solves: 0 },
-  { id: "C", title: "Logistic Regression — Log-Likelihood", topic: "Machine Learning", difficulty: "Medium", solves: 0 },
-  { id: "D", title: "Markov Chain Steady State", topic: "Probability", difficulty: "Hard", solves: 0 },
-  { id: "E", title: "Pandas Multi-Index Operations", topic: "Python", difficulty: "Hard", solves: 0 },
+type ContestQuestion = {
+  _id: string;
+  title: string;
+  contentId?: string;
+  problemId?: string;
+  difficulty: string;
+  questionType: string;
+  topic?: string;
+  markingScheme?: { positive: number; negative: number };
+};
+
+type Contest = {
+  _id: string;
+  title: string;
+  description: string;
+  meta?: string;
+  contestType: string;
+  scoringMode: string;
+  lifecycle: string;
+  contestState:
+    | "upcoming"
+    | "registration_open"
+    | "live"
+    | "frozen"
+    | "ended"
+    | "answer_key_released"
+    | "claims_open"
+    | "claims_closed"
+    | "finalized"
+    | "ratings_applied";
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  wrongPenaltyMinutes: number;
+  ratingEnabled: boolean;
+  instantFeedback: boolean;
+  registrationCount: number;
+  maxParticipants?: number;
+  rules?: string[];
+  questions?: ContestQuestion[];
+  userRegistration?: { status: string; registeredAt: string } | null;
+};
+
+const stateClass: Record<string, string> = {
+  live: "border-primary/25 bg-primary/10 text-primary",
+  frozen: "border-primary/25 bg-primary/10 text-primary",
+  registration_open: "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300",
+  upcoming: "border-border bg-secondary/35 text-muted-foreground",
+  ended: "border-border bg-secondary/35 text-muted-foreground",
+  answer_key_released: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  claims_open: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  claims_closed: "border-border bg-secondary/35 text-muted-foreground",
+  finalized: "border-border bg-secondary/35 text-muted-foreground",
+  ratings_applied: "border-border bg-secondary/35 text-muted-foreground",
+};
+
+const testTypes = [
+  {
+    title: "Practice Contest",
+    type: "Unrated",
+    Icon: BookOpenCheck,
+    description: "Low-pressure timed sets for learning and revision.",
+    rules: ["Registration optional", "Instant feedback can be enabled", "No rating change"],
+  },
+  {
+    title: "Rated Live Contest",
+    type: "Rated",
+    Icon: Trophy,
+    description: "Scheduled competitive rounds with live/frozen standings.",
+    rules: ["Registration required", "Rating applies after finalization", "Leaderboard freeze supported"],
+  },
+  {
+    title: "GATE Mock Test",
+    type: "Exam Style",
+    Icon: FileQuestion,
+    description: "Full-length or sectional GATE DA simulations.",
+    rules: ["MCQ/MSQ/NAT supported", "GATE-style marking", "Solutions after answer-key release"],
+  },
+  {
+    title: "Challenge Round",
+    type: "Review Based",
+    Icon: ShieldCheck,
+    description: "Contest flow with answer-key claims and recheck windows.",
+    rules: ["Claims window after key release", "Admin review trail", "Final results after closure"],
+  },
 ];
 
-const topParticipants = [
-  { rank: 1, user: "priya_ml", solved: 4, score: 1200 },
-  { rank: 2, user: "arjun_stat", solved: 4, score: 1150 },
-  { rank: 3, user: "rohit_da", solved: 3, score: 900 },
-  { rank: 4, user: "sanjana_cs", solved: 3, score: 870 },
-  { rank: 5, user: "deepak_g", solved: 2, score: 600 },
-];
+function labelize(value?: string) {
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function TestTypeCards() {
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {testTypes.map(({ title, type, Icon, description, rules }) => (
+        <div key={title} className="rounded-sm border border-border bg-card p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
+              <Icon size={18} />
+            </div>
+            <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              {type}
+            </span>
+          </div>
+          <h3 className="font-serif text-base font-bold text-foreground">{title}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <ul className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            {rules.map((rule) => (
+              <li key={rule} className="flex gap-2">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.45)]" />
+                <span>{rule}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatCountdown(contest: Contest) {
+  const now = Date.now();
+  const target = ["live", "frozen"].includes(contest.contestState)
+    ? new Date(contest.endTime).getTime()
+    : new Date(contest.startTime).getTime();
+  const diff = Math.max(0, target - now);
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 export default function Contests() {
-  const [registered, setRegistered] = useState(false);
-  const [timeLeft] = useState({ h: 1, m: 42, s: 17 });
-  const progress = ((3600 - timeLeft.h * 3600 - timeLeft.m * 60 - timeLeft.s) / 10800) * 100;
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [contests, setContests] = useState<Contest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const fetchContests = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/contests", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load contests");
+      const data = await res.json();
+      setContests(data);
+      setActiveId((current) => (current && data.some((contest: Contest) => contest._id === current) ? current : null));
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load contests");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchContests();
+  }, [fetchContests]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const activeContest = useMemo(
+    () => (activeId ? contests.find((contest) => contest._id === activeId) || null : null),
+    [activeId, contests]
+  );
+
+  const grouped = useMemo(() => {
+    const live = contests.filter((contest) => ["live", "frozen"].includes(contest.contestState));
+    const upcoming = contests.filter((contest) => ["registration_open", "upcoming"].includes(contest.contestState));
+    const past = contests.filter((contest) => !live.includes(contest) && !upcoming.includes(contest));
+    return { live, upcoming, past };
+  }, [contests]);
+
+  const updateRegistration = async (contest: Contest, action: "register" | "withdraw" | "check-in") => {
+    if (!isAuthenticated) {
+      toast.error("Please sign in to register for contests");
+      return;
+    }
+    setBusyId(contest._id);
+    try {
+      const res = await fetch(`/api/contests/${contest._id}/${action}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Contest action failed");
+      toast.success(action === "withdraw" ? "Registration withdrawn" : action === "check-in" ? "Contest check-in complete" : "Registered for contest");
+      if (action === "check-in") {
+        navigate(`/contests/${contest._id}`);
+        return;
+      }
+      fetchContests();
+    } catch (error: any) {
+      toast.error(error.message || "Contest action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const renderAction = (contest: Contest) => {
+    const registered = contest.userRegistration && contest.userRegistration.status !== "withdrawn";
+    if (!isAuthenticated) {
+      return (
+        <Link to="/login" className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs">
+          <LogIn size={13} />
+          Sign in
+        </Link>
+      );
+    }
+    if (["live", "frozen"].includes(contest.contestState)) {
+      if (!registered) {
+        return (
+          <button
+            type="button"
+            disabled={busyId === contest._id}
+            onClick={() => updateRegistration(contest, "register")}
+            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+          >
+            Register
+          </button>
+        );
+      }
+      return (
+        <button
+          type="button"
+          disabled={busyId === contest._id}
+          onClick={() => updateRegistration(contest, "check-in")}
+          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
+        >
+          <Trophy size={13} />
+          Enter
+        </button>
+      );
+    }
+    if (registered) {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-sm border border-green-500/25 bg-green-500/10 px-2.5 py-1.5 text-xs font-semibold text-green-700 dark:text-green-300">
+            <CheckCircle2 size={13} />
+            Registered
+          </span>
+          <button
+            type="button"
+            disabled={busyId === contest._id}
+            onClick={() => updateRegistration(contest, "withdraw")}
+            className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs"
+          >
+            Withdraw
+          </button>
+        </div>
+      );
+    }
+    if (["registration_open", "upcoming"].includes(contest.contestState)) {
+      return (
+        <button
+          type="button"
+          disabled={busyId === contest._id}
+          onClick={() => updateRegistration(contest, "register")}
+          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+        >
+          Register
+        </button>
+      );
+    }
+    return (
+      <button type="button" disabled className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60">
+        <Lock size={13} />
+        Closed
+      </button>
+    );
+  };
 
   return (
     <div className="w-full">
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="text-xs font-mono text-muted-foreground mb-2">Contest · Active</div>
-          <h1 className="font-serif text-3xl font-bold text-foreground mb-2">
-            GATE DA Mock — Full Length #12
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            3-hour comprehensive mock examination covering the full GATE DA 2025 syllabus.
+          <div className="mb-1 text-xs font-mono text-muted-foreground">Contest Hub</div>
+          <h1 className="font-serif text-3xl font-bold text-foreground">Live Contests</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Register for scheduled GATE DA contests, track timing, and prepare for live ranked sessions.
           </p>
         </div>
-        <button
-          onClick={() => setRegistered(!registered)}
-          className={registered ? "btn-outline px-6 py-2" : "btn-primary px-6 py-2"}
-        >
-          {registered ? "Registered ✓" : "Register"}
+        <button type="button" onClick={fetchContests} className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs">
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          Refresh
         </button>
       </div>
 
-      {/* Timer */}
-      <div className="academic-card p-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Time Remaining</span>
-          <span className="font-mono text-lg font-medium text-foreground">
-            {String(timeLeft.h).padStart(2, "0")}:{String(timeLeft.m).padStart(2, "0")}:{String(timeLeft.s).padStart(2, "0")}
-          </span>
-        </div>
-        <div className="h-0.5 bg-secondary rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
-          <span>Start: 10:00 AM</span>
-          <span>End: 1:00 PM</span>
-        </div>
+      <div className="mb-6">
+        <TestTypeCards />
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Problem list */}
-        <div className="md:col-span-2">
-          <h2 className="font-serif text-lg font-bold mb-4 text-foreground">Problems</h2>
-          <div className="academic-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-secondary/40">
-                  <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal w-12">—</th>
-                  <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Title</th>
-                  <th className="text-left py-3 px-4 text-xs text-muted-foreground font-normal">Topic</th>
-                  <th className="text-right py-3 px-4 text-xs text-muted-foreground font-normal">Pts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {problems.map(p => (
-                  <tr key={p.id} className="problem-row">
-                    <td className="py-3 px-4 font-mono text-xs font-bold text-foreground">{p.id}</td>
-                    <td className="py-3 px-4">
-                      <Link to="/problems/DA001" className="text-foreground hover:text-primary transition-colors duration-150">
-                        {p.title}
-                      </Link>
-                      <div className={`text-xs mt-0.5 ${p.difficulty === "Hard" ? "text-primary" : "text-muted-foreground"}`}>
-                        {p.difficulty}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.topic ? p.topic.split(/\s*[\+,]\s*/).map((subTopic: string, idx: number) => (
-                          <span
-                            key={idx}
-                            className="text-[10px] px-2 py-0.5 border border-zinc-200/80 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 text-zinc-600 dark:text-zinc-300 rounded-sm font-sans font-medium transition-all"
-                          >
-                            {subTopic}
-                          </span>
-                        )) : null}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono text-xs text-muted-foreground">
-                      {p.difficulty === "Easy" ? 100 : p.difficulty === "Medium" ? 200 : 300}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {loading ? (
+        <div className="academic-card p-12 text-center text-sm text-muted-foreground">Loading contests...</div>
+      ) : contests.length === 0 ? (
+        <div className="academic-card p-8 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
+            <CalendarClock size={22} />
           </div>
-
-          <div className="mt-6 academic-card p-5">
-            <h3 className="font-serif font-bold text-base mb-3 text-foreground">Contest Rules</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              {[
-                "Duration: 3 hours from start time",
-                "All problems carry equal partial credit",
-                "Penalty: −50 points per wrong submission",
-                "Rankings updated in real-time",
-                "Final results published 30 minutes after contest end",
-              ].map(r => (
-                <li key={r} className="flex gap-2">
-                  <span className="text-primary">—</span> {r}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <h2 className="font-serif text-xl font-bold text-foreground">No contests are published yet</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            The platform supports practice contests, rated live contests, full GATE mocks, and claim-based challenge rounds. When an admin publishes a contest, it will appear here with registration and timing controls.
+          </p>
         </div>
-
-        {/* Rankings */}
-        <div>
-          <h2 className="font-serif text-lg font-bold mb-4 text-foreground">Live Rankings</h2>
-          <div className="academic-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-secondary/40">
-                  <th className="text-left py-3 px-3 text-xs text-muted-foreground font-normal">#</th>
-                  <th className="text-left py-3 px-3 text-xs text-muted-foreground font-normal">User</th>
-                  <th className="text-right py-3 px-3 text-xs text-muted-foreground font-normal">Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topParticipants.map(p => (
-                  <tr key={p.user} className="problem-row">
-                    <td className="py-2.5 px-3 text-xs text-muted-foreground font-mono">{p.rank}</td>
-                    <td className="py-2.5 px-3 text-xs text-foreground">{p.user}</td>
-                    <td className="py-2.5 px-3 text-right text-xs font-mono text-foreground">{p.score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4 academic-card p-4">
-            <div className="text-xs text-muted-foreground mb-3">Upcoming Contests</div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
+          <div className="space-y-4">
             {[
-              { name: "Statistics Sprint #8", date: "Mar 5" },
-              { name: "Linear Algebra Weekly", date: "Mar 9" },
-            ].map(c => (
-              <div key={c.name} className="flex justify-between py-2 border-b border-border-faint last:border-0 text-xs">
-                <span className="text-foreground">{c.name}</span>
-                <span className="text-muted-foreground">{c.date}</span>
-              </div>
-            ))}
+              ["Live Now", grouped.live],
+              ["Upcoming", grouped.upcoming],
+              ["Past / Finalizing", grouped.past],
+            ].map(([title, list]) => {
+              const items = list as Contest[];
+              if (items.length === 0) return null;
+              return (
+                <section key={title as string} className="space-y-3">
+                  <h2 className="font-serif text-base font-bold text-foreground">{title as string}</h2>
+                  <div className="grid gap-3">
+                    {items.map((contest) => (
+                      <div
+                        key={contest._id}
+                        onClick={() => setActiveId(contest._id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") setActiveId(contest._id);
+                        }}
+                        className={`rounded-sm border bg-card p-4 text-left transition-colors hover:bg-secondary/25 ${
+                          activeContest?._id === contest._id ? "border-primary/40 shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]" : "border-border"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <span className={`rounded-sm border px-2 py-0.5 text-[10px] font-semibold ${stateClass[contest.contestState] || stateClass.upcoming}`}>
+                                {labelize(contest.contestState)}
+                              </span>
+                              {contest.ratingEnabled && (
+                                <span className="rounded-sm border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                                  Rated
+                                </span>
+                              )}
+                              <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                                {labelize(contest.contestType)}
+                              </span>
+                            </div>
+                            <h3 className="line-clamp-2 text-sm font-semibold text-foreground">{contest.title}</h3>
+                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{contest.description}</p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                              <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDate(contest.startTime)}</span>
+                              <span className="inline-flex items-center gap-1"><Clock3 size={12} /> {contest.durationMinutes} min</span>
+                              <span className="inline-flex items-center gap-1"><Users size={12} /> {contest.registrationCount}</span>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col gap-2 lg:items-end">
+                            <div className="font-mono text-lg font-bold text-foreground" key={nowTick}>
+                              {formatCountdown(contest)}
+                            </div>
+                            <div className="flex flex-wrap justify-start gap-2 lg:justify-end" onClick={(event) => event.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => setActiveId(contest._id)}
+                                className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+                              >
+                                <Eye size={13} />
+                                View Details
+                              </button>
+                              {renderAction(contest)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
+
+          <aside className="space-y-4">
+            {activeContest && (
+              <>
+                <div className="academic-card p-4">
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
+                  <h2 className="font-serif text-lg font-bold text-foreground">{activeContest.title}</h2>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-sm border border-border bg-background p-2">
+                      <div className="text-[10px] text-muted-foreground">Scoring</div>
+                      <div className="font-semibold text-foreground">{labelize(activeContest.scoringMode)}</div>
+                    </div>
+                    <div className="rounded-sm border border-border bg-background p-2">
+                      <div className="text-[10px] text-muted-foreground">Penalty</div>
+                      <div className="font-mono font-semibold text-foreground">{activeContest.wrongPenaltyMinutes}m</div>
+                    </div>
+                    <div className="rounded-sm border border-border bg-background p-2">
+                      <div className="text-[10px] text-muted-foreground">Problems</div>
+                      <div className="font-mono font-semibold text-foreground">{activeContest.questions?.length || 0}</div>
+                    </div>
+                    <div className="rounded-sm border border-border bg-background p-2">
+                      <div className="text-[10px] text-muted-foreground">Feedback</div>
+                      <div className="font-semibold text-foreground">{activeContest.instantFeedback ? "Instant" : "After end"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="academic-card p-4">
+                  <h3 className="mb-3 font-serif text-sm font-bold text-foreground">Problems</h3>
+                  <div className="space-y-2">
+                    {(activeContest.questions || []).slice(0, 8).map((problem, index) => (
+                      <div key={problem._id} className="rounded-sm border border-border bg-background p-2">
+                        <div className="flex items-start gap-2">
+                          <span className="font-mono text-[11px] text-muted-foreground">{String.fromCharCode(65 + index)}</span>
+                          <div className="min-w-0">
+                            <div className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</div>
+                            <div className="mt-1 text-[10px] text-muted-foreground">
+                              {problem.difficulty} / {problem.questionType}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(activeContest.questions || []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">Problem set will be visible after admin attaches approved problems.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="academic-card p-4">
+                  <h3 className="mb-3 font-serif text-sm font-bold text-foreground">Rules</h3>
+                  <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
+                    {(activeContest.rules || []).map((rule) => (
+                      <li key={rule} className="flex gap-2">
+                        <span className="text-primary">-</span>
+                        <span>{rule}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+            {!activeContest && (
+              <div className="academic-card p-5">
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
+                  <Eye size={18} />
+                </div>
+                <h2 className="font-serif text-base font-bold text-foreground">Open a contest to view details</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Use View Details to inspect rules, problem count, scoring mode, and registration status. The lifecycle timeline appears only after entering the specific contest room.
+                </p>
+              </div>
+            )}
+          </aside>
         </div>
-      </div>
+      )}
     </div>
   );
 }

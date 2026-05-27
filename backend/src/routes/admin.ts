@@ -21,8 +21,18 @@ import {
   updateAnnouncement,
   deleteAnnouncement,
   getContestsAdmin,
+  getContestAdminDetail,
+  getContestAdminClaims,
+  getContestAdminStandings,
+  getContestProblemCandidates,
   createContest,
   updateContest,
+  updateContestClaim,
+  updateContestProblems,
+  releaseContestAnswerKey,
+  openContestClaims,
+  closeContestClaims,
+  finalizeContestAndApplyRatings,
   deleteContest,
 } from "../controllers/homeAdminController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
@@ -111,7 +121,17 @@ router.delete("/announcements/:id", deleteAnnouncement);
 
 router.get("/contests", getContestsAdmin);
 router.post("/contests", createContest);
+router.get("/contests/problem-candidates", getContestProblemCandidates);
+router.get("/contests/:id", getContestAdminDetail);
+router.get("/contests/:id/standings", getContestAdminStandings);
+router.get("/contests/:id/claims", getContestAdminClaims);
 router.put("/contests/:id", updateContest);
+router.put("/contests/:id/problems", updateContestProblems);
+router.post("/contests/:id/release-answer-key", releaseContestAnswerKey);
+router.post("/contests/:id/open-claims", openContestClaims);
+router.post("/contests/:id/close-claims", closeContestClaims);
+router.post("/contests/:id/finalize-ratings", finalizeContestAndApplyRatings);
+router.put("/contests/:id/claims/:claimId", updateContestClaim);
 router.delete("/contests/:id", deleteContest);
 
 export default router;

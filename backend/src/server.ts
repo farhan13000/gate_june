@@ -18,6 +18,7 @@ import dashboardRoutes from "./routes/dashboard";
 import leaderboardRoutes from "./routes/leaderboard";
 import homeRoutes from "./routes/home";
 import taxonomyRoutes from "./routes/taxonomy";
+import contestRoutes from "./routes/contests";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,6 +50,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/home", homeRoutes);
 app.use("/api/taxonomy", taxonomyRoutes);
+app.use("/api/contests", contestRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -83,10 +85,7 @@ app.use(
 const startServer = async () => {
   await connectDB();
   await ensureTaxonomySeeded();
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
-  });
+  app.listen(PORT);
 };
 
 startServer().catch((err) => {

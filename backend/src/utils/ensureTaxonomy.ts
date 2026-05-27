@@ -9,7 +9,6 @@ export async function ensureTaxonomySeeded(): Promise<void> {
   if (count > 0) return;
 
   const { subjects, chapters, topics, subtopics } = flattenTaxonomySeed();
-  console.log("📚 Seeding default taxonomy (first run)…");
 
   for (const s of subjects) {
     await Subject.findOneAndUpdate({ subjectId: s.subjectId }, s, { upsert: true });
@@ -24,7 +23,4 @@ export async function ensureTaxonomySeeded(): Promise<void> {
     await Subtopic.findOneAndUpdate({ subtopicId: st.subtopicId }, st, { upsert: true });
   }
 
-  console.log(
-    `✅ Taxonomy seeded: ${subjects.length} subjects, ${chapters.length} chapters, ${topics.length} topics, ${subtopics.length} subtopics`
-  );
 }

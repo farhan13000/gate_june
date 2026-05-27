@@ -6,6 +6,7 @@ import EditorialRenderer from "../components/EditorialRenderer";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import AdminHomeSection from "@/components/admin/AdminHomeSection";
+import AdminContestGuide from "@/components/admin/AdminContestGuide";
 import AdminContestSection from "@/components/admin/AdminContestSection";
 import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
 import { SiteContainer, MainPanel } from "@/components/layout";
@@ -361,6 +362,7 @@ type Section =
   | "User Analytics"
   | "Content Management"
   | "Contest Factory"
+  | "Contest Guide"
   | "Approval Dashboard"
   | "Content Inventory"
   | "Problem Bank"
@@ -839,6 +841,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "Problem Bank",
     "Content Inventory",
     "Contest Factory",
+    "Contest Guide",
     "Approval Dashboard",
     "Platform Logs",
   ];
@@ -972,6 +975,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         {activeSection === "Theory Manager" && <AdminTheoryManager />}
 
         {activeSection === "Home Management" && <AdminHomeSection />}
+        {activeSection === "Contest Guide" && <AdminContestGuide />}
 
         {/* USER ANALYTICS SECTION */}
         {activeSection === "User Analytics" && (

@@ -8,6 +8,7 @@ import {
   PenLine,
   Database,
   Archive,
+  BookOpenCheck,
   Trophy,
   CheckSquare,
   ScrollText,
@@ -25,6 +26,7 @@ export type AdminSectionId =
   | "Problem Bank"
   | "Content Inventory"
   | "Contest Factory"
+  | "Contest Guide"
   | "Approval Dashboard"
   | "Platform Logs";
 
@@ -56,6 +58,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { id: "Home Management", label: "Home & News", icon: Home },
       { id: "Contest Factory", label: "Contests", icon: Trophy },
+      { id: "Contest Guide", label: "Contest Guide", icon: BookOpenCheck },
       { id: "User Analytics", label: "Users", icon: Users },
       { id: "Platform Logs", label: "Logs", icon: ScrollText },
     ],

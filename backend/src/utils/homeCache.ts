@@ -22,5 +22,4 @@ export const setCachedHomeData = (data: any) => {
 
 export const invalidateHomeCache = () => {
   cachedHomeData = null;
-  console.log("⚡ [Cache] Home page data cache invalidated successfully.");
 };

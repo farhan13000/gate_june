@@ -12,6 +12,7 @@ import Problems from "./pages/Problems";
 import ProblemDetail from "./pages/ProblemDetail";
 import Theory from "./pages/Theory";
 import Contests from "./pages/Contests";
+import ContestRoom from "./pages/ContestRoom";
 import Dashboard from "./pages/Dashboard";
 import Leaderboard from "./pages/Leaderboard";
 import Discuss from "./pages/Discuss";
@@ -80,6 +81,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Contests />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contests/:id"
+              element={
+                <ProtectedRoute>
+                  <ContestRoom />
                 </ProtectedRoute>
               }
             />
