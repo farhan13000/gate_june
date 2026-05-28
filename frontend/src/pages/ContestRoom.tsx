@@ -152,7 +152,8 @@ export default function ContestRoom() {
   const submittedByQuestion = useMemo(() => {
     const map = new Map<string, any>();
     (room?.submissions || []).forEach((submission: any) => {
-      map.set(String(submission.questionId), submission);
+      const key = String(submission.questionId);
+      if (!map.has(key)) map.set(key, submission);
     });
     return map;
   }, [room?.submissions]);
@@ -170,7 +171,7 @@ export default function ContestRoom() {
   }, [activeQuestion?._id, submittedByQuestion]);
 
   const activeSubmission = activeQuestion?._id ? submittedByQuestion.get(String(activeQuestion._id)) : null;
-  const activeLocked = Boolean(activeSubmission || room?.registration?.finishedAt);
+  const activeLocked = Boolean(room?.registration?.finishedAt);
   const attemptedCount = room?.standing?.attemptedCount ?? submittedByQuestion.size;
   const totalQuestions = questions.length;
   const resultsVisible = Boolean(room?.canReveal);
@@ -184,7 +185,7 @@ export default function ContestRoom() {
 
   const submitAnswer = async () => {
     if (!activeQuestion || !canSubmitAnswer()) return;
-    const ok = window.confirm("Submit this response? You cannot change this question after submission.");
+    const ok = window.confirm("Save this response? You can update it again until final submit or contest closure.");
     if (!ok) return;
     setSubmitting(true);
     try {
@@ -196,7 +197,7 @@ export default function ContestRoom() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to submit answer");
-      toast.success("Answer submitted. Result will be shown after answer key release.");
+      toast.success("Response saved. The latest saved response is used for scoring.");
       await loadRoom();
     } catch (error: any) {
       toast.error(error.message || "Failed to submit answer");
@@ -210,8 +211,8 @@ export default function ContestRoom() {
     const unanswered = Math.max(0, totalQuestions - attemptedCount);
     const message =
       unanswered > 0
-        ? `Final submit now? ${unanswered} question${unanswered === 1 ? "" : "s"} are unanswered. You cannot submit more responses after this.`
-        : "Final submit now? You cannot change or add responses after this.";
+        ? `Lock this contest attempt now? ${unanswered} question${unanswered === 1 ? "" : "s"} are unanswered. You cannot submit more responses after this.`
+        : "Lock this contest attempt now? You cannot change or add responses after this.";
     if (!window.confirm(message)) return;
     setFinishing(true);
     try {
@@ -221,7 +222,7 @@ export default function ContestRoom() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to finish contest");
-      toast.success("Final submission recorded. Results will be shown after answer key release.");
+      toast.success("Contest attempt locked. Results will be shown after answer key release.");
       await loadRoom();
     } catch (error: any) {
       toast.error(error.message || "Failed to finish contest");
@@ -349,7 +350,7 @@ export default function ContestRoom() {
                 <Eye size={13} />
               </button>
               <div className="pointer-events-none absolute right-0 top-8 z-20 hidden w-64 rounded-sm border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-lg group-hover:block">
-                Each submitted response is locked. Correctness, score, and solutions are shown only after answer key/result release.
+                Saved responses can be updated until final submit or contest closure. Correctness, score, and solutions are shown only after answer key/result release.
               </div>
             </div>
           </div>
@@ -421,7 +422,7 @@ export default function ContestRoom() {
             </span>
             {activeLocked && (
               <span className="rounded-sm border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                Response locked
+                Contest attempt locked
               </span>
             )}
           </div>
@@ -504,9 +505,9 @@ export default function ContestRoom() {
                 <div className="text-sm font-semibold text-foreground">Your Answer</div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {activeSubmission
-                    ? "Submitted and locked"
+                    ? "Latest response saved"
                     : room.registration?.finishedAt
-                      ? "Exam submitted"
+                        ? "Contest attempt locked"
                       : !room.canSubmit
                         ? "Submissions are closed"
                         : "Review carefully before submitting"}
@@ -576,7 +577,7 @@ export default function ContestRoom() {
           <div className="space-y-3 border-t border-border p-4">
             {!activeLocked && room.canSubmit && (
               <div className="rounded-sm border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-                Once you submit this response, it cannot be changed.
+                Saving again updates your latest response for this question.
               </div>
             )}
             <button
@@ -586,7 +587,7 @@ export default function ContestRoom() {
               className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
             >
               <Send size={13} />
-              {activeSubmission ? "Answer Submitted" : "Submit Answer"}
+              {activeSubmission ? "Update Saved Answer" : "Save Answer"}
             </button>
             <button
               type="button"
@@ -595,7 +596,7 @@ export default function ContestRoom() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-sm border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Flag size={13} />
-              {room.registration?.finishedAt ? "Exam Submitted" : "Final Submit Exam"}
+              {room.registration?.finishedAt ? "Attempt Locked" : "Final Submit"}
             </button>
           </div>
         </aside>

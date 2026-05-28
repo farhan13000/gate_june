@@ -64,6 +64,27 @@ async function recordContestAdminEvent({
   if (announcementTitle) invalidateHomeCache();
 }
 
+function lifecycleAnnouncement(contest: any, previousLifecycle?: string) {
+  if (!contest?.lifecycle || contest.lifecycle === previousLifecycle) return null;
+  const title = String(contest.title || "Contest");
+  if (contest.lifecycle === "registration_open") {
+    return { title: `Registration open: ${title}`, type: "important" as const, link: `/contests/${contest._id}/details` };
+  }
+  if (contest.lifecycle === "live") {
+    return { title: `Contest is live: ${title}`, type: "important" as const, link: `/contests/${contest._id}` };
+  }
+  if (contest.lifecycle === "answer_key_released") {
+    return { title: `Answer key released: ${title}`, type: "important" as const, link: `/contests/${contest._id}` };
+  }
+  if (contest.lifecycle === "claims_open") {
+    return { title: `Claims window open: ${title}`, type: "important" as const, link: `/contests/${contest._id}` };
+  }
+  if (contest.lifecycle === "finalized" || contest.lifecycle === "ratings_applied") {
+    return { title: `Result declared: ${title}`, type: "important" as const, link: `/contests/${contest._id}` };
+  }
+  return null;
+}
+
 // ── Problem of the Day ───────────────────────────────────────────────────────
 
 export const getHomeSettings = async (_req: Request, res: Response): Promise<void> => {
@@ -291,8 +312,9 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       contest,
       action: "contest_created",
       message: `Contest "${contest.title}" created.`,
-      announcementTitle: `New contest published: ${contest.title}`,
+      announcementTitle: `Upcoming contest: ${contest.title}`,
       announcementType: "recent",
+      link: `/contests/${contest._id}/details`,
       details: {
         startTime: contest.startTime,
         endTime: contest.endTime,
@@ -315,6 +337,7 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ message: "Contest not found" });
       return;
     }
+    const previousLifecycle = contest.lifecycle;
 
     const {
       title,
@@ -378,14 +401,17 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
     if (status !== undefined) contest.status = status;
 
     await contest.save();
+    const publicAnnouncement = lifecycleAnnouncement(contest, previousLifecycle);
     await recordContestAdminEvent({
       req,
       contest,
       action: "contest_updated",
       message: `Contest "${contest.title}" configuration updated.`,
-      announcementTitle: `Contest updated: ${contest.title}`,
-      announcementType: "recent",
+      announcementTitle: publicAnnouncement?.title,
+      announcementType: publicAnnouncement?.type,
+      link: publicAnnouncement?.link,
       details: {
+        previousLifecycle,
         startTime: contest.startTime,
         endTime: contest.endTime,
         lifecycle: contest.lifecycle,
@@ -411,9 +437,6 @@ export const deleteContest = async (req: Request, res: Response): Promise<void> 
       contest,
       action: "contest_deleted",
       message: `Contest "${contest.title}" deleted.`,
-      announcementTitle: `Contest removed: ${contest.title}`,
-      announcementType: "recent",
-      link: "/contests",
     });
     
     invalidateHomeCache();
@@ -483,8 +506,6 @@ export const updateContestProblems = async (req: Request, res: Response): Promis
       contest,
       action: "contest_problem_set_updated",
       message: `Problem set for "${contest.title}" updated with ${questions.length} approved problems.`,
-      announcementTitle: `Problem set updated: ${contest.title}`,
-      announcementType: "recent",
       details: {
         questionCount: questions.length,
         questionIds: questions.map((question) => String(question._id)),
@@ -537,22 +558,52 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
       return;
     }
 
-    const standings = await ContestStanding.find({ contestId: contest._id })
-      .populate("userId", "fullName email rating")
-      .sort({ rank: 1, score: -1, penaltyMinutes: 1, updatedAt: -1 })
-      .limit(300)
-      .lean();
+    const [standings, registrations, submissionCounts] = await Promise.all([
+      ContestStanding.find({ contestId: contest._id })
+        .populate("userId", "fullName email rating")
+        .sort({ rank: 1, score: -1, penaltyMinutes: 1, updatedAt: -1 })
+        .limit(300)
+        .lean(),
+      ContestRegistration.find({ contestId: contest._id, status: { $ne: "withdrawn" } })
+        .populate("userId", "fullName email rating")
+        .sort({ registeredAt: 1 })
+        .lean(),
+      ContestSubmission.aggregate([
+        { $match: { contestId: contest._id } },
+        {
+          $group: {
+            _id: "$userId",
+            submissions: { $sum: 1 },
+            attemptedQuestions: { $addToSet: "$questionId" },
+            lastSubmittedAt: { $max: "$submittedAt" },
+          },
+        },
+      ]),
+    ]);
 
-    res.json({
-      contest,
-      standings: standings.map((standing: any) => ({
+    const submissionsByUser = new Map(
+      submissionCounts.map((row: any) => [
+        String(row._id),
+        {
+          submissions: row.submissions || 0,
+          attemptedQuestions: row.attemptedQuestions?.length || 0,
+          lastSubmittedAt: row.lastSubmittedAt,
+        },
+      ])
+    );
+    const registrationsByUser = new Map(registrations.map((registration: any) => [String(registration.userId?._id || registration.userId), registration]));
+    const standingRows = standings.map((standing: any) => {
+      const userId = String(standing.userId?._id || standing.userId);
+      const registration = registrationsByUser.get(userId);
+      const submissionStats = submissionsByUser.get(userId) || { submissions: 0, attemptedQuestions: 0, lastSubmittedAt: undefined };
+      return {
         _id: standing._id,
         rank: standing.rank,
         visibleRank: standing.visibleRank,
         user: {
-          fullName: standing.userId?.fullName || "User",
-          email: standing.userId?.email || "",
-          rating: standing.userId?.rating || 0,
+          fullName: standing.userId?.fullName || registration?.userId?.fullName || "User",
+          email: standing.userId?.email || registration?.userId?.email || "",
+          rating: standing.userId?.rating || registration?.userId?.rating || 0,
         },
         score: standing.score,
         visibleScore: standing.visibleScore,
@@ -560,8 +611,51 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
         wrongAttempts: standing.wrongAttempts,
         penaltyMinutes: standing.penaltyMinutes,
         disqualified: standing.disqualified,
+        registrationStatus: registration?.status || "checked_in",
+        registeredAt: registration?.registeredAt,
+        startedAt: registration?.startedAt,
+        finishedAt: registration?.finishedAt,
+        submissionCount: submissionStats.submissions,
+        attemptedQuestions: submissionStats.attemptedQuestions,
+        lastSubmittedAt: submissionStats.lastSubmittedAt,
         updatedAt: standing.updatedAt,
-      })),
+      };
+    });
+    const standingUserIds = new Set(standings.map((standing: any) => String(standing.userId?._id || standing.userId)));
+    const registrationOnlyRows = registrations
+      .filter((registration: any) => !standingUserIds.has(String(registration.userId?._id || registration.userId)))
+      .map((registration: any) => {
+        const userId = String(registration.userId?._id || registration.userId);
+        const submissionStats = submissionsByUser.get(userId) || { submissions: 0, attemptedQuestions: 0, lastSubmittedAt: undefined };
+        return {
+          _id: registration._id,
+          rank: undefined,
+          visibleRank: undefined,
+          user: {
+            fullName: registration.userId?.fullName || "User",
+            email: registration.userId?.email || "",
+            rating: registration.userId?.rating || 0,
+          },
+          score: 0,
+          visibleScore: 0,
+          solvedCount: 0,
+          wrongAttempts: 0,
+          penaltyMinutes: 0,
+          disqualified: registration.status === "disqualified",
+          registrationStatus: registration.status,
+          registeredAt: registration.registeredAt,
+          startedAt: registration.startedAt,
+          finishedAt: registration.finishedAt,
+          submissionCount: submissionStats.submissions,
+          attemptedQuestions: submissionStats.attemptedQuestions,
+          lastSubmittedAt: submissionStats.lastSubmittedAt,
+          updatedAt: registration.updatedAt,
+        };
+      });
+
+    res.json({
+      contest,
+      standings: [...standingRows, ...registrationOnlyRows],
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch contest standings" });
@@ -603,9 +697,6 @@ export const updateContestClaim = async (req: Request, res: Response): Promise<v
         contest,
         action: "contest_claim_updated",
         message: `Claim "${claim.title}" for "${contest.title}" moved to ${claim.status}.`,
-        announcementTitle: `Contest claim updated: ${contest.title}`,
-        announcementType: "recent",
-        link: `/contests/${contest._id}`,
         details: {
           claimId: String(claim._id),
           claimStatus: claim.status,
@@ -693,9 +784,6 @@ export const closeContestClaims = async (req: Request, res: Response): Promise<v
       contest,
       action: "contest_claims_closed",
       message: `Claims closed for "${contest.title}".`,
-      announcementTitle: `Claims closed: ${contest.title}`,
-      announcementType: "recent",
-      link: `/contests/${contest._id}`,
       details: {
         claimsCloseTime: contest.claimsCloseTime,
       },
@@ -724,7 +812,7 @@ export const finalizeContestAndApplyRatings = async (req: Request, res: Response
         contest,
         action: "contest_finalized",
         message: `Contest "${contest.title}" finalized without rating changes because it is unrated.`,
-        announcementTitle: `Contest results finalized: ${contest.title}`,
+        announcementTitle: `Result declared: ${contest.title}`,
         announcementType: "important",
         link: `/contests/${contest._id}`,
         details: {
@@ -746,8 +834,8 @@ export const finalizeContestAndApplyRatings = async (req: Request, res: Response
       action: rating.applied || rating.count > 0 ? "contest_ratings_applied" : "contest_finalized",
       message: `Contest "${contest.title}" finalized. ${rating.message || `${rating.count} rating changes processed.`}`,
       announcementTitle: rating.applied || rating.count > 0
-        ? `Ratings applied: ${contest.title}`
-        : `Contest results finalized: ${contest.title}`,
+        ? `Result declared and ratings applied: ${contest.title}`
+        : `Result declared: ${contest.title}`,
       announcementType: "important",
       link: `/contests/${contest._id}`,
       details: {

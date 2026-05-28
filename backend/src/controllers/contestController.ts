@@ -15,24 +15,13 @@ function getContestState(contest: any) {
   const regEnd = contest.registrationEndTime ? new Date(contest.registrationEndTime).getTime() : start;
   const lifecycle = contest.lifecycle;
 
-  if (
-    [
-      "registration_open",
-      "live",
-      "frozen",
-      "ended",
-      "answer_key_released",
-      "claims_open",
-      "claims_closed",
-      "finalized",
-      "ratings_applied",
-    ].includes(lifecycle)
-  ) {
+  if (["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(lifecycle)) {
     return lifecycle;
   }
   if (now >= end) return "ended";
+  if (["live", "frozen"].includes(lifecycle)) return lifecycle;
   if (now >= start && now < end) return "live";
-  if (now >= regStart && now < regEnd) return "registration_open";
+  if (lifecycle === "registration_open" || (now >= regStart && now < regEnd)) return "registration_open";
   return "upcoming";
 }
 
@@ -93,6 +82,11 @@ async function recomputeUserStanding(contest: any, userId: any) {
   const submissions = await ContestSubmission.find({ contestId: contest._id, userId })
     .sort({ submittedAt: 1 })
     .lean();
+  const latestByQuestion = new Map<string, any>();
+  for (const submission of submissions) {
+    latestByQuestion.set(String(submission.questionId), submission);
+  }
+
   const problemStats = [];
   let score = 0;
   let solvedCount = 0;
@@ -102,32 +96,29 @@ async function recomputeUserStanding(contest: any, userId: any) {
 
   for (const questionId of contest.questions.map((id: any) => String(id))) {
     const questionSubs = submissions.filter((submission) => String(submission.questionId) === questionId);
-    const accepted = questionSubs.find((submission) => submission.isCorrect);
-    const attemptsBeforeAccepted = accepted
-      ? questionSubs.filter((submission) => new Date(submission.submittedAt) <= new Date(accepted.submittedAt)).length
-      : questionSubs.length;
-    const wrongBeforeAccepted = accepted ? Math.max(0, attemptsBeforeAccepted - 1) : questionSubs.length;
-    const latest = [...questionSubs].reverse()[0];
+    const latest = latestByQuestion.get(questionId);
+    const isSolved = Boolean(latest?.isCorrect);
+    const wrongForQuestion = latest ? questionSubs.filter((submission) => !submission.isCorrect).length : 0;
 
-    if (accepted) {
+    if (isSolved) {
       solvedCount += 1;
-      score += accepted.marksAwarded;
-      wrongAttempts += wrongBeforeAccepted;
-      const acceptedAt = new Date(accepted.submittedAt);
+      score += latest.marksAwarded;
+      wrongAttempts += wrongForQuestion;
+      const acceptedAt = new Date(latest.submittedAt);
       const minutesFromStart = Math.max(0, Math.ceil((acceptedAt.getTime() - new Date(contest.startTime).getTime()) / 60000));
-      penaltyMinutes += minutesFromStart + wrongBeforeAccepted * (contest.wrongPenaltyMinutes || 0);
+      penaltyMinutes += minutesFromStart + wrongForQuestion * (contest.wrongPenaltyMinutes || 0);
       lastAcceptedAt = !lastAcceptedAt || acceptedAt > lastAcceptedAt ? acceptedAt : lastAcceptedAt;
     } else if (latest) {
       score += latest.marksAwarded;
-      wrongAttempts += wrongBeforeAccepted;
+      wrongAttempts += wrongForQuestion;
     }
 
     problemStats.push({
       questionId,
       attempts: questionSubs.length,
-      isCorrect: Boolean(accepted),
-      marksAwarded: accepted?.marksAwarded ?? latest?.marksAwarded ?? 0,
-      solvedAt: accepted?.submittedAt,
+      isCorrect: isSolved,
+      marksAwarded: latest?.marksAwarded ?? 0,
+      solvedAt: isSolved ? latest.submittedAt : undefined,
     });
   }
 
@@ -262,7 +253,7 @@ export const registerForContest = async (req: Request, res: Response): Promise<v
     }
 
     const state = getContestState(contest);
-    if (!["registration_open", "upcoming"].includes(state)) {
+    if (!["registration_open", "upcoming", "live", "frozen"].includes(state)) {
       res.status(400).json({ message: "Registration is not open for this contest" });
       return;
     }
@@ -550,10 +541,7 @@ export const submitContestAnswer = async (req: Request, res: Response): Promise<
       userId: req.currentUser!._id,
       questionId,
     });
-    if (previousAttempts > 0) {
-      res.status(400).json({ message: "Response already submitted for this question" });
-      return;
-    }
+
     const judged = judgeAnswer(question, req.body);
     const submission = await ContestSubmission.create({
       contestId: contest._id,

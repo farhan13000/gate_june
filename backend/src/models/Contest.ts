@@ -146,7 +146,7 @@ contestSchema.pre("validate", function (next) {
   if (!this.rules?.length) {
     this.rules = [
       "Do not refresh or navigate away during the live contest unless required.",
-      "Only the final submitted answer before contest end is considered for scoring.",
+      "The latest saved response before final submit or contest end is considered for scoring.",
       "Final ranks are published after answer key release and claim review.",
     ];
   }

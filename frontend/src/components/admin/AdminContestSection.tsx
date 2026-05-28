@@ -21,6 +21,7 @@ type Contest = {
   questions?: ProblemCandidate[];
   status: string;
   showOnHome: boolean;
+  createdAt?: string;
 };
 
 type ProblemCandidate = {
@@ -44,6 +45,13 @@ type AdminStanding = {
   wrongAttempts: number;
   penaltyMinutes: number;
   disqualified: boolean;
+  registrationStatus?: string;
+  registeredAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  submissionCount?: number;
+  attemptedQuestions?: number;
+  lastSubmittedAt?: string;
   updatedAt: string;
 };
 
@@ -230,6 +238,7 @@ export default function AdminContestSection() {
   const [adminClaims, setAdminClaims] = useState<AdminClaim[]>([]);
   const [claimResponses, setClaimResponses] = useState<Record<string, string>>({});
   const [activePanel, setActivePanel] = useState<ManagerPanel>("setup");
+  const [adminContestView, setAdminContestView] = useState<"new" | "upcoming" | "live" | "past" | "all">("new");
 
   const selectedContest = useMemo(
     () => contests.find((contest) => contest._id === selectedContestId) || null,
@@ -308,6 +317,23 @@ export default function AdminContestSection() {
     }
     return selectedQuestionIds.map((id) => byId.get(id)).filter(Boolean) as ProblemCandidate[];
   }, [candidates, selectedContest, selectedQuestionIds]);
+
+  const adminContestGroups = useMemo(() => {
+    const now = Date.now();
+    const recentlyCreatedCutoff = now - 7 * 24 * 60 * 60 * 1000;
+    const isPast = (contest: Contest) =>
+      ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.lifecycle || "") ||
+      new Date(contest.endTime).getTime() < now;
+    return {
+      new: contests.filter((contest: any) => new Date(contest.createdAt || contest.startTime).getTime() >= recentlyCreatedCutoff && !isPast(contest)),
+      upcoming: contests.filter((contest) => ["published", "registration_open"].includes(contest.lifecycle || "") && !isPast(contest)),
+      live: contests.filter((contest) => ["live", "frozen"].includes(contest.lifecycle || "")),
+      past: contests.filter(isPast),
+      all: contests,
+    };
+  }, [contests]);
+
+  const visibleAdminContests = adminContestGroups[adminContestView];
 
   const toLocalInput = (iso: string) => {
     if (!iso) return "";
@@ -698,15 +724,39 @@ export default function AdminContestSection() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]">
         <div className="academic-card overflow-hidden">
           <div className="border-b border-border bg-secondary/30 p-4">
-            <h3 className="text-sm font-bold">All Contests</h3>
+            <h3 className="text-sm font-bold">Contest Library</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Separate new, upcoming, live, and past contests before attaching problems.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {[
+                ["new", "New", adminContestGroups.new.length],
+                ["upcoming", "Upcoming", adminContestGroups.upcoming.length],
+                ["live", "Live", adminContestGroups.live.length],
+                ["past", "Past", adminContestGroups.past.length],
+                ["all", "All", adminContestGroups.all.length],
+              ].map(([value, label, count]) => (
+                <button
+                  key={value as string}
+                  type="button"
+                  onClick={() => setAdminContestView(value as typeof adminContestView)}
+                  className={`rounded-sm border px-3 py-2 text-left text-xs transition-colors ${
+                    adminContestView === value
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="font-semibold">{label as string}</span>
+                  <span className="ml-2 font-mono">{String(count)}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          {contests.length === 0 ? (
+          {visibleAdminContests.length === 0 ? (
             <p className="p-6 text-center text-xs text-muted-foreground">
-              No contests scheduled. Create one above to begin.
+              No contests in this group.
             </p>
           ) : (
             <div className="divide-y divide-border">
-              {contests.map((contest) => (
+              {visibleAdminContests.map((contest) => (
                 <button
                   key={contest._id}
                   type="button"
@@ -978,18 +1028,20 @@ export default function AdminContestSection() {
         <div className="flex flex-col gap-2 border-b border-border bg-secondary/30 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-sm font-bold">Live Monitor</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Admin view of current computed standings for the selected contest.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Admin view of registrations, saved responses, locks, and computed standings for the selected contest.</p>
           </div>
           <button type="button" onClick={fetchAdminStandings} className="btn-outline px-3 py-1.5 text-xs">
             Refresh Standings
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-xs">
+          <table className="w-full min-w-[58rem] text-xs">
             <thead>
               <tr className="border-b border-border bg-secondary/10">
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Rank</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">User</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Responses</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Score</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Visible</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Solved</th>
@@ -1005,6 +1057,15 @@ export default function AdminContestSection() {
                     <div className="font-semibold text-foreground">{row.user.fullName}</div>
                     <div className="font-mono text-[10px] text-muted-foreground">{row.user.email}</div>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-foreground">{row.finishedAt ? "locked" : row.registrationStatus || "standing"}</div>
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      {row.lastSubmittedAt ? new Date(row.lastSubmittedAt).toLocaleString() : row.startedAt ? new Date(row.startedAt).toLocaleString() : row.registeredAt ? new Date(row.registeredAt).toLocaleString() : "-"}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                    {row.attemptedQuestions ?? 0} q / {row.submissionCount ?? 0}
+                  </td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-foreground">{row.score}</td>
                   <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.visibleScore}</td>
                   <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.solvedCount}</td>
@@ -1014,8 +1075,8 @@ export default function AdminContestSection() {
               ))}
               {adminStandings.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    No standings yet for this contest.
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No registrations or standings yet for this contest.
                   </td>
                 </tr>
               )}

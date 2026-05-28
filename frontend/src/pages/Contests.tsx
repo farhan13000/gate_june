@@ -48,10 +48,10 @@ type Contest = {
 };
 
 const stateClass: Record<string, string> = {
-  live: "border-primary/25 bg-primary/10 text-primary",
+  live: "border-primary/30 bg-primary/12 text-primary shadow-[0_0_14px_hsl(var(--primary)/0.14)]",
   frozen: "border-primary/25 bg-primary/10 text-primary",
   registration_open: "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300",
-  upcoming: "border-border bg-secondary/35 text-muted-foreground",
+  upcoming: "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300",
   ended: "border-border bg-secondary/35 text-muted-foreground",
   answer_key_released: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   claims_open: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -59,6 +59,40 @@ const stateClass: Record<string, string> = {
   finalized: "border-border bg-secondary/35 text-muted-foreground",
   ratings_applied: "border-border bg-secondary/35 text-muted-foreground",
 };
+
+const viewOptions = [
+  { value: "active", label: "Active & Upcoming", description: "Register or enter live contests." },
+  { value: "registered", label: "My Contests", description: "Your registered contest list." },
+  { value: "past", label: "Past Contests", description: "Completed and archived contests." },
+  { value: "results", label: "Results & Keys", description: "Released keys, claims, and results." },
+] as const;
+
+const sectionMeta: Record<string, { description: string; className: string }> = {
+  "Live Now": {
+    description: "Submission windows are open. Registration is required before entering.",
+    className: "border-primary/30 bg-primary/5",
+  },
+  Upcoming: {
+    description: "Register early and check the schedule before the arena opens.",
+    className: "border-blue-500/20 bg-blue-500/5",
+  },
+  "My Participated Contests": {
+    description: "Answer keys, claims, and results for contests you joined.",
+    className: "border-amber-500/20 bg-amber-500/5",
+  },
+  "Past / Finalizing": {
+    description: "Closed contests and finalization history.",
+    className: "border-border bg-secondary/20",
+  },
+};
+
+function contestCardClass(state: Contest["contestState"]) {
+  if (["live", "frozen"].includes(state)) return "border-primary/35 bg-primary/5";
+  if (["registration_open", "upcoming"].includes(state)) return "border-blue-500/20 bg-blue-500/5";
+  if (["answer_key_released", "claims_open", "claims_closed"].includes(state)) return "border-amber-500/25 bg-amber-500/5";
+  if (["finalized", "ratings_applied"].includes(state)) return "border-green-500/20 bg-green-500/5";
+  return "border-border bg-card";
+}
 
 const testTypes = [
   {
@@ -250,7 +284,7 @@ export default function Contests() {
             type="button"
             disabled={busyId === contest._id}
             onClick={() => updateRegistration(contest, "register")}
-            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
           >
             Register
           </button>
@@ -339,14 +373,18 @@ export default function Contests() {
       </div>
 
       <div className="mb-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["active", "Active & Upcoming", contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)).length],
-          ["registered", "My Contests", contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn").length],
-          ["past", "Past Contests", contests.filter((contest) => postContestStates.includes(contest.contestState)).length],
-          ["results", "Results & Keys", contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn" && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState)).length],
-        ].map(([value, label, count]) => (
+        {viewOptions.map(({ value, label, description }) => {
+          const count =
+            value === "active"
+              ? contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)).length
+              : value === "registered"
+                ? contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn").length
+                : value === "past"
+                  ? contests.filter((contest) => postContestStates.includes(contest.contestState)).length
+                  : contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn" && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState)).length;
+          return (
           <button
-            key={value as string}
+            key={value}
             type="button"
             onClick={() => setContestView(value as typeof contestView)}
             className={`rounded-sm border p-3 text-left transition-colors ${
@@ -355,10 +393,12 @@ export default function Contests() {
                 : "border-border bg-card hover:bg-secondary/25"
             }`}
           >
-            <div className="font-serif text-sm font-bold">{label as string}</div>
+            <div className="font-serif text-sm font-bold">{label}</div>
+            <p className="mt-1 min-h-8 text-xs leading-relaxed text-muted-foreground">{description}</p>
             <div className="mt-1 font-mono text-lg font-bold">{String(count)}</div>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {loading ? (
@@ -393,7 +433,10 @@ export default function Contests() {
               if (items.length === 0) return null;
               return (
                 <section key={title as string} className="space-y-3">
-                  <h2 className="font-serif text-base font-bold text-foreground">{title as string}</h2>
+                  <div className={`rounded-sm border p-3 ${sectionMeta[title as string]?.className || "border-border bg-card"}`}>
+                    <h2 className="font-serif text-base font-bold text-foreground">{title as string}</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">{sectionMeta[title as string]?.description}</p>
+                  </div>
                   <div className="grid gap-3">
                     {items.map((contest) => (
                       <div
@@ -404,7 +447,7 @@ export default function Contests() {
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") navigate(`/contests/${contest._id}/details`);
                         }}
-                        className="rounded-sm border border-border bg-card p-4 text-left transition-colors hover:bg-secondary/25"
+                        className={`rounded-sm border p-4 text-left transition-colors hover:bg-secondary/25 ${contestCardClass(contest.contestState)}`}
                       >
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                           <div className="min-w-0">
