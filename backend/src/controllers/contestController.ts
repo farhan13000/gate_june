@@ -5,6 +5,7 @@ import ContestClaim from "../models/ContestClaim";
 import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
+import RatingHistory from "../models/RatingHistory";
 
 function getContestState(contest: any) {
   const now = Date.now();
@@ -374,7 +375,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const [submissions, claims] = await Promise.all([
+    const [submissions, claims, ratingChange] = await Promise.all([
       ContestSubmission.find({
       contestId: contest._id,
       userId: req.currentUser!._id,
@@ -382,6 +383,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       ContestClaim.find({ contestId: contest._id, userId: req.currentUser!._id })
         .sort({ createdAt: -1 })
         .lean(),
+      RatingHistory.findOne({ contestId: contest._id, userId: req.currentUser!._id }).lean(),
     ]);
     const standing = await ContestStanding.findOne({ contestId: contest._id, userId: req.currentUser!._id }).lean();
     const canReveal = ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(state);
@@ -444,6 +446,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       canSubmit: ["live", "frozen"].includes(state) && !registration.finishedAt,
       canReveal,
       claimsOpen,
+      ratingChange: canReveal ? ratingChange : null,
       serverTime: new Date().toISOString(),
     });
   } catch (error) {

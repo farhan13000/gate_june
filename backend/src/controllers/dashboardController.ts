@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import User from "../models/User";
 import Submission from "../models/Submission";
 import RatingHistory from "../models/RatingHistory";
+import Contest from "../models/Contest";
+import ContestRegistration from "../models/ContestRegistration";
 
 const subjectsList = [
   "Statistics",
@@ -15,6 +17,35 @@ const subjectsList = [
 ];
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+
+function getContestState(contest: any) {
+  const now = Date.now();
+  const start = new Date(contest.startTime).getTime();
+  const end = new Date(contest.endTime).getTime();
+  const regStart = contest.registrationStartTime ? new Date(contest.registrationStartTime).getTime() : start;
+  const regEnd = contest.registrationEndTime ? new Date(contest.registrationEndTime).getTime() : start;
+  const lifecycle = contest.lifecycle;
+
+  if (
+    [
+      "registration_open",
+      "live",
+      "frozen",
+      "ended",
+      "answer_key_released",
+      "claims_open",
+      "claims_closed",
+      "finalized",
+      "ratings_applied",
+    ].includes(lifecycle)
+  ) {
+    return lifecycle;
+  }
+  if (now >= end) return "ended";
+  if (now >= start && now < end) return "live";
+  if (now >= regStart && now < regEnd) return "registration_open";
+  return "upcoming";
+}
 
 const buildRatingHistory = (currentRating: number) => {
   const baseRating = 1500;
@@ -30,6 +61,90 @@ const buildRatingHistory = (currentRating: number) => {
       rating,
     };
   });
+};
+
+const getRatingData = async (userId: any, currentRating: number) => {
+  const ratingHistory = await RatingHistory.find({ userId })
+    .populate("contestId", "title")
+    .sort({ appliedAt: 1, createdAt: 1 })
+    .lean();
+  const ratingData = ratingHistory.length
+    ? ratingHistory.map((item: any) => ({
+        date: new Date(item.appliedAt || item.createdAt).toISOString().slice(0, 10),
+        contest: item.contestId?.title || "Contest",
+        rating: item.newRating,
+        delta: item.delta,
+        rank: item.rank,
+      }))
+    : buildRatingHistory(currentRating);
+  return { ratingHistory, ratingData };
+};
+
+const getContestDashboardData = async (userId: any) => {
+  const now = new Date();
+  const [registrations, upcomingContests, recentRatings] = await Promise.all([
+    ContestRegistration.find({ userId, status: { $ne: "withdrawn" } })
+      .populate("contestId", "title contestType lifecycle startTime endTime durationMinutes ratingEnabled")
+      .sort({ updatedAt: -1 })
+      .lean(),
+    Contest.find({
+      status: { $in: ["approved", "completed"] },
+      visibility: "public",
+      lifecycle: { $ne: "draft" },
+      endTime: { $gte: now },
+    })
+      .select("title contestType lifecycle registrationStartTime registrationEndTime startTime endTime durationMinutes ratingEnabled")
+      .sort({ startTime: 1 })
+      .limit(5)
+      .lean(),
+    RatingHistory.find({ userId })
+      .populate("contestId", "title contestType")
+      .sort({ appliedAt: -1, createdAt: -1 })
+      .limit(5)
+      .lean(),
+  ]);
+
+  const registeredIds = new Set(
+    registrations
+      .filter((registration: any) => registration.contestId)
+      .map((registration: any) => String(registration.contestId._id))
+  );
+
+  const contestSummary = {
+    registered: registrations.length,
+    participated: registrations.filter((registration: any) => registration.status === "checked_in" || registration.finishedAt).length,
+    rated: recentRatings.length,
+    upcomingRegistered: registrations.filter((registration: any) => {
+      const contest = registration.contestId;
+      return contest && ["upcoming", "registration_open", "live", "frozen"].includes(getContestState(contest));
+    }).length,
+  };
+
+  return {
+    contestSummary,
+    upcomingContests: upcomingContests.map((contest: any) => ({
+      _id: contest._id,
+      title: contest.title,
+      contestType: contest.contestType,
+      contestState: getContestState(contest),
+      startTime: contest.startTime,
+      endTime: contest.endTime,
+      durationMinutes: contest.durationMinutes,
+      ratingEnabled: contest.ratingEnabled,
+      registered: registeredIds.has(String(contest._id)),
+    })),
+    recentContestResults: recentRatings.map((rating: any) => ({
+      contestId: rating.contestId?._id,
+      title: rating.contestId?.title || "Contest",
+      contestType: rating.contestId?.contestType || "contest",
+      oldRating: rating.oldRating,
+      newRating: rating.newRating,
+      delta: rating.delta,
+      rank: rating.rank,
+      participants: rating.participants,
+      appliedAt: rating.appliedAt || rating.createdAt,
+    })),
+  };
 };
 
 const getSubjectsForTopic = (topic: string): string[] => {
@@ -282,25 +397,14 @@ export const getDashboard = async (req: Request, res: Response) => {
     });
 
     const currentRating = user.rating || 0;
-    const ratingHistory = await RatingHistory.find({ userId })
-      .populate("contestId", "title")
-      .sort({ appliedAt: 1 })
-      .lean();
-    const ratingData = ratingHistory.length
-      ? ratingHistory.map((item: any) => ({
-          date: new Date(item.appliedAt).toISOString().slice(0, 10),
-          contest: item.contestId?.title || "Contest",
-          rating: item.newRating,
-          delta: item.delta,
-          rank: item.rank,
-        }))
-      : buildRatingHistory(currentRating);
+    const { ratingHistory, ratingData } = await getRatingData(userId, currentRating);
+    const contestDashboard = await getContestDashboardData(userId);
 
     const dashboard = {
       profile: user.toProfile(),
       stats: {
         problemsSolved: statsSummary.problemsSolved,
-        contestsParticipated: ratingHistory.length || Math.max(0, Math.floor(user.rating / 400)),
+        contestsParticipated: contestDashboard.contestSummary.participated || ratingHistory.length,
         currentStreakDays: statsSummary.currentStreakDays,
         overallAccuracy: statsSummary.overallAccuracy,
         rating: currentRating,
@@ -314,6 +418,7 @@ export const getDashboard = async (req: Request, res: Response) => {
       heatmapData,
       chapterWiseData,
       ratingData,
+      ...contestDashboard,
     };
 
     res.json({ dashboard });
@@ -344,10 +449,18 @@ export const streamDashboard = async (req: Request, res: Response) => {
         if (!user) return;
 
         const statsSummary = await calculateUserStats(userId);
+        const currentRating = user.rating || 0;
+        const rating = await getRatingData(userId, currentRating);
+        const contestDashboard = await getContestDashboardData(userId);
 
         const payload = {
           timestamp: new Date().toISOString(),
-          rating: user.rating,
+          rating: currentRating,
+          contestsParticipated: contestDashboard.contestSummary.participated || rating.ratingHistory.length,
+          ratingData: rating.ratingData,
+          contestSummary: contestDashboard.contestSummary,
+          upcomingContests: contestDashboard.upcomingContests,
+          recentContestResults: contestDashboard.recentContestResults,
           problemsSolved: statsSummary.problemsSolved,
           overallAccuracy: statsSummary.overallAccuracy,
           currentStreakDays: statsSummary.currentStreakDays,

@@ -5,7 +5,16 @@ export interface IContest extends Document {
   description: string;
   meta?: string;
   questions: mongoose.Types.ObjectId[];
-  contestType: "practice" | "rated" | "gate_mock" | "private" | "challenge";
+  contestType:
+    | "full_mock"
+    | "subject_wise"
+    | "weekly"
+    | "challenge_yourself"
+    | "practice"
+    | "rated"
+    | "gate_mock"
+    | "private"
+    | "challenge";
   visibility: "public" | "private" | "invite_only";
   scoringMode: "gate" | "icpc";
   lifecycle:
@@ -51,8 +60,18 @@ const contestSchema = new Schema<IContest>(
     questions: [{ type: Schema.Types.ObjectId, ref: "Question" }],
     contestType: {
       type: String,
-      enum: ["practice", "rated", "gate_mock", "private", "challenge"],
-      default: "practice",
+      enum: [
+        "full_mock",
+        "subject_wise",
+        "weekly",
+        "challenge_yourself",
+        "practice",
+        "rated",
+        "gate_mock",
+        "private",
+        "challenge",
+      ],
+      default: "full_mock",
       index: true,
     },
     visibility: {

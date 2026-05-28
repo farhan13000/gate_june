@@ -41,6 +41,14 @@ type RoomData = {
   } | null;
   claims?: Array<any>;
   registration?: { finishedAt?: string | null } | null;
+  ratingChange?: {
+    oldRating: number;
+    newRating: number;
+    delta: number;
+    rank: number;
+    participants: number;
+    performanceRating?: number;
+  } | null;
   canSubmit: boolean;
   canReveal: boolean;
   claimsOpen: boolean;
@@ -165,6 +173,7 @@ export default function ContestRoom() {
   const activeLocked = Boolean(activeSubmission || room?.registration?.finishedAt);
   const attemptedCount = room?.standing?.attemptedCount ?? submittedByQuestion.size;
   const totalQuestions = questions.length;
+  const resultsVisible = Boolean(room?.canReveal);
 
   const canSubmitAnswer = () => {
     if (!room?.canSubmit || !activeQuestion || activeLocked) return false;
@@ -278,25 +287,54 @@ export default function ContestRoom() {
             <div className="mt-0.5 font-mono text-base font-bold text-foreground" key={tick}>{formatRemaining(room.contest.endTime)}</div>
           </div>
           <div className="rounded-sm border border-border bg-card px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{room.canReveal ? "Score" : "Attempted"}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{resultsVisible ? "Score" : "Attempted"}</div>
             <div className="mt-0.5 font-mono text-base font-bold text-foreground">
-              {room.canReveal ? room.standing?.score ?? 0 : room.standing?.attemptedCount ?? 0}
+              {resultsVisible ? room.standing?.score ?? 0 : room.standing?.attemptedCount ?? 0}
             </div>
           </div>
           <div className="rounded-sm border border-border bg-card px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{room.canReveal ? "Solved" : "Status"}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{resultsVisible ? "Solved" : "Status"}</div>
             <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
-              {room.canReveal ? room.standing?.solvedCount ?? 0 : room.registration?.finishedAt ? "Submitted" : "Running"}
+              {resultsVisible ? room.standing?.solvedCount ?? 0 : room.registration?.finishedAt ? "Submitted" : "Running"}
             </div>
           </div>
           <div className="rounded-sm border border-border bg-card px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{room.canReveal ? "Penalty" : "Remaining"}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{resultsVisible ? "Penalty" : "Remaining"}</div>
             <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
-              {room.canReveal ? room.standing?.penaltyMinutes ?? 0 : Math.max(0, totalQuestions - attemptedCount)}
+              {resultsVisible ? room.standing?.penaltyMinutes ?? 0 : Math.max(0, totalQuestions - attemptedCount)}
             </div>
           </div>
         </div>
       </div>
+
+      {resultsVisible && room.ratingChange && (
+        <div className="mb-5 grid gap-3 md:grid-cols-4">
+          <div className="rounded-sm border border-border bg-card p-4">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rating Change</div>
+            <div className={`mt-1 font-mono text-2xl font-bold ${room.ratingChange.delta >= 0 ? "text-green-600" : "text-destructive"}`}>
+              {room.ratingChange.delta >= 0 ? "+" : ""}{room.ratingChange.delta}
+            </div>
+          </div>
+          <div className="rounded-sm border border-border bg-card p-4">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">New Rating</div>
+            <div className="mt-1 font-mono text-2xl font-bold text-foreground">{room.ratingChange.newRating}</div>
+          </div>
+          <div className="rounded-sm border border-border bg-card p-4">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rank</div>
+            <div className="mt-1 font-mono text-2xl font-bold text-foreground">#{room.ratingChange.rank}</div>
+          </div>
+          <div className="rounded-sm border border-border bg-card p-4">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Participants</div>
+            <div className="mt-1 font-mono text-2xl font-bold text-foreground">{room.ratingChange.participants}</div>
+          </div>
+        </div>
+      )}
+
+      {resultsVisible && !room.ratingChange && (
+        <div className="mb-5 rounded-sm border border-border bg-card p-4 text-sm text-muted-foreground">
+          Answer key is released. Rating change will appear here after the admin finalizes ratings.
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[clamp(13rem,17vw,18rem)_minmax(0,1fr)_minmax(20rem,24rem)]">
         <aside className="academic-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-7rem)] xl:overflow-hidden">
@@ -333,8 +371,8 @@ export default function ContestRoom() {
                   <span className="font-mono text-[10px] text-muted-foreground">
                     +{question.markingScheme?.positive ?? 1}
                   </span>
-                  {room.canReveal && stat?.isCorrect && <CheckCircle2 size={12} className="text-green-600" />}
-                  {!room.canReveal && submitted && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  {resultsVisible && stat?.isCorrect && <CheckCircle2 size={12} className="text-green-600" />}
+                  {!resultsVisible && submitted && <span className="h-2 w-2 rounded-full bg-primary" />}
                 </button>
               );
             })}
@@ -349,7 +387,7 @@ export default function ContestRoom() {
               <div className="font-mono font-bold text-foreground">{room.registration?.finishedAt ? "Yes" : "No"}</div>
             </div>
           </div>
-          {room.canReveal && (
+          {resultsVisible && (
           <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs xl:grid-cols-1">
             <div className="rounded-sm border border-border bg-background p-2">
               <div className="text-[10px] text-muted-foreground">Score</div>
@@ -397,7 +435,7 @@ export default function ContestRoom() {
             <LatexRenderer latex={activeQuestion.statement} />
           </div>
 
-          {room.canReveal && (
+          {resultsVisible && (
             <div className="mt-6 border-t border-border pt-5">
               <h3 className="mb-3 font-serif text-base font-bold">Answer Key</h3>
               <div className="rounded-sm border border-primary/20 bg-primary/10 p-3 text-sm text-foreground">
@@ -566,9 +604,9 @@ export default function ContestRoom() {
       <div className="mt-5 academic-card overflow-hidden">
         <div className="flex flex-col gap-2 border-b border-border bg-secondary/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-serif text-base font-bold text-foreground">Live Standings</h2>
+            <h2 className="font-serif text-base font-bold text-foreground">{resultsVisible ? "Final Standings" : "Live Standings"}</h2>
             <p className="text-xs text-muted-foreground">
-              {standingMeta.final ? "Final leaderboard" : standingMeta.frozen ? "Scoreboard is frozen" : "Auto-refreshes every few seconds"}
+              {standingMeta.final || resultsVisible ? "Final leaderboard and result summary" : standingMeta.frozen ? "Scoreboard is frozen" : "Auto-refreshes every few seconds"}
             </p>
           </div>
           <button type="button" onClick={loadStandings} className="btn-outline px-3 py-1.5 text-xs">

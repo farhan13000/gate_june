@@ -1,4 +1,5 @@
 import ContestStanding from "../models/ContestStanding";
+import ContestRegistration from "../models/ContestRegistration";
 import RatingHistory from "../models/RatingHistory";
 import User from "../models/User";
 
@@ -25,18 +26,36 @@ export async function applyContestRatings(contestId: string) {
 
   const standings = await ContestStanding.find({ contestId, disqualified: false })
     .populate("userId", "rating")
-    .sort({ rank: 1 })
+    .sort({ score: -1, penaltyMinutes: 1, solvedCount: -1, lastAcceptedAt: 1, updatedAt: 1 })
     .lean();
 
   if (standings.length < 2) {
     return { applied: false, count: 0, message: "At least two participants are required" };
   }
 
-  const users = standings.map((standing: any) => ({
-    userId: standing.userId._id,
-    oldRating: Number(standing.userId.rating || 0),
-    rank: Number(standing.rank || standings.length),
-  }));
+  let rank = 0;
+  let previousKey = "";
+  const users = [];
+  for (let index = 0; index < standings.length; index += 1) {
+    const standing: any = standings[index];
+    const key = [
+      standing.score,
+      standing.penaltyMinutes,
+      standing.solvedCount,
+      standing.lastAcceptedAt ? new Date(standing.lastAcceptedAt).getTime() : 0,
+    ].join(":");
+    if (key !== previousKey) rank = index + 1;
+    previousKey = key;
+    await ContestStanding.updateOne(
+      { _id: standing._id },
+      { rank, visibleRank: standing.visibleRank || rank, visibleScore: standing.visibleScore ?? standing.score }
+    );
+    users.push({
+      userId: standing.userId._id,
+      oldRating: Number(standing.userId.rating || 0),
+      rank,
+    });
+  }
 
   const histories = [];
   for (const user of users) {
@@ -55,6 +74,10 @@ export async function applyContestRatings(contestId: string) {
     const newRating = Math.max(0, user.oldRating + delta);
 
     await User.updateOne({ _id: user.userId }, { rating: newRating });
+    await ContestRegistration.updateOne(
+      { contestId, userId: user.userId },
+      { ratingBefore: user.oldRating, ratingAfter: newRating }
+    );
     histories.push({
       userId: user.userId,
       contestId,

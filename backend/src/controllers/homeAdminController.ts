@@ -208,7 +208,7 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       meta: meta?.trim(),
       startTime: new Date(startTime),
       endTime: new Date(endTime),
-      contestType: contestType || "practice",
+      contestType: contestType || "full_mock",
       visibility: visibility || "public",
       scoringMode: scoringMode || "gate",
       lifecycle: lifecycle || "published",

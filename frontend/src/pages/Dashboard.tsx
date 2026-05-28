@@ -9,6 +9,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, CartesianGrid
 } from "recharts";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,21 @@ const SectionHeader = ({ title, sub }: { title: string; sub?: string }) => (
   </div>
 );
 
+const labelize = (value?: string) =>
+  String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatContestDate = (value?: string) => {
+  if (!value) return "Not scheduled";
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const PriorityBadge = ({ p }: { p: string }) => {
   const styles: Record<string, string> = {
     High: "bg-destructive/10 text-destructive border-destructive/30",
@@ -208,6 +224,7 @@ const tooltipStyle = {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [ratingTab, setRatingTab] = useState<"current" | "old">("current");
   const [perfTab, setPerfTab] = useState<"subject" | "difficulty" | "type" | "testtype">("subject");
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
@@ -236,7 +253,21 @@ export default function Dashboard() {
       es.addEventListener("dashboard-update", (e: any) => {
         try {
           const data = JSON.parse(e.data);
-          setDashboard((prev: any) => ({ ...prev, stats: { ...prev?.stats, ...data } }));
+          const {
+            ratingData: nextRatingData,
+            contestSummary,
+            upcomingContests,
+            recentContestResults,
+            ...stats
+          } = data;
+          setDashboard((prev: any) => ({
+            ...prev,
+            stats: { ...prev?.stats, ...stats },
+            ...(nextRatingData ? { ratingData: nextRatingData } : {}),
+            ...(contestSummary ? { contestSummary } : {}),
+            ...(upcomingContests ? { upcomingContests } : {}),
+            ...(recentContestResults ? { recentContestResults } : {}),
+          }));
         } catch {
           // Ignore malformed stream events; the next valid event will refresh the state.
         }
@@ -272,6 +303,19 @@ export default function Dashboard() {
   const questionTypePerformanceData = dashboard?.questionTypePerformance ?? questionTypePerformance;
   const weeklyActivityData = dashboard?.weeklyActivity ?? weeklyActivity;
   const ratingDataData = dashboard?.ratingData ?? ratingData;
+  const rating = dashboard?.stats?.rating ?? 1500;
+  const problemsSolved = dashboard?.stats?.problemsSolved ?? 0;
+  const streak = dashboard?.stats?.currentStreakDays ?? 0;
+  const contests = dashboard?.stats?.contestsParticipated ?? 0;
+  const contestSummary = dashboard?.contestSummary ?? {
+    registered: contests,
+    participated: contests,
+    rated: ratingDataData.length,
+    upcomingRegistered: 0,
+  };
+  const upcomingContestData = dashboard?.upcomingContests ?? [];
+  const recentContestResults = dashboard?.recentContestResults ?? [];
+  const latestRatingChange = recentContestResults[0];
   const chapterWiseDataData = dashboard?.chapterWiseData ?? chapterWiseData;
 
   // Heatmap calculation
@@ -286,11 +330,6 @@ export default function Dashboard() {
     }
   });
 
-  const rating = dashboard?.stats?.rating ?? 1500;
-  const problemsSolved = dashboard?.stats?.problemsSolved ?? 0;
-  const streak = dashboard?.stats?.currentStreakDays ?? 0;
-  const contests = dashboard?.stats?.contestsParticipated ?? 0;
-  
   const globalRank = typeof dashboard?.stats?.rating === "number" ? `#${Math.max(1, 2000 - Math.floor(rating * 0.95))}` : "—";
   const countryRank = typeof dashboard?.stats?.rating === "number" ? `#${Math.max(1, 500 - Math.floor(rating * 0.24))}` : "—";
   const ratingStarsCount = Math.min(5, Math.max(1, Math.floor(rating / 400)));
@@ -815,6 +854,11 @@ export default function Dashboard() {
             </div>
             <div className="text-xs text-primary font-semibold">GATE DA Rating</div>
             <div className="text-[10px] text-muted-foreground">(Highest: {rating})</div>
+            {latestRatingChange && (
+              <div className={`mt-2 text-xs font-mono font-bold ${latestRatingChange.delta >= 0 ? "text-primary" : "text-destructive"}`}>
+                Last contest: {latestRatingChange.delta >= 0 ? "+" : ""}{latestRatingChange.delta} rating
+              </div>
+            )}
             <div className="border-t border-border mt-3 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="text-center sm:border-r sm:border-border">
                 <div className="font-serif text-base font-bold text-foreground">{globalRank}</div>
@@ -834,6 +878,8 @@ export default function Dashboard() {
               {[
                 ["Problems Solved", String(problemsSolved)],
                 ["Contest Participated", String(contests)],
+                ["Registered Contests", String(contestSummary.registered)],
+                ["Rated Contests", String(contestSummary.rated)],
                 ["Current Streak", `${streak} days`],
                 ["Total Attempted", String(totalAttempted)],
                 ["Total Correct", String(totalCorrect)],
@@ -903,16 +949,46 @@ export default function Dashboard() {
             </div>
           </div>
 
+          <div className="bg-card border border-border rounded-sm p-4">
+            <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide">Contest Snapshot</h3>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {[
+                ["Registered", contestSummary.registered],
+                ["Participated", contestSummary.participated],
+                ["Rated", contestSummary.rated],
+                ["Upcoming Joined", contestSummary.upcomingRegistered],
+              ].map(([label, value]) => (
+                <div key={label as string} className="rounded-sm border border-border bg-background p-2 text-center">
+                  <div className="font-mono text-lg font-bold text-primary">{String(value)}</div>
+                  <div className="text-[10px] text-muted-foreground">{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Upcoming Contests */}
           <div className="bg-card border border-border rounded-sm p-4">
             <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide">Upcoming Contests</h3>
             <div className="space-y-2">
-              {[
-                { name: "Statistics Sprint #8", date: formatDateOffset(2), registered: true },
-                { name: "Linear Algebra Weekly", date: formatDateOffset(6), registered: false },
-                { name: "Full Mock #13", date: formatDateOffset(12), registered: false },
-              ].map(c => (
-                <div key={c.name} className="flex items-center justify-between text-xs border-b border-border pb-2 last:border-0 last:pb-0">
+              {upcomingContestData.length === 0 && (
+                <div className="text-xs text-muted-foreground">No upcoming contests are published yet.</div>
+              )}
+              {upcomingContestData.map((contest: any) => ({
+                id: contest._id,
+                name: contest.title,
+                date: formatContestDate(contest.startTime),
+                registered: contest.registered,
+              })).map(c => (
+                <div
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/contests/${c.id}/details`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") navigate(`/contests/${c.id}/details`);
+                  }}
+                  className="flex cursor-pointer items-center justify-between text-xs border-b border-border pb-2 transition-colors hover:text-primary last:border-0 last:pb-0"
+                >
                   <div>
                     <div className="text-foreground text-[11px]">{c.name}</div>
                     <div className="text-muted-foreground font-mono text-[10px] mt-0.5">{c.date}</div>
@@ -922,6 +998,35 @@ export default function Dashboard() {
                     : <button className="text-[10px] px-2 py-0.5 border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors rounded-sm font-mono">+</button>
                   }
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-sm p-4">
+            <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide">Recent Contest Results</h3>
+            <div className="space-y-2">
+              {recentContestResults.length === 0 && (
+                <div className="text-xs text-muted-foreground">Rating changes will appear after contests are finalized.</div>
+              )}
+              {recentContestResults.map((result: any) => (
+                <button
+                  key={`${result.contestId}-${result.appliedAt}`}
+                  type="button"
+                  onClick={() => result.contestId && navigate(`/contests/${result.contestId}`)}
+                  className="w-full border-b border-border pb-2 text-left text-xs transition-colors hover:bg-secondary/20 last:border-0 last:pb-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11px] font-semibold text-foreground">{result.title}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                        Rank #{result.rank} / {result.participants} - {labelize(result.contestType)}
+                      </div>
+                    </div>
+                    <div className={`shrink-0 font-mono text-xs font-bold ${result.delta >= 0 ? "text-primary" : "text-destructive"}`}>
+                      {result.delta >= 0 ? "+" : ""}{result.delta}
+                    </div>
+                  </div>
+                </button>
               ))}
             </div>
           </div>

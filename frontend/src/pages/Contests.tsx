@@ -62,32 +62,32 @@ const stateClass: Record<string, string> = {
 
 const testTypes = [
   {
-    title: "Practice Contest",
-    type: "Unrated",
+    title: "Full Mock Test",
+    type: "Exam Simulation",
     Icon: BookOpenCheck,
-    description: "Low-pressure timed sets for learning and revision.",
-    rules: ["Registration optional", "Instant feedback can be enabled", "No rating change"],
+    description: "Full-length GATE DA simulation with exam-style timing and result review.",
+    rules: ["Complete syllabus coverage", "Answer key after release", "Rank and rating can apply"],
   },
   {
-    title: "Rated Live Contest",
-    type: "Rated",
+    title: "Subject Wise Test",
+    type: "Focused",
     Icon: Trophy,
-    description: "Scheduled competitive rounds with live/frozen standings.",
-    rules: ["Registration required", "Rating applies after finalization", "Leaderboard freeze supported"],
+    description: "Focused tests for one subject or major syllabus area.",
+    rules: ["Subject-level analysis", "Useful for weak-area repair", "Leaderboard can be enabled"],
   },
   {
-    title: "GATE Mock Test",
-    type: "Exam Style",
+    title: "Weekly Test",
+    type: "Regular",
     Icon: FileQuestion,
-    description: "Full-length or sectional GATE DA simulations.",
-    rules: ["MCQ/MSQ/NAT supported", "GATE-style marking", "Solutions after answer-key release"],
+    description: "Scheduled weekly tests for consistency and time-pressure practice.",
+    rules: ["Weekly ranking cycle", "Timed participation", "Rating can update after finalization"],
   },
   {
-    title: "Challenge Round",
-    type: "Review Based",
+    title: "Challenge Yourself",
+    type: "Advanced",
     Icon: ShieldCheck,
-    description: "Contest flow with answer-key claims and recheck windows.",
-    rules: ["Claims window after key release", "Admin review trail", "Final results after closure"],
+    description: "Advanced challenge tests with harder problem mixes and claims support.",
+    rules: ["Higher difficulty mix", "Answer-key claims window", "Final results after review"],
   },
 ];
 
@@ -147,12 +147,20 @@ function formatCountdown(contest: Contest) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+const postContestStates = ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"];
+
+function resultActionLabel(state: Contest["contestState"]) {
+  if (state === "claims_open") return "Answer Key / Claim";
+  if (state === "answer_key_released" || state === "claims_closed") return "Answer Key";
+  if (state === "finalized" || state === "ratings_applied") return "View Results";
+  return "View Summary";
+}
+
 export default function Contests() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [contests, setContests] = useState<Contest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -163,7 +171,6 @@ export default function Contests() {
       if (!res.ok) throw new Error("Failed to load contests");
       const data = await res.json();
       setContests(data);
-      setActiveId((current) => (current && data.some((contest: Contest) => contest._id === current) ? current : null));
     } catch (error: any) {
       toast.error(error.message || "Failed to load contests");
     } finally {
@@ -180,16 +187,13 @@ export default function Contests() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const activeContest = useMemo(
-    () => (activeId ? contests.find((contest) => contest._id === activeId) || null : null),
-    [activeId, contests]
-  );
-
   const grouped = useMemo(() => {
+    const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
     const live = contests.filter((contest) => ["live", "frozen"].includes(contest.contestState));
     const upcoming = contests.filter((contest) => ["registration_open", "upcoming"].includes(contest.contestState));
-    const past = contests.filter((contest) => !live.includes(contest) && !upcoming.includes(contest));
-    return { live, upcoming, past };
+    const myPast = contests.filter((contest) => registered(contest) && postContestStates.includes(contest.contestState));
+    const past = contests.filter((contest) => !live.includes(contest) && !upcoming.includes(contest) && !myPast.includes(contest));
+    return { live, upcoming, myPast, past };
   }, [contests]);
 
   const updateRegistration = async (contest: Contest, action: "register" | "withdraw" | "check-in") => {
@@ -250,6 +254,18 @@ export default function Contests() {
         >
           <Trophy size={13} />
           Enter
+        </button>
+      );
+    }
+    if (registered && postContestStates.includes(contest.contestState)) {
+      return (
+        <button
+          type="button"
+          onClick={() => navigate(`/contests/${contest._id}`)}
+          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+        >
+          <Eye size={13} />
+          {resultActionLabel(contest.contestState)}
         </button>
       );
     }
@@ -320,15 +336,16 @@ export default function Contests() {
           </div>
           <h2 className="font-serif text-xl font-bold text-foreground">No contests are published yet</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            The platform supports practice contests, rated live contests, full GATE mocks, and claim-based challenge rounds. When an admin publishes a contest, it will appear here with registration and timing controls.
+            The platform supports full mock tests, subject wise tests, weekly tests, and advanced Challenge Yourself tests. When an admin publishes a contest, it will appear here with registration and result controls.
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="grid gap-6">
           <div className="space-y-4">
             {[
               ["Live Now", grouped.live],
               ["Upcoming", grouped.upcoming],
+              ["My Participated Contests", grouped.myPast],
               ["Past / Finalizing", grouped.past],
             ].map(([title, list]) => {
               const items = list as Contest[];
@@ -340,15 +357,13 @@ export default function Contests() {
                     {items.map((contest) => (
                       <div
                         key={contest._id}
-                        onClick={() => setActiveId(contest._id)}
+                        onClick={() => navigate(`/contests/${contest._id}/details`)}
                         role="button"
                         tabIndex={0}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") setActiveId(contest._id);
+                          if (event.key === "Enter" || event.key === " ") navigate(`/contests/${contest._id}/details`);
                         }}
-                        className={`rounded-sm border bg-card p-4 text-left transition-colors hover:bg-secondary/25 ${
-                          activeContest?._id === contest._id ? "border-primary/40 shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]" : "border-border"
-                        }`}
+                        className="rounded-sm border border-border bg-card p-4 text-left transition-colors hover:bg-secondary/25"
                       >
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                           <div className="min-w-0">
@@ -371,6 +386,11 @@ export default function Contests() {
                               <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDate(contest.startTime)}</span>
                               <span className="inline-flex items-center gap-1"><Clock3 size={12} /> {contest.durationMinutes} min</span>
                               <span className="inline-flex items-center gap-1"><Users size={12} /> {contest.registrationCount}</span>
+                              {contest.userRegistration && contest.userRegistration.status !== "withdrawn" && (
+                                <span className="inline-flex items-center gap-1 text-primary">
+                                  <CheckCircle2 size={12} /> Participated
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex shrink-0 flex-col gap-2 lg:items-end">
@@ -380,7 +400,7 @@ export default function Contests() {
                             <div className="flex flex-wrap justify-start gap-2 lg:justify-end" onClick={(event) => event.stopPropagation()}>
                               <button
                                 type="button"
-                                onClick={() => setActiveId(contest._id)}
+                                onClick={() => navigate(`/contests/${contest._id}/details`)}
                                 className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
                               >
                                 <Eye size={13} />
@@ -397,80 +417,6 @@ export default function Contests() {
               );
             })}
           </div>
-
-          <aside className="space-y-4">
-            {activeContest && (
-              <>
-                <div className="academic-card p-4">
-                  <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
-                  <h2 className="font-serif text-lg font-bold text-foreground">{activeContest.title}</h2>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-sm border border-border bg-background p-2">
-                      <div className="text-[10px] text-muted-foreground">Scoring</div>
-                      <div className="font-semibold text-foreground">{labelize(activeContest.scoringMode)}</div>
-                    </div>
-                    <div className="rounded-sm border border-border bg-background p-2">
-                      <div className="text-[10px] text-muted-foreground">Penalty</div>
-                      <div className="font-mono font-semibold text-foreground">{activeContest.wrongPenaltyMinutes}m</div>
-                    </div>
-                    <div className="rounded-sm border border-border bg-background p-2">
-                      <div className="text-[10px] text-muted-foreground">Problems</div>
-                      <div className="font-mono font-semibold text-foreground">{activeContest.questions?.length || 0}</div>
-                    </div>
-                    <div className="rounded-sm border border-border bg-background p-2">
-                      <div className="text-[10px] text-muted-foreground">Feedback</div>
-                      <div className="font-semibold text-foreground">{activeContest.instantFeedback ? "Instant" : "After end"}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="academic-card p-4">
-                  <h3 className="mb-3 font-serif text-sm font-bold text-foreground">Problems</h3>
-                  <div className="space-y-2">
-                    {(activeContest.questions || []).slice(0, 8).map((problem, index) => (
-                      <div key={problem._id} className="rounded-sm border border-border bg-background p-2">
-                        <div className="flex items-start gap-2">
-                          <span className="font-mono text-[11px] text-muted-foreground">{String.fromCharCode(65 + index)}</span>
-                          <div className="min-w-0">
-                            <div className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</div>
-                            <div className="mt-1 text-[10px] text-muted-foreground">
-                              {problem.difficulty} / {problem.questionType}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {(activeContest.questions || []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">Problem set will be visible after admin attaches approved problems.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="academic-card p-4">
-                  <h3 className="mb-3 font-serif text-sm font-bold text-foreground">Rules</h3>
-                  <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
-                    {(activeContest.rules || []).map((rule) => (
-                      <li key={rule} className="flex gap-2">
-                        <span className="text-primary">-</span>
-                        <span>{rule}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            )}
-            {!activeContest && (
-              <div className="academic-card p-5">
-                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
-                  <Eye size={18} />
-                </div>
-                <h2 className="font-serif text-base font-bold text-foreground">Open a contest to view details</h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Use View Details to inspect rules, problem count, scoring mode, and registration status. The lifecycle timeline appears only after entering the specific contest room.
-                </p>
-              </div>
-            )}
-          </aside>
         </div>
       )}
     </div>

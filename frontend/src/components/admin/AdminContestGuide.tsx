@@ -2,32 +2,32 @@ import { BookOpenCheck, Calculator, Flag, LineChart, Medal, ShieldCheck, Trophy 
 
 const contestTypes = [
   {
-    title: "Practice Contest",
-    tag: "Unrated",
+    title: "Full Mock Test",
+    tag: "Exam Simulation",
     Icon: BookOpenCheck,
-    use: "Revision rounds, topic drills, classroom practice, and low-pressure timed solving.",
-    rules: ["Registration can stay optional.", "Instant feedback may be enabled.", "No rating change is applied."],
+    use: "Full-length GATE DA simulation with exam-like timing, scoring, answer key, and final result review.",
+    rules: ["Use for complete syllabus evaluation.", "Release answer key after the test.", "Apply ratings after finalization when enabled."],
   },
   {
-    title: "Rated Live Contest",
-    tag: "Rated",
+    title: "Subject Wise Test",
+    tag: "Focused",
     Icon: Trophy,
-    use: "Scheduled competitive rounds where rank and rating both matter.",
-    rules: ["Registration and check-in are required.", "Ranks are finalized after review.", "Rating changes apply only once."],
+    use: "Focused contest for a single subject or domain, useful for diagnosing weak areas.",
+    rules: ["Keep problems inside one subject.", "Show subject-level result quality.", "Ratings can be optional."],
   },
   {
-    title: "GATE Mock Test",
-    tag: "Exam Style",
+    title: "Weekly Test",
+    tag: "Regular",
     Icon: Medal,
-    use: "Full-length or sectional GATE DA simulations with exam-style marking.",
-    rules: ["Supports MCQ, MSQ, and NAT.", "Score follows question marking schemes.", "Solutions unlock after answer-key release."],
+    use: "Recurring weekly test for habit, consistency, leaderboard pressure, and progress tracking.",
+    rules: ["Use a fixed weekly schedule.", "Keep duration predictable.", "Finalize results after key and claim review."],
   },
   {
-    title: "Challenge Round",
-    tag: "Claims",
+    title: "Challenge Yourself",
+    tag: "Advanced",
     Icon: ShieldCheck,
-    use: "High-stakes rounds where answer keys can be challenged before final ranks.",
-    rules: ["Open claims after key release.", "Review each claim with an admin response.", "Finalize ranks after claims close."],
+    use: "Advanced difficulty test for high-intensity practice, harder mixes, and claim-based review.",
+    rules: ["Use harder problem sets.", "Open claims after key release.", "Finalize ranks and ratings after review."],
   },
 ];
 

@@ -67,7 +67,7 @@ const emptyForm = {
   endTime: "",
   registrationStartTime: "",
   registrationEndTime: "",
-  contestType: "practice",
+  contestType: "full_mock",
   visibility: "public",
   scoringMode: "gate",
   lifecycle: "published",
@@ -78,11 +78,10 @@ const emptyForm = {
 };
 
 const contestTypes = [
-  ["practice", "Practice"],
-  ["rated", "Rated Live"],
-  ["gate_mock", "GATE Mock"],
-  ["private", "Private"],
-  ["challenge", "Challenge"],
+  ["full_mock", "Full Mock Test"],
+  ["subject_wise", "Subject Wise Test"],
+  ["weekly", "Weekly Test"],
+  ["challenge_yourself", "Challenge Yourself"],
 ];
 
 const lifecycleOptions = [
@@ -298,7 +297,7 @@ export default function AdminContestSection() {
       endTime: toLocalInput(contest.endTime),
       registrationStartTime: toLocalInput(contest.registrationStartTime || ""),
       registrationEndTime: toLocalInput(contest.registrationEndTime || ""),
-      contestType: contest.contestType || "practice",
+      contestType: contest.contestType || "full_mock",
       visibility: contest.visibility || "public",
       scoringMode: contest.scoringMode || "gate",
       lifecycle: contest.lifecycle || "published",
@@ -422,7 +421,7 @@ export default function AdminContestSection() {
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
               <div className="mt-1 truncate text-sm font-semibold text-foreground">{selectedContest.title}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {new Date(selectedContest.startTime).toLocaleString()} / {selectedContest.contestType || "practice"} / {selectedContest.lifecycle || selectedContest.status}
+                {new Date(selectedContest.startTime).toLocaleString()} / {selectedContest.contestType || "full_mock"} / {selectedContest.lifecycle || selectedContest.status}
               </div>
             </div>
             <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
@@ -631,7 +630,7 @@ export default function AdminContestSection() {
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-foreground">{contest.title}</span>
                     <span className="mt-1 block text-[11px] text-muted-foreground">
-                      {new Date(contest.startTime).toLocaleString()} / {contest.contestType || "practice"} /{" "}
+                      {new Date(contest.startTime).toLocaleString()} / {contest.contestType || "full_mock"} /{" "}
                       {contest.scoringMode || "gate"}
                     </span>
                     <span className="mt-2 inline-flex flex-wrap gap-2">
@@ -643,29 +642,30 @@ export default function AdminContestSection() {
                       </span>
                     </span>
                   </span>
-                  <span className="flex shrink-0 gap-1">
-                    <span
-                      role="button"
-                      tabIndex={0}
+                  <span className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
                       onClick={(event) => {
                         event.stopPropagation();
                         startEdit(contest);
+                        setActivePanel("setup");
                       }}
-                      className="rounded-sm p-1.5 hover:bg-secondary"
+                      className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[11px]"
                     >
                       <Pencil size={14} />
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
+                      Edit
+                    </button>
+                    <button
+                      type="button"
                       onClick={(event) => {
                         event.stopPropagation();
                         deleteContest(contest._id);
                       }}
-                      className="rounded-sm p-1.5 text-red-600 hover:bg-red-500/10"
+                      className="inline-flex items-center justify-center gap-2 rounded-sm border border-destructive/30 px-3 py-1.5 text-[11px] text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 size={14} />
-                    </span>
+                      Delete
+                    </button>
                   </span>
                 </button>
               ))}
@@ -790,20 +790,20 @@ export default function AdminContestSection() {
             <h3 className="text-sm font-bold">Answer Key & Claims</h3>
             <p className="mt-1 text-xs text-muted-foreground">Release official answers, open/close claims, and resolve appeals.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => runContestAction("release-answer-key")} className="btn-outline px-3 py-1.5 text-xs">
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-5">
+            <button type="button" onClick={() => runContestAction("release-answer-key")} className="btn-outline px-3 py-2 text-xs">
               Release Key
             </button>
-            <button type="button" onClick={() => runContestAction("open-claims")} className="btn-outline px-3 py-1.5 text-xs">
+            <button type="button" onClick={() => runContestAction("open-claims")} className="btn-outline px-3 py-2 text-xs">
               Open Claims
             </button>
-            <button type="button" onClick={() => runContestAction("close-claims")} className="btn-outline px-3 py-1.5 text-xs">
+            <button type="button" onClick={() => runContestAction("close-claims")} className="btn-outline px-3 py-2 text-xs">
               Close Claims
             </button>
-            <button type="button" onClick={() => runContestAction("finalize-ratings")} className="btn-primary px-3 py-1.5 text-xs">
+            <button type="button" onClick={() => runContestAction("finalize-ratings")} className="btn-primary px-3 py-2 text-xs">
               Finalize Ratings
             </button>
-            <button type="button" onClick={fetchAdminClaims} className="btn-outline px-3 py-1.5 text-xs">
+            <button type="button" onClick={fetchAdminClaims} className="btn-outline px-3 py-2 text-xs">
               Refresh
             </button>
           </div>
