@@ -153,6 +153,7 @@ export default function AdminPlatformLogs() {
         >
           <option value="">All categories</option>
           <option value="taxonomy">Taxonomy</option>
+          <option value="contest">Contest</option>
         </select>
         <select
           value={status}

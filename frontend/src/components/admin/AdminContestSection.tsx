@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, Check, FileQuestion, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
+import { Award, BarChart3, Check, Eye, FileQuestion, Flag, Gavel, KeyRound, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 type Contest = {
@@ -84,20 +84,6 @@ const contestTypes = [
   ["challenge_yourself", "Challenge Yourself"],
 ];
 
-const lifecycleOptions = [
-  ["draft", "Draft"],
-  ["published", "Published"],
-  ["registration_open", "Registration Open"],
-  ["live", "Live"],
-  ["frozen", "Frozen"],
-  ["ended", "Ended"],
-  ["answer_key_released", "Answer Key Released"],
-  ["claims_open", "Claims Open"],
-  ["claims_closed", "Claims Closed"],
-  ["finalized", "Finalized"],
-  ["ratings_applied", "Ratings Applied"],
-];
-
 const lifecycleHelp = [
   ["published", "Published", "Visible in contest hub."],
   ["registration_open", "Registration", "Users can register and prepare."],
@@ -114,11 +100,22 @@ const lifecycleHelp = [
 const managerPanels = [
   { id: "setup", label: "Setup", description: "Create or edit contest basics", Icon: Settings2 },
   { id: "problems", label: "Problems", description: "Attach approved problem set", Icon: FileQuestion },
+  { id: "lifecycle", label: "Lifecycle", description: "Move contest through stages", Icon: Radio },
   { id: "monitor", label: "Monitor", description: "Review live standings", Icon: BarChart3 },
-  { id: "claims", label: "Claims", description: "Release keys and finalize", Icon: ShieldCheck },
+  { id: "claims", label: "Claims", description: "Review submitted appeals", Icon: ShieldCheck },
 ] as const;
 
 type ManagerPanel = (typeof managerPanels)[number]["id"];
+type ContestLifecycleAction = "release-answer-key" | "open-claims" | "close-claims" | "finalize-ratings";
+type LifecycleOperation = {
+  stage: string;
+  title: string;
+  description: string;
+  lifecycle?: string;
+  action?: ContestLifecycleAction;
+  Icon: React.ComponentType<{ size?: number }>;
+  primary?: boolean;
+};
 
 function AdminLifecycleRail({ current }: { current?: string }) {
   const currentIndex = Math.max(0, lifecycleHelp.findIndex(([key]) => key === current));
@@ -156,6 +153,70 @@ function AdminLifecycleRail({ current }: { current?: string }) {
   );
 }
 
+function getProblemId(problem: any) {
+  return String(problem?._id || problem || "");
+}
+
+const lifecycleActions: LifecycleOperation[] = [
+  {
+    stage: "Registration",
+    title: "Open Registration",
+    description: "Allow users to register before the contest begins.",
+    lifecycle: "registration_open",
+    Icon: Radio,
+  },
+  {
+    stage: "Live",
+    title: "Start Contest",
+    description: "Open the contest arena and begin accepting submissions.",
+    lifecycle: "live",
+    Icon: PlayCircle,
+  },
+  {
+    stage: "Live",
+    title: "Freeze Leaderboard",
+    description: "Keep submissions open while limiting leaderboard visibility.",
+    lifecycle: "frozen",
+    Icon: ShieldCheck,
+  },
+  {
+    stage: "Closure",
+    title: "End Contest",
+    description: "Stop new contest submissions and prepare for answer key release.",
+    lifecycle: "ended",
+    Icon: Flag,
+  },
+  {
+    stage: "Review",
+    title: "Release Answer Key",
+    description: "Show official answers and solutions to participants.",
+    action: "release-answer-key",
+    Icon: KeyRound,
+  },
+  {
+    stage: "Review",
+    title: "Open Claims",
+    description: "Let participants submit answer-key or marking claims.",
+    action: "open-claims",
+    Icon: Gavel,
+  },
+  {
+    stage: "Review",
+    title: "Close Claims",
+    description: "Stop new claims after the review window ends.",
+    action: "close-claims",
+    Icon: Gavel,
+  },
+  {
+    stage: "Results",
+    title: "Finalize Results",
+    description: "Lock ranks and apply ratings for rated contests.",
+    action: "finalize-ratings",
+    Icon: Award,
+    primary: true,
+  },
+] as const;
+
 export default function AdminContestSection() {
   const [contests, setContests] = useState<Contest[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -183,7 +244,7 @@ export default function AdminContestSection() {
         setContests(data);
         if (!selectedContestId && data.length > 0) {
           setSelectedContestId(data[0]._id);
-          setSelectedQuestionIds((data[0].questions || []).map((question: ProblemCandidate) => question._id));
+          setSelectedQuestionIds((data[0].questions || []).map(getProblemId).filter(Boolean));
         }
       }
     } catch {
@@ -233,9 +294,20 @@ export default function AdminContestSection() {
 
   useEffect(() => {
     if (selectedContest) {
-      setSelectedQuestionIds((selectedContest.questions || []).map((question) => question._id));
+      setSelectedQuestionIds((selectedContest.questions || []).map(getProblemId).filter(Boolean));
     }
   }, [selectedContest]);
+
+  const selectedProblems = useMemo(() => {
+    const byId = new Map<string, ProblemCandidate>();
+    for (const problem of selectedContest?.questions || []) {
+      if ((problem as any)?.title) byId.set(getProblemId(problem), problem as ProblemCandidate);
+    }
+    for (const problem of candidates) {
+      if (selectedQuestionIds.includes(problem._id)) byId.set(problem._id, problem);
+    }
+    return selectedQuestionIds.map((id) => byId.get(id)).filter(Boolean) as ProblemCandidate[];
+  }, [candidates, selectedContest, selectedQuestionIds]);
 
   const toLocalInput = (iso: string) => {
     if (!iso) return "";
@@ -365,6 +437,26 @@ export default function AdminContestSection() {
     }
   };
 
+  const setContestLifecycle = async (lifecycle: string) => {
+    if (!selectedContest) return;
+    const res = await fetch(`/api/admin/contests/${selectedContest._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        lifecycle,
+        status: lifecycle === "ended" || lifecycle === "finalized" || lifecycle === "ratings_applied" ? "completed" : "approved",
+      }),
+    });
+    if (res.ok) {
+      toast.success(`Contest moved to ${lifecycle.replace(/_/g, " ")}`);
+      fetchContests();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.message || "Failed to update contest lifecycle");
+    }
+  };
+
   const updateClaim = async (claimId: string, status: string) => {
     if (!selectedContestId) return;
     const res = await fetch(`/api/admin/contests/${selectedContestId}/claims/${claimId}`, {
@@ -389,9 +481,9 @@ export default function AdminContestSection() {
   return (
     <div className="w-full space-y-6">
       <div>
-        <h2 className="font-serif text-lg font-bold text-foreground">Contest Configuration</h2>
+        <h2 className="font-serif text-lg font-bold text-foreground">Contest Command Center</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage contests in focused stages: setup, problem set, live monitoring, and claims/finalization.
+          Build contests in focused stages, then move them through registration, live, review, and results with dedicated controls.
         </p>
       </div>
 
@@ -445,6 +537,14 @@ export default function AdminContestSection() {
                 <Pencil size={13} />
                 Edit
               </button>
+              <button
+                type="button"
+                onClick={() => setActivePanel("lifecycle")}
+                className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+              >
+                <Radio size={13} />
+                Manage Stage
+              </button>
             </div>
           </div>
         </div>
@@ -483,7 +583,7 @@ export default function AdminContestSection() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
             <label className="mb-1 block text-xs font-bold">Contest Type</label>
             <select
@@ -492,18 +592,6 @@ export default function AdminContestSection() {
               className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
             >
               {contestTypes.map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold">Lifecycle</label>
-            <select
-              value={form.lifecycle}
-              onChange={(e) => setForm({ ...form, lifecycle: e.target.value })}
-              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
-            >
-              {lifecycleOptions.map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
@@ -676,10 +764,66 @@ export default function AdminContestSection() {
         <div className="space-y-6">
           <AdminLifecycleRail current={selectedContest?.lifecycle || form.lifecycle} />
           <div className="academic-card p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold">Selected Problems</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  These problems are currently attached to the selected contest.
+                </p>
+              </div>
+              <span className="rounded-sm border border-border bg-background px-2 py-1 font-mono text-xs text-foreground">
+                {selectedQuestionIds.length}
+              </span>
+            </div>
+            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {selectedProblems.map((problem, index) => (
+                <div key={problem._id} className="rounded-sm border border-primary/25 bg-primary/5 p-3">
+                  <div className="flex items-start gap-3">
+                    <span className="font-mono text-xs text-primary">{index + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</div>
+                      <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                        {problem.contentId || problem.problemId || problem._id} / {problem.difficulty} / {problem.questionType}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        title="View problem"
+                        onClick={() => window.open(`/problems/${problem._id}`, "_blank", "noopener,noreferrer")}
+                        className="rounded-sm border border-border bg-background p-1.5 text-muted-foreground hover:text-foreground"
+                      >
+                        <Eye size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove from contest"
+                        onClick={() => toggleQuestion(problem._id)}
+                        className="rounded-sm border border-destructive/25 bg-background p-1.5 text-destructive hover:bg-destructive/10"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {selectedQuestionIds.length > 0 && selectedProblems.length === 0 && (
+                <p className="rounded-sm border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                  Selected problem IDs are saved, but their details are still loading. Refresh contests if this remains visible.
+                </p>
+              )}
+              {selectedQuestionIds.length === 0 && (
+                <p className="rounded-sm border border-border bg-background p-3 text-xs text-muted-foreground">
+                  No problems selected yet. Use the approved-problem search below.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="academic-card p-4">
             <div className="mb-4">
-              <h3 className="text-sm font-bold">Contest Problem Set</h3>
+              <h3 className="text-sm font-bold">Add Approved Problems</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Select approved problems for the currently highlighted contest.
+                Search and add approved problems. Selected items appear in the panel above.
               </p>
             </div>
             <div className="relative mb-3">
@@ -726,6 +870,104 @@ export default function AdminContestSection() {
             >
               Save {selectedQuestionIds.length} Problems
             </button>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {activePanel === "lifecycle" && (
+      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <AdminLifecycleRail current={selectedContest?.lifecycle || form.lifecycle} />
+          {selectedContest && (
+            <div className="academic-card p-4">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
+              <h3 className="mt-1 font-serif text-base font-bold text-foreground">{selectedContest.title}</h3>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-sm border border-border bg-background p-2">
+                  <div className="text-[10px] text-muted-foreground">Current Stage</div>
+                  <div className="font-semibold text-foreground">{selectedContest.lifecycle || selectedContest.status}</div>
+                </div>
+                <div className="rounded-sm border border-border bg-background p-2">
+                  <div className="text-[10px] text-muted-foreground">Problems</div>
+                  <div className="font-mono font-semibold text-foreground">{(selectedContest.questions || []).length}</div>
+                </div>
+                <div className="rounded-sm border border-border bg-background p-2">
+                  <div className="text-[10px] text-muted-foreground">Rated</div>
+                  <div className="font-semibold text-foreground">{selectedContest.ratingEnabled ? "Yes" : "No"}</div>
+                </div>
+                <div className="rounded-sm border border-border bg-background p-2">
+                  <div className="text-[10px] text-muted-foreground">Scoring</div>
+                  <div className="font-semibold text-foreground">{selectedContest.scoringMode || "gate"}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="academic-card overflow-hidden">
+          <div className="border-b border-border bg-secondary/30 p-4">
+            <h3 className="font-serif text-base font-bold text-foreground">Stage Operations</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Use these controls for contest operations. Setup fields stay separate from live-stage decisions.
+            </p>
+          </div>
+          <div className="border-b border-border bg-background p-4">
+            <div className="grid gap-3 lg:grid-cols-3">
+              <div className="rounded-sm border border-border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rating Declaration</div>
+                <p className="mt-1 text-xs leading-relaxed text-foreground">
+                  Click <strong>Finalize Results</strong> after claims are closed. The backend locks ranks, applies Elo-style rating deltas, stores RatingHistory, and updates each user rating.
+                </p>
+              </div>
+              <div className="rounded-sm border border-border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Formula</div>
+                <p className="mt-1 text-xs leading-relaxed text-foreground">
+                  Expected score uses 1 / (1 + 10^((opponent - user) / 400)); delta uses K-factor by experience/rating and is clamped between -150 and +150.
+                </p>
+              </div>
+              <div className="rounded-sm border border-border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Visibility</div>
+                <p className="mt-1 text-xs leading-relaxed text-foreground">
+                  Result, answer key, rank, and rating change become visible to participants from the contest room after key/result release stages.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 p-4 md:grid-cols-2">
+            {lifecycleActions.map(({ stage, title, description, lifecycle, action, Icon, primary }) => {
+              const isCurrent = lifecycle && selectedContest?.lifecycle === lifecycle;
+              return (
+                <button
+                  key={title}
+                  type="button"
+                  disabled={!selectedContestId || Boolean(isCurrent)}
+                  onClick={() => lifecycle ? setContestLifecycle(lifecycle) : runContestAction(action!)}
+                  className={`rounded-sm border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isCurrent
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : primary
+                        ? "border-primary/35 bg-primary text-primary-foreground hover:opacity-90"
+                        : "border-border bg-background hover:bg-secondary/25"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border ${
+                      primary && !isCurrent ? "border-primary-foreground/30 bg-primary-foreground/10" : "border-border bg-card"
+                    }`}>
+                      <Icon size={17} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[10px] uppercase tracking-wide opacity-75">{stage}</span>
+                      <span className="mt-1 block text-sm font-bold">{isCurrent ? `${title} active` : title}</span>
+                      <span className={`mt-1 block text-xs leading-relaxed ${primary && !isCurrent ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                        {description}
+                      </span>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -787,21 +1029,12 @@ export default function AdminContestSection() {
       <div className="academic-card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border bg-secondary/30 p-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h3 className="text-sm font-bold">Answer Key & Claims</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Release official answers, open/close claims, and resolve appeals.</p>
+            <h3 className="text-sm font-bold">Claims Review</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Resolve participant appeals after claims are opened from Lifecycle.</p>
           </div>
-          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-5">
-            <button type="button" onClick={() => runContestAction("release-answer-key")} className="btn-outline px-3 py-2 text-xs">
-              Release Key
-            </button>
-            <button type="button" onClick={() => runContestAction("open-claims")} className="btn-outline px-3 py-2 text-xs">
-              Open Claims
-            </button>
-            <button type="button" onClick={() => runContestAction("close-claims")} className="btn-outline px-3 py-2 text-xs">
-              Close Claims
-            </button>
-            <button type="button" onClick={() => runContestAction("finalize-ratings")} className="btn-primary px-3 py-2 text-xs">
-              Finalize Ratings
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button type="button" onClick={() => setActivePanel("lifecycle")} className="btn-primary px-3 py-2 text-xs">
+              Lifecycle Actions
             </button>
             <button type="button" onClick={fetchAdminClaims} className="btn-outline px-3 py-2 text-xs">
               Refresh

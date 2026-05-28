@@ -9,6 +9,60 @@ import Question from "../models/Question";
 import { getOrCreateSettings } from "../models/PlatformSettings";
 import { applyContestRatings } from "../utils/contestRating";
 import { invalidateHomeCache } from "../utils/homeCache";
+import { writePlatformLog } from "../utils/platformLogger";
+
+async function recordContestAdminEvent({
+  req,
+  contest,
+  action,
+  message,
+  announcementTitle,
+  announcementType = "recent",
+  link,
+  details,
+}: {
+  req: Request;
+  contest: any;
+  action: string;
+  message: string;
+  announcementTitle?: string;
+  announcementType?: "important" | "recent";
+  link?: string;
+  details?: Record<string, unknown>;
+}) {
+  const contestId = String(contest?._id || "");
+  const title = String(contest?.title || "Contest");
+  await Promise.allSettled([
+    writePlatformLog({
+      category: "contest",
+      action,
+      message,
+      targetType: "contest",
+      targetId: contestId,
+      performedBy: req.currentUser!._id,
+      details: {
+        contestTitle: title,
+        contestType: contest?.contestType,
+        lifecycle: contest?.lifecycle,
+        status: contest?.status,
+        ...details,
+      },
+    }),
+    announcementTitle
+      ? Announcement.create({
+          title: announcementTitle,
+          link: link ?? (contestId ? `/contests/${contestId}/details` : undefined),
+          type: announcementType,
+          showNewBadge: true,
+          isActive: true,
+          sortOrder: announcementType === "important" ? 50 : 0,
+          publishedAt: new Date(),
+          createdBy: req.currentUser!._id,
+        })
+      : Promise.resolve(),
+  ]);
+  if (announcementTitle) invalidateHomeCache();
+}
 
 // ── Problem of the Day ───────────────────────────────────────────────────────
 
@@ -159,6 +213,7 @@ export const getContestsAdmin = async (_req: Request, res: Response): Promise<vo
   try {
     const contests = await Contest.find()
       .populate("createdBy", "fullName email")
+      .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
       .sort({ startTime: -1 });
     res.json(contests);
   } catch (error) {
@@ -229,6 +284,21 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       questions: [],
       createdBy: req.currentUser!._id,
       approvedBy: req.currentUser!._id,
+    });
+
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_created",
+      message: `Contest "${contest.title}" created.`,
+      announcementTitle: `New contest published: ${contest.title}`,
+      announcementType: "recent",
+      details: {
+        startTime: contest.startTime,
+        endTime: contest.endTime,
+        ratingEnabled: contest.ratingEnabled,
+        scoringMode: contest.scoringMode,
+      },
     });
     
     invalidateHomeCache();
@@ -308,6 +378,20 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
     if (status !== undefined) contest.status = status;
 
     await contest.save();
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_updated",
+      message: `Contest "${contest.title}" configuration updated.`,
+      announcementTitle: `Contest updated: ${contest.title}`,
+      announcementType: "recent",
+      details: {
+        startTime: contest.startTime,
+        endTime: contest.endTime,
+        lifecycle: contest.lifecycle,
+        ratingEnabled: contest.ratingEnabled,
+      },
+    });
     invalidateHomeCache();
     res.json(contest);
   } catch (error: any) {
@@ -322,6 +406,15 @@ export const deleteContest = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ message: "Contest not found" });
       return;
     }
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_deleted",
+      message: `Contest "${contest.title}" deleted.`,
+      announcementTitle: `Contest removed: ${contest.title}`,
+      announcementType: "recent",
+      link: "/contests",
+    });
     
     invalidateHomeCache();
     res.json({ message: "Contest deleted" });
@@ -385,6 +478,18 @@ export const updateContestProblems = async (req: Request, res: Response): Promis
 
     contest.questions = questions.map((question) => question._id);
     await contest.save();
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_problem_set_updated",
+      message: `Problem set for "${contest.title}" updated with ${questions.length} approved problems.`,
+      announcementTitle: `Problem set updated: ${contest.title}`,
+      announcementType: "recent",
+      details: {
+        questionCount: questions.length,
+        questionIds: questions.map((question) => String(question._id)),
+      },
+    });
     invalidateHomeCache();
 
     const populated = await Contest.findById(contest._id).populate(
@@ -491,6 +596,23 @@ export const updateContestClaim = async (req: Request, res: Response): Promise<v
     claim.reviewedBy = req.currentUser!._id;
     claim.reviewedAt = new Date();
     await claim.save();
+    const contest = await Contest.findById(req.params.id).select("title contestType lifecycle status");
+    if (contest) {
+      await recordContestAdminEvent({
+        req,
+        contest,
+        action: "contest_claim_updated",
+        message: `Claim "${claim.title}" for "${contest.title}" moved to ${claim.status}.`,
+        announcementTitle: `Contest claim updated: ${contest.title}`,
+        announcementType: "recent",
+        link: `/contests/${contest._id}`,
+        details: {
+          claimId: String(claim._id),
+          claimStatus: claim.status,
+          claimType: claim.type,
+        },
+      });
+    }
 
     res.json(claim);
   } catch (error: any) {
@@ -508,6 +630,18 @@ export const releaseContestAnswerKey = async (req: Request, res: Response): Prom
     contest.lifecycle = "answer_key_released";
     contest.answerKeyReleaseTime = new Date();
     await contest.save();
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_answer_key_released",
+      message: `Answer key released for "${contest.title}".`,
+      announcementTitle: `Answer key released: ${contest.title}`,
+      announcementType: "important",
+      link: `/contests/${contest._id}`,
+      details: {
+        answerKeyReleaseTime: contest.answerKeyReleaseTime,
+      },
+    });
     res.json(contest);
   } catch {
     res.status(500).json({ message: "Failed to release answer key" });
@@ -525,6 +659,19 @@ export const openContestClaims = async (req: Request, res: Response): Promise<vo
     contest.claimsOpenTime = contest.claimsOpenTime || new Date();
     if (req.body.claimsCloseTime) contest.claimsCloseTime = new Date(req.body.claimsCloseTime);
     await contest.save();
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_claims_opened",
+      message: `Claims opened for "${contest.title}".`,
+      announcementTitle: `Claims open: ${contest.title}`,
+      announcementType: "important",
+      link: `/contests/${contest._id}`,
+      details: {
+        claimsOpenTime: contest.claimsOpenTime,
+        claimsCloseTime: contest.claimsCloseTime,
+      },
+    });
     res.json(contest);
   } catch {
     res.status(500).json({ message: "Failed to open claims" });
@@ -541,6 +688,18 @@ export const closeContestClaims = async (req: Request, res: Response): Promise<v
     contest.lifecycle = "claims_closed";
     contest.claimsCloseTime = new Date();
     await contest.save();
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_claims_closed",
+      message: `Claims closed for "${contest.title}".`,
+      announcementTitle: `Claims closed: ${contest.title}`,
+      announcementType: "recent",
+      link: `/contests/${contest._id}`,
+      details: {
+        claimsCloseTime: contest.claimsCloseTime,
+      },
+    });
     res.json(contest);
   } catch {
     res.status(500).json({ message: "Failed to close claims" });
@@ -560,6 +719,18 @@ export const finalizeContestAndApplyRatings = async (req: Request, res: Response
     await contest.save();
 
     if (!contest.ratingEnabled) {
+      await recordContestAdminEvent({
+        req,
+        contest,
+        action: "contest_finalized",
+        message: `Contest "${contest.title}" finalized without rating changes because it is unrated.`,
+        announcementTitle: `Contest results finalized: ${contest.title}`,
+        announcementType: "important",
+        link: `/contests/${contest._id}`,
+        details: {
+          ratingEnabled: false,
+        },
+      });
       res.json({ contest, rating: { applied: false, count: 0, message: "Contest is unrated" } });
       return;
     }
@@ -569,6 +740,21 @@ export const finalizeContestAndApplyRatings = async (req: Request, res: Response
       contest.lifecycle = "ratings_applied";
       await contest.save();
     }
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: rating.applied || rating.count > 0 ? "contest_ratings_applied" : "contest_finalized",
+      message: `Contest "${contest.title}" finalized. ${rating.message || `${rating.count} rating changes processed.`}`,
+      announcementTitle: rating.applied || rating.count > 0
+        ? `Ratings applied: ${contest.title}`
+        : `Contest results finalized: ${contest.title}`,
+      announcementType: "important",
+      link: `/contests/${contest._id}`,
+      details: {
+        ratingEnabled: true,
+        rating,
+      },
+    });
 
     res.json({ contest, rating });
   } catch (error: any) {

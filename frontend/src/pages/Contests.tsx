@@ -163,6 +163,7 @@ export default function Contests() {
   const [loading, setLoading] = useState(true);
   const [nowTick, setNowTick] = useState(Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [contestView, setContestView] = useState<"active" | "registered" | "past" | "results">("active");
 
   const fetchContests = useCallback(async () => {
     setLoading(true);
@@ -187,14 +188,24 @@ export default function Contests() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const visibleContests = useMemo(() => {
+    const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
+    if (contestView === "registered") return contests.filter(registered);
+    if (contestView === "past") return contests.filter((contest) => postContestStates.includes(contest.contestState));
+    if (contestView === "results") {
+      return contests.filter((contest) => registered(contest) && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState));
+    }
+    return contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState));
+  }, [contestView, contests]);
+
   const grouped = useMemo(() => {
     const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
-    const live = contests.filter((contest) => ["live", "frozen"].includes(contest.contestState));
-    const upcoming = contests.filter((contest) => ["registration_open", "upcoming"].includes(contest.contestState));
-    const myPast = contests.filter((contest) => registered(contest) && postContestStates.includes(contest.contestState));
-    const past = contests.filter((contest) => !live.includes(contest) && !upcoming.includes(contest) && !myPast.includes(contest));
+    const live = visibleContests.filter((contest) => ["live", "frozen"].includes(contest.contestState));
+    const upcoming = visibleContests.filter((contest) => ["registration_open", "upcoming"].includes(contest.contestState));
+    const myPast = visibleContests.filter((contest) => registered(contest) && postContestStates.includes(contest.contestState));
+    const past = visibleContests.filter((contest) => !live.includes(contest) && !upcoming.includes(contest) && !myPast.includes(contest));
     return { live, upcoming, myPast, past };
-  }, [contests]);
+  }, [visibleContests]);
 
   const updateRegistration = async (contest: Contest, action: "register" | "withdraw" | "check-in") => {
     if (!isAuthenticated) {
@@ -327,6 +338,29 @@ export default function Contests() {
         <TestTypeCards />
       </div>
 
+      <div className="mb-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["active", "Active & Upcoming", contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)).length],
+          ["registered", "My Contests", contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn").length],
+          ["past", "Past Contests", contests.filter((contest) => postContestStates.includes(contest.contestState)).length],
+          ["results", "Results & Keys", contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn" && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState)).length],
+        ].map(([value, label, count]) => (
+          <button
+            key={value as string}
+            type="button"
+            onClick={() => setContestView(value as typeof contestView)}
+            className={`rounded-sm border p-3 text-left transition-colors ${
+              contestView === value
+                ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]"
+                : "border-border bg-card hover:bg-secondary/25"
+            }`}
+          >
+            <div className="font-serif text-sm font-bold">{label as string}</div>
+            <div className="mt-1 font-mono text-lg font-bold">{String(count)}</div>
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="academic-card p-12 text-center text-sm text-muted-foreground">Loading contests...</div>
       ) : contests.length === 0 ? (
@@ -337,6 +371,13 @@ export default function Contests() {
           <h2 className="font-serif text-xl font-bold text-foreground">No contests are published yet</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
             The platform supports full mock tests, subject wise tests, weekly tests, and advanced Challenge Yourself tests. When an admin publishes a contest, it will appear here with registration and result controls.
+          </p>
+        </div>
+      ) : visibleContests.length === 0 ? (
+        <div className="academic-card p-8 text-center">
+          <h2 className="font-serif text-xl font-bold text-foreground">No contests in this view</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Switch filters to see active contests, registered contests, past contests, or released results and answer keys.
           </p>
         </div>
       ) : (
