@@ -4,6 +4,7 @@ import Submission from "../models/Submission";
 import RatingHistory from "../models/RatingHistory";
 import Contest from "../models/Contest";
 import ContestRegistration from "../models/ContestRegistration";
+import { getContestState } from "../utils/contestLifecycle";
 
 const subjectsList = [
   "Statistics",
@@ -17,35 +18,6 @@ const subjectsList = [
 ];
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
-
-function getContestState(contest: any) {
-  const now = Date.now();
-  const start = new Date(contest.startTime).getTime();
-  const end = new Date(contest.endTime).getTime();
-  const regStart = contest.registrationStartTime ? new Date(contest.registrationStartTime).getTime() : start;
-  const regEnd = contest.registrationEndTime ? new Date(contest.registrationEndTime).getTime() : start;
-  const lifecycle = contest.lifecycle;
-
-  if (
-    [
-      "registration_open",
-      "live",
-      "frozen",
-      "ended",
-      "answer_key_released",
-      "claims_open",
-      "claims_closed",
-      "finalized",
-      "ratings_applied",
-    ].includes(lifecycle)
-  ) {
-    return lifecycle;
-  }
-  if (now >= end) return "ended";
-  if (now >= start && now < end) return "live";
-  if (now >= regStart && now < regEnd) return "registration_open";
-  return "upcoming";
-}
 
 const buildRatingHistory = (currentRating: number) => {
   const baseRating = 1500;
@@ -78,6 +50,37 @@ const getRatingData = async (userId: any, currentRating: number) => {
       }))
     : buildRatingHistory(currentRating);
   return { ratingHistory, ratingData };
+};
+
+const getRatingSummary = async (userId: any, currentRating: number, ratingHistory: any[]) => {
+  const highestFromHistory = ratingHistory.reduce((max, item: any) => {
+    return Math.max(max, Number(item.oldRating || 0), Number(item.newRating || 0));
+  }, Number(currentRating || 0));
+
+  if (!currentRating || currentRating <= 0) {
+    return {
+      globalRank: null,
+      countryRank: null,
+      highestRating: highestFromHistory,
+      ratedUsers: await User.countDocuments({ role: "student", rating: { $gt: 0 } }),
+    };
+  }
+
+  const [higherRatedUsers, ratedUsers] = await Promise.all([
+    User.countDocuments({
+      role: "student",
+      rating: { $gt: currentRating },
+      _id: { $ne: userId },
+    }),
+    User.countDocuments({ role: "student", rating: { $gt: 0 } }),
+  ]);
+
+  return {
+    globalRank: higherRatedUsers + 1,
+    countryRank: null,
+    highestRating: Math.max(highestFromHistory, currentRating),
+    ratedUsers,
+  };
 };
 
 const getContestDashboardData = async (userId: any) => {
@@ -398,6 +401,7 @@ export const getDashboard = async (req: Request, res: Response) => {
 
     const currentRating = user.rating || 0;
     const { ratingHistory, ratingData } = await getRatingData(userId, currentRating);
+    const ratingSummary = await getRatingSummary(userId, currentRating, ratingHistory);
     const contestDashboard = await getContestDashboardData(userId);
 
     const dashboard = {
@@ -408,6 +412,10 @@ export const getDashboard = async (req: Request, res: Response) => {
         currentStreakDays: statsSummary.currentStreakDays,
         overallAccuracy: statsSummary.overallAccuracy,
         rating: currentRating,
+        globalRank: ratingSummary.globalRank,
+        countryRank: ratingSummary.countryRank,
+        highestRating: ratingSummary.highestRating,
+        ratedUsers: ratingSummary.ratedUsers,
         totalAttempted: statsSummary.totalAttempted,
         totalCorrect: statsSummary.totalCorrect,
       },
@@ -451,11 +459,16 @@ export const streamDashboard = async (req: Request, res: Response) => {
         const statsSummary = await calculateUserStats(userId);
         const currentRating = user.rating || 0;
         const rating = await getRatingData(userId, currentRating);
+        const ratingSummary = await getRatingSummary(userId, currentRating, rating.ratingHistory);
         const contestDashboard = await getContestDashboardData(userId);
 
         const payload = {
           timestamp: new Date().toISOString(),
           rating: currentRating,
+          globalRank: ratingSummary.globalRank,
+          countryRank: ratingSummary.countryRank,
+          highestRating: ratingSummary.highestRating,
+          ratedUsers: ratingSummary.ratedUsers,
           contestsParticipated: contestDashboard.contestSummary.participated || rating.ratingHistory.length,
           ratingData: rating.ratingData,
           contestSummary: contestDashboard.contestSummary,

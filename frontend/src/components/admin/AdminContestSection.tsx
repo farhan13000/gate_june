@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Award, BarChart3, Check, Eye, FileQuestion, Flag, Gavel, KeyRound, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -52,7 +52,31 @@ type AdminStanding = {
   submissionCount?: number;
   attemptedQuestions?: number;
   lastSubmittedAt?: string;
+  responses?: AdminContestResponse[];
   updatedAt: string;
+};
+
+type AdminContestResponse = {
+  _id: string;
+  question?: {
+    _id: string;
+    title?: string;
+    contentId?: string;
+    problemId?: string;
+    questionType?: string;
+    options?: Array<{ _id: string; text: string; isCorrect?: boolean }>;
+  } | null;
+  answer: {
+    mcqSelected?: string | null;
+    msqSelected?: string[];
+    natAnswer?: string;
+  };
+  isCorrect: boolean;
+  marksAwarded: number;
+  attemptNumber: number;
+  judgeStatus: string;
+  submittedAt: string;
+  judgedAt?: string;
 };
 
 type AdminClaim = {
@@ -104,6 +128,74 @@ const lifecycleHelp = [
   ["finalized", "Finalized", "Ranks are locked."],
   ["ratings_applied", "Ratings", "Rating history is written."],
 ];
+
+type ContestForm = typeof emptyForm;
+
+function getTimeValue(value?: string) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : NaN;
+}
+
+function getContestTimingErrors(form: ContestForm) {
+  const errors: Partial<Record<"startTime" | "endTime" | "registrationStartTime" | "registrationEndTime", string>> = {};
+  const start = getTimeValue(form.startTime);
+  const end = getTimeValue(form.endTime);
+  const registrationStart = getTimeValue(form.registrationStartTime);
+  const registrationEnd = getTimeValue(form.registrationEndTime);
+
+  if (Number.isNaN(start)) errors.startTime = "Enter a valid contest start time.";
+  if (Number.isNaN(end)) errors.endTime = "Enter a valid contest end time.";
+  if (Number.isNaN(registrationStart)) errors.registrationStartTime = "Enter a valid registration opening time.";
+  if (Number.isNaN(registrationEnd)) errors.registrationEndTime = "Enter a valid registration closing time.";
+
+  if (start !== null && end !== null && Number.isFinite(start) && Number.isFinite(end) && end <= start) {
+    errors.endTime = "Contest end time must be after the start time.";
+  }
+
+  if (
+    registrationStart !== null &&
+    registrationEnd !== null &&
+    Number.isFinite(registrationStart) &&
+    Number.isFinite(registrationEnd) &&
+    registrationEnd <= registrationStart
+  ) {
+    errors.registrationEndTime = "Registration closing time must be after opening time.";
+  }
+
+  if (
+    registrationStart === null &&
+    registrationEnd !== null &&
+    start !== null &&
+    Number.isFinite(registrationEnd) &&
+    Number.isFinite(start) &&
+    registrationEnd <= start - 7 * 24 * 60 * 60 * 1000
+  ) {
+    errors.registrationEndTime = "Registration closing time must be after the auto opening time.";
+  }
+
+  if (
+    registrationStart !== null &&
+    start !== null &&
+    Number.isFinite(registrationStart) &&
+    Number.isFinite(start) &&
+    registrationStart >= start
+  ) {
+    errors.registrationStartTime = "Registration must open before the contest starts.";
+  }
+
+  if (
+    registrationEnd !== null &&
+    start !== null &&
+    Number.isFinite(registrationEnd) &&
+    Number.isFinite(start) &&
+    registrationEnd > start
+  ) {
+    errors.registrationEndTime = "Registration must close before or at the contest start time.";
+  }
+
+  return errors;
+}
 
 const managerPanels = [
   { id: "setup", label: "Setup", description: "Create or edit contest basics", Icon: Settings2 },
@@ -239,11 +331,14 @@ export default function AdminContestSection() {
   const [claimResponses, setClaimResponses] = useState<Record<string, string>>({});
   const [activePanel, setActivePanel] = useState<ManagerPanel>("setup");
   const [adminContestView, setAdminContestView] = useState<"new" | "upcoming" | "live" | "past" | "all">("new");
+  const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
 
   const selectedContest = useMemo(
     () => contests.find((contest) => contest._id === selectedContestId) || null,
     [contests, selectedContestId]
   );
+  const timingErrors = useMemo(() => getContestTimingErrors(form), [form]);
+  const hasTimingErrors = Object.keys(timingErrors).length > 0;
 
   const fetchContests = useCallback(async () => {
     try {
@@ -253,7 +348,6 @@ export default function AdminContestSection() {
         setContests(data);
         if (!selectedContestId && data.length > 0) {
           setSelectedContestId(data[0]._id);
-          setSelectedQuestionIds((data[0].questions || []).map(getProblemId).filter(Boolean));
         }
       }
     } catch {
@@ -345,12 +439,23 @@ export default function AdminContestSection() {
   const resetForm = () => {
     setForm(emptyForm);
     setEditingId(null);
+    setSelectedContestId(null);
+    setSelectedQuestionIds([]);
+  };
+
+  const selectContest = (contestId: string) => {
+    setSelectedContestId(contestId);
+    setExpandedParticipantId(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.description || !form.startTime || !form.endTime) {
       toast.error("Fill all required fields");
+      return;
+    }
+    if (hasTimingErrors) {
+      toast.error("Please correct the contest timing before saving");
       return;
     }
 
@@ -373,8 +478,12 @@ export default function AdminContestSection() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const saved = await res.json();
         toast.success(editingId ? "Contest updated" : "Contest created");
-        resetForm();
+        setForm(emptyForm);
+        setEditingId(null);
+        setSelectedContestId(saved._id);
+        setSelectedQuestionIds((saved.questions || []).map(getProblemId).filter(Boolean));
         fetchContests();
       } else {
         const data = await res.json();
@@ -386,6 +495,7 @@ export default function AdminContestSection() {
   };
 
   const startEdit = (contest: Contest) => {
+    setSelectedContestId(contest._id);
     setEditingId(contest._id);
     setForm({
       title: contest.title,
@@ -443,6 +553,32 @@ export default function AdminContestSection() {
       const data = await res.json().catch(() => ({}));
       toast.error(data.message || "Failed to update contest problems");
     }
+  };
+
+  const formatDateTime = (value?: string) => {
+    if (!value) return "-";
+    return new Date(value).toLocaleString();
+  };
+
+  const timingInputClass = (field: keyof typeof timingErrors) =>
+    `w-full rounded-sm border bg-background px-3 py-2 text-xs outline-none focus:border-primary ${
+      timingErrors[field] ? "border-destructive" : "border-border"
+    }`;
+
+  const formatAdminAnswer = (response: AdminContestResponse) => {
+    const question = response.question;
+    const options = question?.options || [];
+    if (question?.questionType === "NAT") return response.answer?.natAnswer || "-";
+    if (question?.questionType === "MSQ") {
+      const selected = response.answer?.msqSelected || [];
+      if (selected.length === 0) return "-";
+      return selected
+        .map((id) => options.find((option) => String(option._id) === String(id))?.text || id)
+        .join(", ");
+    }
+    const selected = response.answer?.mcqSelected;
+    if (!selected) return "-";
+    return options.find((option) => String(option._id) === String(selected))?.text || selected;
   };
 
   const runContestAction = async (action: "release-answer-key" | "open-claims" | "close-claims" | "finalize-ratings") => {
@@ -545,13 +681,24 @@ export default function AdminContestSection() {
             <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
               <select
                 value={selectedContestId || ""}
-                onChange={(event) => setSelectedContestId(event.target.value)}
+                onChange={(event) => selectContest(event.target.value)}
                 className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none md:w-80"
               >
                 {contests.map((contest) => (
                   <option key={contest._id} value={contest._id}>{contest.title}</option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setActivePanel("setup");
+                }}
+                className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+              >
+                <Plus size={13} />
+                New
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -652,8 +799,9 @@ export default function AdminContestSection() {
               type="datetime-local"
               value={form.startTime}
               onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+              className={timingInputClass("startTime")}
             />
+            {timingErrors.startTime && <p className="mt-1 text-[11px] text-destructive">{timingErrors.startTime}</p>}
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold">End Date & Time</label>
@@ -661,8 +809,9 @@ export default function AdminContestSection() {
               type="datetime-local"
               value={form.endTime}
               onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+              className={timingInputClass("endTime")}
             />
+            {timingErrors.endTime && <p className="mt-1 text-[11px] text-destructive">{timingErrors.endTime}</p>}
           </div>
         </div>
 
@@ -673,9 +822,11 @@ export default function AdminContestSection() {
               type="datetime-local"
               value={form.registrationStartTime}
               onChange={(e) => setForm({ ...form, registrationStartTime: e.target.value })}
-              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+              className={timingInputClass("registrationStartTime")}
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">Leave blank to auto-open before the contest.</p>
+            <p className={`mt-1 text-[11px] ${timingErrors.registrationStartTime ? "text-destructive" : "text-muted-foreground"}`}>
+              {timingErrors.registrationStartTime || "Leave blank to auto-open before the contest."}
+            </p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold">Registration Closes</label>
@@ -683,11 +834,19 @@ export default function AdminContestSection() {
               type="datetime-local"
               value={form.registrationEndTime}
               onChange={(e) => setForm({ ...form, registrationEndTime: e.target.value })}
-              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+              className={timingInputClass("registrationEndTime")}
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">Usually this should match the contest start time.</p>
+            <p className={`mt-1 text-[11px] ${timingErrors.registrationEndTime ? "text-destructive" : "text-muted-foreground"}`}>
+              {timingErrors.registrationEndTime || "Usually this should match the contest start time."}
+            </p>
           </div>
         </div>
+
+        {hasTimingErrors && (
+          <div className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Fix the highlighted timing fields before setting this contest.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-3">
           {[
@@ -712,7 +871,7 @@ export default function AdminContestSection() {
               Cancel
             </button>
           )}
-          <button type="submit" className="btn-primary flex items-center justify-center gap-1 px-6 py-2 text-xs">
+          <button type="submit" disabled={hasTimingErrors} className="btn-primary flex items-center justify-center gap-1 px-6 py-2 text-xs disabled:opacity-50">
             <Plus size={14} />
             {editingId ? "Update Contest" : "Save Contest"}
           </button>
@@ -760,7 +919,7 @@ export default function AdminContestSection() {
                 <button
                   key={contest._id}
                   type="button"
-                  onClick={() => setSelectedContestId(contest._id)}
+                  onClick={() => selectContest(contest._id)}
                   className={`flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-secondary/20 ${
                     selectedContestId === contest._id ? "bg-primary/5" : ""
                   }`}
@@ -1050,29 +1209,95 @@ export default function AdminContestSection() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {adminStandings.map((row) => (
-                <tr key={row._id} className="hover:bg-secondary/20">
-                  <td className="px-4 py-3 font-mono text-muted-foreground">#{row.rank || "-"}</td>
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-foreground">{row.user.fullName}</div>
-                    <div className="font-mono text-[10px] text-muted-foreground">{row.user.email}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-foreground">{row.finishedAt ? "locked" : row.registrationStatus || "standing"}</div>
-                    <div className="font-mono text-[10px] text-muted-foreground">
-                      {row.lastSubmittedAt ? new Date(row.lastSubmittedAt).toLocaleString() : row.startedAt ? new Date(row.startedAt).toLocaleString() : row.registeredAt ? new Date(row.registeredAt).toLocaleString() : "-"}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">
-                    {row.attemptedQuestions ?? 0} q / {row.submissionCount ?? 0}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-bold text-foreground">{row.score}</td>
-                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.visibleScore}</td>
-                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.solvedCount}</td>
-                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.wrongAttempts}</td>
-                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.penaltyMinutes}</td>
-                </tr>
-              ))}
+              {adminStandings.map((row) => {
+                const expanded = expandedParticipantId === row._id;
+                return (
+                  <Fragment key={row._id}>
+                    <tr className="hover:bg-secondary/20">
+                      <td className="px-4 py-3 font-mono text-muted-foreground">#{row.rank || "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-foreground">{row.user.fullName}</div>
+                        <div className="font-mono text-[10px] text-muted-foreground">{row.user.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-foreground">{row.finishedAt ? "locked" : row.registrationStatus || "standing"}</div>
+                        <div className="font-mono text-[10px] text-muted-foreground">
+                          {formatDateTime(row.lastSubmittedAt || row.startedAt || row.registeredAt)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                        {row.attemptedQuestions ?? 0} q / {row.submissionCount ?? 0}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-foreground">{row.score}</td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.visibleScore}</td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.solvedCount}</td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.wrongAttempts}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <span className="font-mono text-muted-foreground">{row.penaltyMinutes}</span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedParticipantId(expanded ? null : row._id)}
+                            className="rounded-sm border border-border px-2 py-1 text-[10px] font-semibold text-foreground hover:bg-secondary"
+                          >
+                            {expanded ? "Hide" : "Details"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {expanded && (
+                      <tr className="bg-secondary/10">
+                        <td colSpan={9} className="px-4 py-4">
+                          <div className="grid gap-3 lg:grid-cols-4">
+                            {[
+                              ["Registered", formatDateTime(row.registeredAt)],
+                              ["Started", formatDateTime(row.startedAt)],
+                              ["Locked", formatDateTime(row.finishedAt)],
+                              ["Last Response", formatDateTime(row.lastSubmittedAt)],
+                            ].map(([label, value]) => (
+                              <div key={label} className="rounded-sm border border-border bg-background p-3">
+                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                                <div className="mt-1 font-mono text-[11px] text-foreground">{value}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-4 rounded-sm border border-border bg-background">
+                            <div className="border-b border-border px-3 py-2 text-xs font-bold">Saved Responses</div>
+                            <div className="max-h-96 overflow-y-auto">
+                              {(row.responses || []).map((response) => (
+                                <div key={response._id} className="grid gap-2 border-b border-border p-3 text-xs last:border-b-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem_8rem]">
+                                  <div className="min-w-0">
+                                    <div className="truncate font-semibold text-foreground">
+                                      {response.question?.contentId || response.question?.problemId || response.question?._id || "Question"}
+                                    </div>
+                                    <div className="mt-1 line-clamp-2 text-muted-foreground">{response.question?.title || "Question details unavailable"}</div>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Answer</div>
+                                    <div className="mt-1 line-clamp-2 text-foreground">{formatAdminAnswer(response)}</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-mono text-foreground">Attempt {response.attemptNumber}</div>
+                                    <div className={response.isCorrect ? "text-green-600" : "text-destructive"}>
+                                      {response.judgeStatus} / {response.marksAwarded}
+                                    </div>
+                                  </div>
+                                  <div className="font-mono text-[11px] text-muted-foreground">
+                                    {formatDateTime(response.submittedAt)}
+                                  </div>
+                                </div>
+                              ))}
+                              {(row.responses || []).length === 0 && (
+                                <div className="p-4 text-center text-xs text-muted-foreground">No saved responses for this participant yet.</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
               {adminStandings.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">

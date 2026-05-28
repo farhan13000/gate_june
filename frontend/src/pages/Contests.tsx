@@ -190,6 +190,12 @@ function resultActionLabel(state: Contest["contestState"]) {
   return "View Summary";
 }
 
+function registrationLabel(status?: string) {
+  if (status === "checked_in") return "Entered";
+  if (status === "disqualified") return "Disqualified";
+  return "Registered";
+}
+
 export default function Contests() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -282,11 +288,11 @@ export default function Contests() {
         return (
           <button
             type="button"
-            disabled={busyId === contest._id}
-            onClick={() => updateRegistration(contest, "register")}
-            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
+            disabled
+            className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60"
           >
-            Register
+            <Lock size={13} />
+            Registration Closed
           </button>
         );
       }
@@ -472,7 +478,7 @@ export default function Contests() {
                               <span className="inline-flex items-center gap-1"><Users size={12} /> {contest.registrationCount}</span>
                               {contest.userRegistration && contest.userRegistration.status !== "withdrawn" && (
                                 <span className="inline-flex items-center gap-1 text-primary">
-                                  <CheckCircle2 size={12} /> Participated
+                                  <CheckCircle2 size={12} /> {registrationLabel(contest.userRegistration.status)}
                                 </span>
                               )}
                             </div>

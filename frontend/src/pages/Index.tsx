@@ -120,14 +120,14 @@ function AnnouncementLink({
         href={link}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-start justify-between gap-2 text-xs hover:underline"
+        className="flex items-start justify-between gap-3 border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2 text-xs transition-colors hover:border-[#93c5fd] hover:bg-[#eff6ff]"
       >
         {inner}
       </a>
     );
   }
 
-  return <div className="flex items-start justify-between gap-2 text-xs">{inner}</div>;
+  return <div className="flex items-start justify-between gap-3 border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2 text-xs">{inner}</div>;
 }
 
 export default function Index() {
@@ -386,7 +386,10 @@ export default function Index() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-none bg-[#eff6ff] text-[#2563eb]">
                   <Award size={16} />
                 </div>
-                <h2 className="text-sm font-semibold text-[#0f172a]">Important Announcements</h2>
+                <div>
+                  <h2 className="text-sm font-semibold text-[#0f172a]">Contest Alerts</h2>
+                  <p className="text-xs text-[#64748b]">Registration windows, keys, claims, and results.</p>
+                </div>
               </div>
               {loading ? (
                 <div className="flex justify-center py-6">
@@ -396,7 +399,7 @@ export default function Index() {
                 <ul className="space-y-2">
                   {important.map((item) => (
                     <li key={item._id}>
-                      <AnnouncementLink title={item.title} link={item.link} date={item.date} />
+                      <AnnouncementLink title={item.title} link={item.link} date={item.date} isNew={item.isNew} />
                     </li>
                   ))}
                 </ul>
@@ -404,13 +407,13 @@ export default function Index() {
                 <EmptyState
                   variant="compact"
                   icon={Award}
-                  title="No critical updates right now"
+                  title="No contest alerts right now"
                   statusLabel="Clear"
                   description="Important exam notices—registration windows, syllabus changes, and official GATE DA deadlines—will be highlighted here as they are published."
                   hints={[
-                    "GATE 2026 registration & admit card dates",
-                    "Syllabus revisions and exam pattern changes",
-                    "Official mock schedules and proctoring rules",
+                    "Registration open alerts",
+                    "Answer key and claim windows",
+                    "Result and rating declarations",
                   ]}
                 />
               )}
@@ -421,7 +424,10 @@ export default function Index() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-none bg-[#eff6ff] text-[#2563eb]">
                   <MessageCircle size={16} />
                 </div>
-                <h2 className="text-sm font-semibold text-[#0f172a]">Recent Announcements</h2>
+                <div>
+                  <h2 className="text-sm font-semibold text-[#0f172a]">Latest Contest Updates</h2>
+                  <p className="text-xs text-[#64748b]">New contest notices are marked clearly.</p>
+                </div>
               </div>
               {loading ? (
                 <div className="flex justify-center py-6">
@@ -443,9 +449,9 @@ export default function Index() {
                   statusLabel="Fresh"
                   description="Latest platform news, new problem drops, and contest openings appear in this feed—newest items marked when published."
                   hints={[
-                    "New mock tests and weekly challenge drops",
-                    "Fresh theory chapters and problem sets",
-                    "Community highlights and preparation tips",
+                    "Upcoming mock tests",
+                    "Registration-start notices",
+                    "Published keys and declared results",
                   ]}
                 />
               )}

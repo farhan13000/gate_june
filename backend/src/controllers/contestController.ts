@@ -6,24 +6,7 @@ import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
 import RatingHistory from "../models/RatingHistory";
-
-function getContestState(contest: any) {
-  const now = Date.now();
-  const start = new Date(contest.startTime).getTime();
-  const end = new Date(contest.endTime).getTime();
-  const regStart = contest.registrationStartTime ? new Date(contest.registrationStartTime).getTime() : start;
-  const regEnd = contest.registrationEndTime ? new Date(contest.registrationEndTime).getTime() : start;
-  const lifecycle = contest.lifecycle;
-
-  if (["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(lifecycle)) {
-    return lifecycle;
-  }
-  if (now >= end) return "ended";
-  if (["live", "frozen"].includes(lifecycle)) return lifecycle;
-  if (now >= start && now < end) return "live";
-  if (lifecycle === "registration_open" || (now >= regStart && now < regEnd)) return "registration_open";
-  return "upcoming";
-}
+import { getContestState, isContestOpenForArena, isPostContestState } from "../utils/contestLifecycle";
 
 function normalizeNat(value: string) {
   return String(value || "").trim().toLowerCase();
@@ -253,7 +236,7 @@ export const registerForContest = async (req: Request, res: Response): Promise<v
     }
 
     const state = getContestState(contest);
-    if (!["registration_open", "upcoming", "live", "frozen"].includes(state)) {
+    if (!["registration_open", "upcoming"].includes(state)) {
       res.status(400).json({ message: "Registration is not open for this contest" });
       return;
     }
@@ -314,8 +297,7 @@ export const checkInContest = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const state = getContestState(contest);
-    if (!["live", "frozen"].includes(state)) {
+    if (!isContestOpenForArena(contest)) {
       res.status(400).json({ message: "Contest is not live yet" });
       return;
     }
@@ -351,7 +333,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
     }
 
     const state = getContestState(contest);
-    if (!["live", "frozen", "ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(state)) {
+    if (!isContestOpenForArena(contest) && !isPostContestState(state)) {
       res.status(403).json({ message: "Contest room opens when the contest goes live" });
       return;
     }
@@ -434,7 +416,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       submissions: sanitizedSubmissions,
       standing: visibleStanding,
       claims,
-      canSubmit: ["live", "frozen"].includes(state) && !registration.finishedAt,
+      canSubmit: isContestOpenForArena(contest) && !registration.finishedAt,
       canReveal,
       claimsOpen,
       ratingChange: canReveal ? ratingChange : null,
@@ -505,7 +487,7 @@ export const submitContestAnswer = async (req: Request, res: Response): Promise<
       res.status(404).json({ message: "Contest not found" });
       return;
     }
-    if (!["live", "frozen"].includes(getContestState(contest))) {
+    if (!isContestOpenForArena(contest)) {
       res.status(400).json({ message: "Contest is not accepting submissions" });
       return;
     }
@@ -580,8 +562,7 @@ export const finishContest = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const state = getContestState(contest);
-    if (!["live", "frozen"].includes(state)) {
+    if (!isContestOpenForArena(contest)) {
       res.status(400).json({ message: "Contest is not accepting final submission" });
       return;
     }
@@ -615,7 +596,7 @@ export const getContestStandings = async (req: Request, res: Response): Promise<
     await recomputeContestRanks(contest._id);
     const state = getContestState(contest);
     const isFrozen = ["frozen", "live"].includes(state) && contest.freezeTime && Date.now() >= new Date(contest.freezeTime).getTime();
-    const showFinal = ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(state);
+    const showFinal = isPostContestState(state);
     const useVisible = Boolean(isFrozen && !showFinal);
 
     const standings = await ContestStanding.find({ contestId: contest._id, disqualified: false })

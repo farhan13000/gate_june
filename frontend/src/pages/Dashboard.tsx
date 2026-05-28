@@ -307,6 +307,7 @@ export default function Dashboard() {
   const problemsSolved = dashboard?.stats?.problemsSolved ?? 0;
   const streak = dashboard?.stats?.currentStreakDays ?? 0;
   const contests = dashboard?.stats?.contestsParticipated ?? 0;
+  const highestRating = dashboard?.stats?.highestRating ?? rating;
   const contestSummary = dashboard?.contestSummary ?? {
     registered: contests,
     participated: contests,
@@ -330,9 +331,9 @@ export default function Dashboard() {
     }
   });
 
-  const globalRank = typeof dashboard?.stats?.rating === "number" ? `#${Math.max(1, 2000 - Math.floor(rating * 0.95))}` : "—";
-  const countryRank = typeof dashboard?.stats?.rating === "number" ? `#${Math.max(1, 500 - Math.floor(rating * 0.24))}` : "—";
-  const ratingStarsCount = Math.min(5, Math.max(1, Math.floor(rating / 400)));
+  const globalRank = dashboard?.stats?.globalRank ? `#${dashboard.stats.globalRank}` : "—";
+  const countryRank = dashboard?.stats?.countryRank ? `#${dashboard.stats.countryRank}` : "—";
+  const ratingStarsCount = rating > 0 ? Math.min(5, Math.max(1, Math.floor(rating / 400))) : 0;
 
   return (
     <div className="w-full">
@@ -846,14 +847,20 @@ export default function Dashboard() {
             <div className="font-mono text-4xl font-bold text-foreground">{rating}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{rating >= 2000 ? "(Div 1)" : rating >= 1500 ? "(Div 2)" : "(Unrated)"}</div>
             <div className="flex justify-center gap-0.5 mt-2 mb-1.5">
-              {[...Array(ratingStarsCount)].map((_, i) => (
-                <div key={i} className="w-5 h-5 bg-primary flex items-center justify-center">
-                  <span className="text-primary-foreground text-[10px]">★</span>
+              {ratingStarsCount > 0 ? (
+                [...Array(ratingStarsCount)].map((_, i) => (
+                  <div key={i} className="w-5 h-5 bg-primary flex items-center justify-center">
+                    <span className="text-primary-foreground text-[10px]">*</span>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-sm border border-border bg-secondary/30 px-2 py-1 text-[10px] text-muted-foreground">
+                  No rated contests yet
                 </div>
-              ))}
+              )}
             </div>
             <div className="text-xs text-primary font-semibold">GATE DA Rating</div>
-            <div className="text-[10px] text-muted-foreground">(Highest: {rating})</div>
+            <div className="text-[10px] text-muted-foreground">(Highest: {highestRating})</div>
             {latestRatingChange && (
               <div className={`mt-2 text-xs font-mono font-bold ${latestRatingChange.delta >= 0 ? "text-primary" : "text-destructive"}`}>
                 Last contest: {latestRatingChange.delta >= 0 ? "+" : ""}{latestRatingChange.delta} rating

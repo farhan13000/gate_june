@@ -85,6 +85,47 @@ function lifecycleAnnouncement(contest: any, previousLifecycle?: string) {
   return null;
 }
 
+function parseOptionalDate(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function validateContestTiming({
+  startTime,
+  endTime,
+  registrationStartTime,
+  registrationEndTime,
+}: {
+  startTime?: Date;
+  endTime?: Date;
+  registrationStartTime?: Date;
+  registrationEndTime?: Date;
+}) {
+  if (!startTime || Number.isNaN(startTime.getTime())) return "startTime must be a valid date";
+  if (!endTime || Number.isNaN(endTime.getTime())) return "endTime must be a valid date";
+  if (endTime.getTime() <= startTime.getTime()) return "endTime must be after startTime";
+  if (registrationStartTime && Number.isNaN(registrationStartTime.getTime())) {
+    return "registrationStartTime must be a valid date";
+  }
+  if (registrationEndTime && Number.isNaN(registrationEndTime.getTime())) {
+    return "registrationEndTime must be a valid date";
+  }
+  const effectiveRegistrationStartTime =
+    registrationStartTime || new Date(startTime.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const effectiveRegistrationEndTime = registrationEndTime || startTime;
+  if (effectiveRegistrationEndTime.getTime() <= effectiveRegistrationStartTime.getTime()) {
+    return "registrationEndTime must be after registrationStartTime";
+  }
+  if (registrationStartTime && registrationStartTime.getTime() >= startTime.getTime()) {
+    return "registrationStartTime must be before startTime";
+  }
+  if (registrationEndTime && registrationEndTime.getTime() > startTime.getTime()) {
+    return "registrationEndTime must be before or equal to startTime";
+  }
+  return null;
+}
+
 // ── Problem of the Day ───────────────────────────────────────────────────────
 
 export const getHomeSettings = async (_req: Request, res: Response): Promise<void> => {
@@ -273,8 +314,18 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({ message: "title, description, startTime, and endTime are required" });
       return;
     }
-    if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
-      res.status(400).json({ message: "endTime must be after startTime" });
+    const parsedStartTime = parseOptionalDate(startTime);
+    const parsedEndTime = parseOptionalDate(endTime);
+    const parsedRegistrationStartTime = parseOptionalDate(registrationStartTime);
+    const parsedRegistrationEndTime = parseOptionalDate(registrationEndTime);
+    const timingError = validateContestTiming({
+      startTime: parsedStartTime || undefined,
+      endTime: parsedEndTime || undefined,
+      registrationStartTime: parsedRegistrationStartTime || undefined,
+      registrationEndTime: parsedRegistrationEndTime || undefined,
+    });
+    if (timingError) {
+      res.status(400).json({ message: timingError });
       return;
     }
 
@@ -282,14 +333,14 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       title: title.trim(),
       description: description.trim(),
       meta: meta?.trim(),
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
+      startTime: parsedStartTime,
+      endTime: parsedEndTime,
       contestType: contestType || "full_mock",
       visibility: visibility || "public",
       scoringMode: scoringMode || "gate",
       lifecycle: lifecycle || "published",
-      registrationStartTime: registrationStartTime ? new Date(registrationStartTime) : undefined,
-      registrationEndTime: registrationEndTime ? new Date(registrationEndTime) : undefined,
+      registrationStartTime: parsedRegistrationStartTime || undefined,
+      registrationEndTime: parsedRegistrationEndTime || undefined,
       freezeTime: freezeTime ? new Date(freezeTime) : undefined,
       answerKeyReleaseTime: answerKeyReleaseTime ? new Date(answerKeyReleaseTime) : undefined,
       claimsOpenTime: claimsOpenTime ? new Date(claimsOpenTime) : undefined,
@@ -364,24 +415,45 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
       instructions,
       rules,
     } = req.body;
+    const hasTimingUpdate =
+      startTime !== undefined ||
+      endTime !== undefined ||
+      registrationStartTime !== undefined ||
+      registrationEndTime !== undefined;
+    const parsedStartTime = startTime !== undefined ? parseOptionalDate(startTime) : contest.startTime;
+    const parsedEndTime = endTime !== undefined ? parseOptionalDate(endTime) : contest.endTime;
+    const parsedRegistrationStartTime =
+      registrationStartTime !== undefined ? parseOptionalDate(registrationStartTime) : contest.registrationStartTime;
+    const parsedRegistrationEndTime =
+      registrationEndTime !== undefined ? parseOptionalDate(registrationEndTime) : contest.registrationEndTime;
+
+    if (hasTimingUpdate) {
+      const timingError = validateContestTiming({
+        startTime: parsedStartTime || undefined,
+        endTime: parsedEndTime || undefined,
+        registrationStartTime: parsedRegistrationStartTime || undefined,
+        registrationEndTime: parsedRegistrationEndTime || undefined,
+      });
+      if (timingError) {
+        res.status(400).json({ message: timingError });
+        return;
+      }
+    }
+
     if (title !== undefined) contest.title = title.trim();
     if (description !== undefined) contest.description = description.trim();
     if (meta !== undefined) contest.meta = meta?.trim();
-    if (startTime !== undefined) contest.startTime = new Date(startTime);
-    if (endTime !== undefined) contest.endTime = new Date(endTime);
-    if (contest.endTime.getTime() <= contest.startTime.getTime()) {
-      res.status(400).json({ message: "endTime must be after startTime" });
-      return;
-    }
+    if (startTime !== undefined && parsedStartTime) contest.startTime = parsedStartTime;
+    if (endTime !== undefined && parsedEndTime) contest.endTime = parsedEndTime;
     if (contestType !== undefined) contest.contestType = contestType;
     if (visibility !== undefined) contest.visibility = visibility;
     if (scoringMode !== undefined) contest.scoringMode = scoringMode;
     if (lifecycle !== undefined) contest.lifecycle = lifecycle;
     if (registrationStartTime !== undefined) {
-      contest.registrationStartTime = registrationStartTime ? new Date(registrationStartTime) : undefined;
+      contest.registrationStartTime = parsedRegistrationStartTime || undefined;
     }
     if (registrationEndTime !== undefined) {
-      contest.registrationEndTime = registrationEndTime ? new Date(registrationEndTime) : undefined;
+      contest.registrationEndTime = parsedRegistrationEndTime || undefined;
     }
     if (freezeTime !== undefined) contest.freezeTime = freezeTime ? new Date(freezeTime) : undefined;
     if (answerKeyReleaseTime !== undefined) {
@@ -558,7 +630,7 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
       return;
     }
 
-    const [standings, registrations, submissionCounts] = await Promise.all([
+    const [standings, registrations, submissionCounts, submissions] = await Promise.all([
       ContestStanding.find({ contestId: contest._id })
         .populate("userId", "fullName email rating")
         .sort({ rank: 1, score: -1, penaltyMinutes: 1, updatedAt: -1 })
@@ -579,6 +651,10 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
           },
         },
       ]),
+      ContestSubmission.find({ contestId: contest._id })
+        .populate("questionId", "title contentId problemId questionType options markingScheme")
+        .sort({ userId: 1, submittedAt: 1 })
+        .lean(),
     ]);
 
     const submissionsByUser = new Map(
@@ -591,6 +667,34 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
         },
       ])
     );
+    const responseDetailsByUser = new Map<string, any[]>();
+    for (const submission of submissions as any[]) {
+      const userId = String(submission.userId);
+      const list = responseDetailsByUser.get(userId) || [];
+      list.push({
+        _id: submission._id,
+        question: submission.questionId
+          ? {
+              _id: submission.questionId._id,
+              title: submission.questionId.title,
+              contentId: submission.questionId.contentId,
+              problemId: submission.questionId.problemId,
+              questionType: submission.questionId.questionType,
+              options: submission.questionId.options || [],
+              markingScheme: submission.questionId.markingScheme,
+            }
+          : null,
+        answer: submission.answer,
+        isCorrect: submission.isCorrect,
+        marksAwarded: submission.marksAwarded,
+        attemptNumber: submission.attemptNumber,
+        judgeStatus: submission.judgeStatus,
+        source: submission.source,
+        submittedAt: submission.submittedAt,
+        judgedAt: submission.judgedAt,
+      });
+      responseDetailsByUser.set(userId, list);
+    }
     const registrationsByUser = new Map(registrations.map((registration: any) => [String(registration.userId?._id || registration.userId), registration]));
     const standingRows = standings.map((standing: any) => {
       const userId = String(standing.userId?._id || standing.userId);
@@ -618,6 +722,7 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
         submissionCount: submissionStats.submissions,
         attemptedQuestions: submissionStats.attemptedQuestions,
         lastSubmittedAt: submissionStats.lastSubmittedAt,
+        responses: responseDetailsByUser.get(userId) || [],
         updatedAt: standing.updatedAt,
       };
     });
@@ -649,6 +754,7 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
           submissionCount: submissionStats.submissions,
           attemptedQuestions: submissionStats.attemptedQuestions,
           lastSubmittedAt: submissionStats.lastSubmittedAt,
+          responses: responseDetailsByUser.get(userId) || [],
           updatedAt: registration.updatedAt,
         };
       });
