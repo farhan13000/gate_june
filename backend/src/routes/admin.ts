@@ -24,6 +24,7 @@ import {
   getContestAdminDetail,
   getContestAdminClaims,
   getContestAdminStandings,
+  streamContestAdminStandings,
   getContestProblemCandidates,
   createContest,
   updateContest,
@@ -32,6 +33,8 @@ import {
   releaseContestAnswerKey,
   openContestClaims,
   closeContestClaims,
+  previewContestRatingChanges,
+  syncContestLifecyclesNow,
   finalizeContestAndApplyRatings,
   deleteContest,
 } from "../controllers/homeAdminController";
@@ -121,15 +124,18 @@ router.delete("/announcements/:id", deleteAnnouncement);
 
 router.get("/contests", getContestsAdmin);
 router.post("/contests", createContest);
+router.post("/contests/sync-lifecycle", syncContestLifecyclesNow);
 router.get("/contests/problem-candidates", getContestProblemCandidates);
 router.get("/contests/:id", getContestAdminDetail);
 router.get("/contests/:id/standings", getContestAdminStandings);
+router.get("/contests/:id/standings/stream", streamContestAdminStandings);
 router.get("/contests/:id/claims", getContestAdminClaims);
 router.put("/contests/:id", updateContest);
 router.put("/contests/:id/problems", updateContestProblems);
 router.post("/contests/:id/release-answer-key", releaseContestAnswerKey);
 router.post("/contests/:id/open-claims", openContestClaims);
 router.post("/contests/:id/close-claims", closeContestClaims);
+router.get("/contests/:id/rating-preview", previewContestRatingChanges);
 router.post("/contests/:id/finalize-ratings", finalizeContestAndApplyRatings);
 router.put("/contests/:id/claims/:claimId", updateContestClaim);
 router.delete("/contests/:id", deleteContest);

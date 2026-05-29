@@ -7,7 +7,9 @@ import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
 import { getOrCreateSettings } from "../models/PlatformSettings";
-import { applyContestRatings } from "../utils/contestRating";
+import { applyContestRatings, previewContestRatings } from "../utils/contestRating";
+import { recomputeContestStandings } from "../utils/contestScoring";
+import { syncContestLifecycleById, syncDueContestLifecycles } from "../utils/contestLifecycleSync";
 import { invalidateHomeCache } from "../utils/homeCache";
 import { writePlatformLog } from "../utils/platformLogger";
 
@@ -273,6 +275,7 @@ export const deleteAnnouncement = async (req: Request, res: Response): Promise<v
 
 export const getContestsAdmin = async (_req: Request, res: Response): Promise<void> => {
   try {
+    await syncDueContestLifecycles();
     const contests = await Contest.find()
       .populate("createdBy", "fullName email")
       .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
@@ -499,16 +502,35 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
 
 export const deleteContest = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findByIdAndDelete(req.params.id);
+    const contest = await Contest.findById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
       return;
     }
+    const force = req.query.force === "true" || req.body?.force === true;
+    const [registrations, submissions, standings, claims] = await Promise.all([
+      ContestRegistration.countDocuments({ contestId: contest._id }),
+      ContestSubmission.countDocuments({ contestId: contest._id }),
+      ContestStanding.countDocuments({ contestId: contest._id }),
+      ContestClaim.countDocuments({ contestId: contest._id }),
+    ]);
+    const hasActivity = registrations + submissions + standings + claims > 0;
+    if (hasActivity && !force) {
+      res.status(409).json({
+        message: "Contest has activity. Confirm forced deletion to remove it.",
+        requiresForce: true,
+        stats: { registrations, submissions, standings, claims },
+      });
+      return;
+    }
+
+    await Contest.deleteOne({ _id: contest._id });
     await recordContestAdminEvent({
       req,
       contest,
       action: "contest_deleted",
       message: `Contest "${contest.title}" deleted.`,
+      details: { force, registrations, submissions, standings, claims },
     });
     
     invalidateHomeCache();
@@ -520,6 +542,7 @@ export const deleteContest = async (req: Request, res: Response): Promise<void> 
 
 export const getContestAdminDetail = async (req: Request, res: Response): Promise<void> => {
   try {
+    await syncContestLifecycleById(req.params.id);
     const contest = await Contest.findById(req.params.id)
       .populate("createdBy", "fullName email")
       .populate("questions", "title contentId problemId difficulty questionType status topic markingScheme");
@@ -622,13 +645,15 @@ export const getContestProblemCandidates = async (req: Request, res: Response): 
   }
 };
 
-export const getContestAdminStandings = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const contest = await Contest.findById(req.params.id).select("title lifecycle startTime endTime freezeTime");
-    if (!contest) {
-      res.status(404).json({ message: "Contest not found" });
-      return;
-    }
+function writeSse(res: Response, event: string, data: unknown) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+async function buildContestAdminStandingsPayload(contestId: string) {
+    await syncContestLifecycleById(contestId);
+    const contest = await Contest.findById(contestId).select("title lifecycle startTime endTime freezeTime");
+    if (!contest) return null;
 
     const [standings, registrations, submissionCounts, submissions] = await Promise.all([
       ContestStanding.find({ contestId: contest._id })
@@ -759,13 +784,47 @@ export const getContestAdminStandings = async (req: Request, res: Response): Pro
         };
       });
 
-    res.json({
+    return {
       contest,
       standings: [...standingRows, ...registrationOnlyRows],
-    });
+    };
+}
+
+export const getContestAdminStandings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const payload = await buildContestAdminStandingsPayload(String(req.params.id));
+    if (!payload) {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch contest standings" });
   }
+};
+
+export const streamContestAdminStandings = async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const sendUpdate = async () => {
+    try {
+      const payload = await buildContestAdminStandingsPayload(String(req.params.id));
+      if (!payload) {
+        writeSse(res, "admin-standings-error", { message: "Contest not found" });
+        return;
+      }
+      writeSse(res, "admin-standings-update", { timestamp: new Date().toISOString(), ...payload });
+    } catch {
+      writeSse(res, "admin-standings-error", { message: "Failed to stream contest standings" });
+    }
+  };
+
+  await sendUpdate();
+  const timer = setInterval(sendUpdate, 5000);
+  req.on("close", () => clearInterval(timer));
 };
 
 export const getContestAdminClaims = async (req: Request, res: Response): Promise<void> => {
@@ -900,13 +959,57 @@ export const closeContestClaims = async (req: Request, res: Response): Promise<v
   }
 };
 
-export const finalizeContestAndApplyRatings = async (req: Request, res: Response): Promise<void> => {
+export const previewContestRatingChanges = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
       return;
     }
+
+    if (!contest.ratingEnabled) {
+      res.json({
+        canApply: false,
+        count: 0,
+        participants: 0,
+        alreadyApplied: false,
+        message: "Contest is unrated",
+        changes: [],
+      });
+      return;
+    }
+
+    await recomputeContestStandings(contest);
+    res.json(await previewContestRatings(contest._id.toString()));
+  } catch (error: any) {
+    res.status(400).json({ message: error.message || "Failed to preview rating changes" });
+  }
+};
+
+export const syncContestLifecyclesNow = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await syncDueContestLifecycles());
+  } catch (error: any) {
+    res.status(500).json({ message: error.message || "Failed to sync contest lifecycles" });
+  }
+};
+
+export const finalizeContestAndApplyRatings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contest = await syncContestLifecycleById(req.params.id);
+    if (!contest) {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+
+    const finalizableStates = ["ended", "answer_key_released", "claims_closed", "finalized", "ratings_applied"];
+    const hasEndedByClock = Date.now() >= new Date(contest.endTime).getTime();
+    if (!finalizableStates.includes(contest.lifecycle) && !hasEndedByClock) {
+      res.status(400).json({ message: "Contest can be finalized only after it has ended" });
+      return;
+    }
+
+    const participantCount = await recomputeContestStandings(contest);
 
     contest.lifecycle = "finalized";
     contest.status = "completed";
@@ -930,22 +1033,21 @@ export const finalizeContestAndApplyRatings = async (req: Request, res: Response
     }
 
     const rating = await applyContestRatings(contest._id.toString());
-    if (rating.applied || rating.count > 0) {
-      contest.lifecycle = "ratings_applied";
-      await contest.save();
-    }
+    contest.lifecycle = "ratings_applied";
+    contest.status = "completed";
+    await contest.save();
+
     await recordContestAdminEvent({
       req,
       contest,
-      action: rating.applied || rating.count > 0 ? "contest_ratings_applied" : "contest_finalized",
+      action: "contest_ratings_applied",
       message: `Contest "${contest.title}" finalized. ${rating.message || `${rating.count} rating changes processed.`}`,
-      announcementTitle: rating.applied || rating.count > 0
-        ? `Result declared and ratings applied: ${contest.title}`
-        : `Result declared: ${contest.title}`,
+      announcementTitle: `Result declared and ratings applied: ${contest.title}`,
       announcementType: "important",
       link: `/contests/${contest._id}`,
       details: {
         ratingEnabled: true,
+        participantCount,
         rating,
       },
     });

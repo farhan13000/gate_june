@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Eye, Flag, Send } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, Eye, Flag, Gavel, Send } from "lucide-react";
 import { toast } from "sonner";
 import LatexRenderer from "@/components/LatexRenderer";
 import EditorialRenderer from "@/components/EditorialRenderer";
@@ -72,6 +72,15 @@ function formatRemaining(endTime: string) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function labelize(value?: string) {
   return String(value || "")
     .replace(/[_-]+/g, " ")
@@ -91,6 +100,13 @@ function getCorrectAnswer(question: ContestQuestion) {
     .map((option) => option.text);
 }
 
+function claimStatusClass(status?: string) {
+  if (status === "accepted") return "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300";
+  if (status === "rejected") return "border-destructive/25 bg-destructive/10 text-destructive";
+  if (status === "under_review") return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  return "border-border bg-background text-muted-foreground";
+}
+
 export default function ContestRoom() {
   const { id } = useParams();
   const [room, setRoom] = useState<RoomData | null>(null);
@@ -105,6 +121,7 @@ export default function ContestRoom() {
   const [standings, setStandings] = useState<StandingRow[]>([]);
   const [standingMeta, setStandingMeta] = useState({ frozen: false, final: false });
   const [claimForm, setClaimForm] = useState({ type: "answer_key", title: "", description: "" });
+  const [claimQuestionId, setClaimQuestionId] = useState("");
 
   const loadRoom = useCallback(async () => {
     setLoading(true);
@@ -138,14 +155,37 @@ export default function ContestRoom() {
   }, [loadRoom, loadStandings]);
 
   useEffect(() => {
+    if (room?.canReveal || !room?.canSubmit) return undefined;
     const timer = window.setInterval(() => setTick(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [room?.canReveal, room?.canSubmit]);
 
   useEffect(() => {
     const timer = window.setInterval(loadStandings, 5000);
     return () => window.clearInterval(timer);
   }, [loadStandings]);
+
+  useEffect(() => {
+    if (!id) return undefined;
+    const esUrl = `${import.meta.env.VITE_API_BASE || ""}/api/contests/${id}/standings/stream`;
+    const es = new EventSource(esUrl, { withCredentials: true });
+    es.addEventListener("standings-update", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        setStandings(data.standings || []);
+        setStandingMeta({ frozen: Boolean(data.frozen), final: Boolean(data.final) });
+        if (data.contestState && data.contestState !== room?.contest.contestState) {
+          loadRoom();
+        }
+      } catch {
+        // Keep the last standings snapshot; polling/manual refresh remains available.
+      }
+    });
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [id, loadRoom, room?.contest.contestState]);
 
   const questions = room?.contest.questions || [];
   const activeQuestion = questions[activeIndex];
@@ -175,6 +215,28 @@ export default function ContestRoom() {
   const attemptedCount = room?.standing?.attemptedCount ?? submittedByQuestion.size;
   const totalQuestions = questions.length;
   const resultsVisible = Boolean(room?.canReveal);
+  const timeCard = useMemo(() => {
+    if (!room) return { label: "Time", value: "--" };
+    if (room.canReveal || ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(room.contest.contestState)) {
+      return { label: "Ended", value: formatDateTime(room.contest.endTime) };
+    }
+    if (!room.canSubmit) return { label: "Status", value: "Closed" };
+    return { label: "Time Left", value: formatRemaining(room.contest.endTime) };
+  }, [room, tick]);
+  const claimStats = useMemo(() => {
+    const claims = room?.claims || [];
+    return {
+      total: claims.length,
+      pending: claims.filter((claim) => claim.status === "pending").length,
+      review: claims.filter((claim) => claim.status === "under_review").length,
+      accepted: claims.filter((claim) => claim.status === "accepted").length,
+      rejected: claims.filter((claim) => claim.status === "rejected").length,
+    };
+  }, [room?.claims]);
+
+  useEffect(() => {
+    if (!claimQuestionId && activeQuestion?._id) setClaimQuestionId(activeQuestion._id);
+  }, [activeQuestion?._id, claimQuestionId]);
 
   const canSubmitAnswer = () => {
     if (!room?.canSubmit || !activeQuestion || activeLocked) return false;
@@ -232,7 +294,7 @@ export default function ContestRoom() {
   };
 
   const submitClaim = async () => {
-    if (!activeQuestion || !claimForm.title.trim() || !claimForm.description.trim()) {
+    if (!claimForm.title.trim() || !claimForm.description.trim()) {
       toast.error("Add claim title and description");
       return;
     }
@@ -241,7 +303,7 @@ export default function ContestRoom() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ ...claimForm, questionId: activeQuestion._id }),
+        body: JSON.stringify({ ...claimForm, questionId: claimQuestionId || activeQuestion?._id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to submit claim");
@@ -284,8 +346,8 @@ export default function ContestRoom() {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[28rem]">
           <div className="rounded-sm border border-border bg-card px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Time</div>
-            <div className="mt-0.5 font-mono text-base font-bold text-foreground" key={tick}>{formatRemaining(room.contest.endTime)}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{timeCard.label}</div>
+            <div className="mt-0.5 font-mono text-base font-bold text-foreground">{timeCard.value}</div>
           </div>
           <div className="rounded-sm border border-border bg-card px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{resultsVisible ? "Score" : "Attempted"}</div>
@@ -462,40 +524,6 @@ export default function ContestRoom() {
             </div>
           )}
 
-          {room.claimsOpen && (
-            <div className="mt-6 border-t border-border pt-5">
-              <h3 className="mb-3 font-serif text-base font-bold">Submit Claim</h3>
-              <div className="grid gap-3">
-                <select
-                  value={claimForm.type}
-                  onChange={(event) => setClaimForm({ ...claimForm, type: event.target.value })}
-                  className="rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
-                >
-                  <option value="answer_key">Answer key issue</option>
-                  <option value="ambiguous_question">Ambiguous question</option>
-                  <option value="marking">Marking issue</option>
-                  <option value="technical">Technical issue</option>
-                  <option value="other">Other</option>
-                </select>
-                <input
-                  value={claimForm.title}
-                  onChange={(event) => setClaimForm({ ...claimForm, title: event.target.value })}
-                  placeholder="Short claim title"
-                  className="rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
-                <textarea
-                  value={claimForm.description}
-                  onChange={(event) => setClaimForm({ ...claimForm, description: event.target.value })}
-                  placeholder="Explain the issue clearly with expected correction."
-                  rows={4}
-                  className="rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
-                <button type="button" onClick={submitClaim} className="btn-primary justify-self-start px-4 py-2 text-xs">
-                  Submit Claim
-                </button>
-              </div>
-            </div>
-          )}
         </main>
 
         <aside className="academic-card flex flex-col overflow-hidden">
@@ -651,26 +679,119 @@ export default function ContestRoom() {
       </div>
 
       <div className="mt-5 academic-card overflow-hidden">
-        <div className="border-b border-border bg-secondary/25 px-4 py-3">
-          <h2 className="font-serif text-base font-bold text-foreground">My Claims</h2>
-          <p className="text-xs text-muted-foreground">Claims become available when the admin opens the review window.</p>
+        <div className="flex flex-col gap-3 border-b border-border bg-secondary/25 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="font-serif text-base font-bold text-foreground">Claims Center</h2>
+            <p className="text-xs text-muted-foreground">Submit answer-key or marking concerns and track the admin decision for each claim.</p>
+          </div>
+          <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
+            {[
+              ["All", claimStats.total],
+              ["Pending", claimStats.pending],
+              ["Review", claimStats.review],
+              ["Accepted", claimStats.accepted],
+              ["Rejected", claimStats.rejected],
+            ].map(([label, value]) => (
+              <div key={label as string} className="rounded-sm border border-border bg-background px-2 py-1">
+                <div className="font-mono font-bold text-foreground">{String(value)}</div>
+                <div className="text-muted-foreground">{label as string}</div>
+              </div>
+            ))}
+          </div>
         </div>
+
+        {room.claimsOpen ? (
+          <div className="grid gap-4 border-b border-border p-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground">
+                <Gavel size={16} />
+                New Claim
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <select
+                  value={claimForm.type}
+                  onChange={(event) => setClaimForm({ ...claimForm, type: event.target.value })}
+                  className="rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
+                >
+                  <option value="answer_key">Answer key issue</option>
+                  <option value="ambiguous_question">Ambiguous question</option>
+                  <option value="marking">Marking issue</option>
+                  <option value="technical">Technical issue</option>
+                  <option value="other">Other</option>
+                </select>
+                <select
+                  value={claimQuestionId}
+                  onChange={(event) => setClaimQuestionId(event.target.value)}
+                  className="rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
+                >
+                  {questions.map((question, index) => (
+                    <option key={question._id} value={question._id}>
+                      Q{index + 1}: {question.contentId || question.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                value={claimForm.title}
+                onChange={(event) => setClaimForm({ ...claimForm, title: event.target.value })}
+                placeholder="Short claim title"
+                className="mt-3 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <textarea
+                value={claimForm.description}
+                onChange={(event) => setClaimForm({ ...claimForm, description: event.target.value })}
+                placeholder="Explain the issue clearly with expected correction."
+                rows={5}
+                className="mt-3 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <button type="button" onClick={submitClaim} className="btn-primary mt-3 inline-flex items-center gap-2 px-4 py-2 text-xs">
+                <Send size={13} />
+                Submit Claim
+              </button>
+            </div>
+            <div className="rounded-sm border border-border bg-background p-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <Clock3 size={16} />
+                Review Window
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Claims are open for this contest. Submit one focused issue per claim so the admin can review and respond cleanly.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="border-b border-border bg-background p-4 text-sm text-muted-foreground">
+            Claims are not open right now. Existing claims and admin responses remain visible below.
+          </div>
+        )}
+
         <div className="divide-y divide-border">
           {(room.claims || []).map((claim) => (
             <div key={claim._id} className="p-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="font-semibold text-foreground">{claim.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{claim.description}</div>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-sm border px-2 py-0.5 text-[10px] uppercase ${claimStatusClass(claim.status)}`}>
+                      {labelize(claim.status)}
+                    </span>
+                    <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] uppercase text-muted-foreground">
+                      {labelize(claim.type)}
+                    </span>
+                    {claim.questionId && (
+                      <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {claim.questionId.contentId || claim.questionId.problemId || claim.questionId.title || "Question"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 font-semibold text-foreground">{claim.title}</div>
+                  <div className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{claim.description}</div>
                   {claim.adminResponse && (
-                    <div className="mt-2 rounded-sm border border-border bg-secondary/20 p-2 text-xs text-foreground">
+                    <div className="mt-3 rounded-sm border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
+                      <span className="mb-1 block font-bold text-primary">Admin response</span>
                       {claim.adminResponse}
                     </div>
                   )}
                 </div>
-                <span className="rounded-sm border border-border bg-background px-2 py-1 text-[10px] uppercase text-muted-foreground">
-                  {claim.status}
-                </span>
               </div>
             </div>
           ))}

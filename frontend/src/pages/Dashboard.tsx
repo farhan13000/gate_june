@@ -313,10 +313,11 @@ export default function Dashboard() {
     participated: contests,
     rated: ratingDataData.length,
     upcomingRegistered: 0,
+    results: 0,
   };
   const upcomingContestData = dashboard?.upcomingContests ?? [];
   const recentContestResults = dashboard?.recentContestResults ?? [];
-  const latestRatingChange = recentContestResults[0];
+  const latestRatingChange = recentContestResults.find((result: any) => typeof result.delta === "number");
   const chapterWiseDataData = dashboard?.chapterWiseData ?? chapterWiseData;
 
   // Heatmap calculation
@@ -963,6 +964,7 @@ export default function Dashboard() {
                 ["Registered", contestSummary.registered],
                 ["Participated", contestSummary.participated],
                 ["Rated", contestSummary.rated],
+                ["Results", contestSummary.results ?? recentContestResults.length],
                 ["Upcoming Joined", contestSummary.upcomingRegistered],
               ].map(([label, value]) => (
                 <div key={label as string} className="rounded-sm border border-border bg-background p-2 text-center">
@@ -1013,7 +1015,7 @@ export default function Dashboard() {
             <h3 className="font-serif font-bold text-xs text-foreground mb-2.5 pb-2 border-b border-border uppercase tracking-wide">Recent Contest Results</h3>
             <div className="space-y-2">
               {recentContestResults.length === 0 && (
-                <div className="text-xs text-muted-foreground">Rating changes will appear after contests are finalized.</div>
+                <div className="text-xs text-muted-foreground">Contest results will appear after contests are finalized.</div>
               )}
               {recentContestResults.map((result: any) => (
                 <button
@@ -1026,12 +1028,21 @@ export default function Dashboard() {
                     <div className="min-w-0">
                       <div className="truncate text-[11px] font-semibold text-foreground">{result.title}</div>
                       <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                        Rank #{result.rank} / {result.participants} - {labelize(result.contestType)}
+                        Rank #{result.rank || "-"}{result.participants ? ` / ${result.participants}` : ""} - {labelize(result.contestType)}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                        Score {result.score ?? 0} / Solved {result.solvedCount ?? 0}
                       </div>
                     </div>
-                    <div className={`shrink-0 font-mono text-xs font-bold ${result.delta >= 0 ? "text-primary" : "text-destructive"}`}>
-                      {result.delta >= 0 ? "+" : ""}{result.delta}
-                    </div>
+                    {typeof result.delta === "number" ? (
+                      <div className={`shrink-0 font-mono text-xs font-bold ${result.delta >= 0 ? "text-primary" : "text-destructive"}`}>
+                        {result.delta >= 0 ? "+" : ""}{result.delta}
+                      </div>
+                    ) : (
+                      <div className="shrink-0 rounded-sm border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        Unrated
+                      </div>
+                    )}
                   </div>
                 </button>
               ))}

@@ -4,6 +4,7 @@ import Submission from "../models/Submission";
 import RatingHistory from "../models/RatingHistory";
 import Contest from "../models/Contest";
 import ContestRegistration from "../models/ContestRegistration";
+import ContestStanding from "../models/ContestStanding";
 import { getContestState } from "../utils/contestLifecycle";
 
 const subjectsList = [
@@ -85,7 +86,7 @@ const getRatingSummary = async (userId: any, currentRating: number, ratingHistor
 
 const getContestDashboardData = async (userId: any) => {
   const now = new Date();
-  const [registrations, upcomingContests, recentRatings] = await Promise.all([
+  const [registrations, upcomingContests, recentRatings, recentStandings] = await Promise.all([
     ContestRegistration.find({ userId, status: { $ne: "withdrawn" } })
       .populate("contestId", "title contestType lifecycle startTime endTime durationMinutes ratingEnabled")
       .sort({ updatedAt: -1 })
@@ -105,6 +106,11 @@ const getContestDashboardData = async (userId: any) => {
       .sort({ appliedAt: -1, createdAt: -1 })
       .limit(5)
       .lean(),
+    ContestStanding.find({ userId, disqualified: false })
+      .populate("contestId", "title contestType lifecycle startTime endTime ratingEnabled status")
+      .sort({ updatedAt: -1 })
+      .limit(10)
+      .lean(),
   ]);
 
   const registeredIds = new Set(
@@ -113,14 +119,46 @@ const getContestDashboardData = async (userId: any) => {
       .map((registration: any) => String(registration.contestId._id))
   );
 
+  const ratingByContestId = new Map(recentRatings.map((rating: any) => [String(rating.contestId?._id || rating.contestId), rating]));
+  const finalizedResults = recentStandings
+    .filter((standing: any) => {
+      const contest = standing.contestId;
+      if (!contest) return false;
+      const state = getContestState(contest);
+      return ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied", "ended"].includes(state);
+    })
+    .slice(0, 5)
+    .map((standing: any) => {
+      const contest = standing.contestId;
+      const rating = ratingByContestId.get(String(contest?._id || contest));
+      return {
+        contestId: contest?._id,
+        title: contest?.title || "Contest",
+        contestType: contest?.contestType || "contest",
+        contestState: getContestState(contest),
+        ratingEnabled: Boolean(contest?.ratingEnabled),
+        ratingApplied: Boolean(rating),
+        oldRating: rating?.oldRating,
+        newRating: rating?.newRating,
+        delta: rating?.delta,
+        rank: rating?.rank ?? standing.rank,
+        participants: rating?.participants,
+        score: standing.score,
+        solvedCount: standing.solvedCount,
+        penaltyMinutes: standing.penaltyMinutes,
+        appliedAt: rating?.appliedAt || rating?.createdAt || standing.updatedAt,
+      };
+    });
+
   const contestSummary = {
     registered: registrations.length,
     participated: registrations.filter((registration: any) => registration.status === "checked_in" || registration.finishedAt).length,
-    rated: recentRatings.length,
+    rated: await RatingHistory.countDocuments({ userId }),
     upcomingRegistered: registrations.filter((registration: any) => {
       const contest = registration.contestId;
       return contest && ["upcoming", "registration_open", "live", "frozen"].includes(getContestState(contest));
     }).length,
+    results: finalizedResults.length,
   };
 
   return {
@@ -136,17 +174,7 @@ const getContestDashboardData = async (userId: any) => {
       ratingEnabled: contest.ratingEnabled,
       registered: registeredIds.has(String(contest._id)),
     })),
-    recentContestResults: recentRatings.map((rating: any) => ({
-      contestId: rating.contestId?._id,
-      title: rating.contestId?.title || "Contest",
-      contestType: rating.contestId?.contestType || "contest",
-      oldRating: rating.oldRating,
-      newRating: rating.newRating,
-      delta: rating.delta,
-      rank: rating.rank,
-      participants: rating.participants,
-      appliedAt: rating.appliedAt || rating.createdAt,
-    })),
+    recentContestResults: finalizedResults,
   };
 };
 

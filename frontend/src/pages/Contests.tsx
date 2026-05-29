@@ -170,6 +170,7 @@ function formatDate(value: string) {
 }
 
 function formatCountdown(contest: Contest) {
+  if (postContestStates.includes(contest.contestState) || contest.contestState === "ended") return "Closed";
   const now = Date.now();
   const target = ["live", "frozen"].includes(contest.contestState)
     ? new Date(contest.endTime).getTime()
@@ -222,6 +223,26 @@ export default function Contests() {
   useEffect(() => {
     fetchContests();
   }, [fetchContests]);
+
+  useEffect(() => {
+    const esUrl = `${import.meta.env.VITE_API_BASE || ""}/api/contests/stream`;
+    const es = new EventSource(esUrl, { withCredentials: true });
+    es.addEventListener("contests-update", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (Array.isArray(data.contests)) {
+          setContests(data.contests);
+          setLoading(false);
+        }
+      } catch {
+        // Keep the last good contest list; the next event or manual refresh will recover.
+      }
+    });
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
@@ -285,7 +306,16 @@ export default function Contests() {
     }
     if (["live", "frozen"].includes(contest.contestState)) {
       if (!registered) {
-        return (
+        return contest.contestState === "live" ? (
+          <button
+            type="button"
+            disabled={busyId === contest._id}
+            onClick={() => updateRegistration(contest, "register")}
+            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
+          >
+            Register
+          </button>
+        ) : (
           <button
             type="button"
             disabled

@@ -89,6 +89,30 @@ export default function ContestDetails() {
     fetchContest();
   }, [fetchContest]);
 
+  useEffect(() => {
+    if (!id) return undefined;
+    const esUrl = `${import.meta.env.VITE_API_BASE || ""}/api/contests/stream`;
+    const es = new EventSource(esUrl, { withCredentials: true });
+    es.addEventListener("contests-update", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        const updated = Array.isArray(data.contests)
+          ? data.contests.find((item: Contest) => String(item._id) === String(id))
+          : null;
+        if (updated) {
+          setContest(updated);
+          setLoading(false);
+        }
+      } catch {
+        // Keep the current detail; normal fetch and manual actions still refresh it.
+      }
+    });
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [id]);
+
   const updateRegistration = async (action: "register" | "withdraw" | "check-in") => {
     if (!contest) return;
     if (!isAuthenticated) {
@@ -132,6 +156,10 @@ export default function ContestDetails() {
         <button type="button" disabled={busy} onClick={() => updateRegistration("check-in")} className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50">
           <Trophy size={13} />
           Enter Arena
+        </button>
+      ) : contest.contestState === "live" ? (
+        <button type="button" disabled={busy} onClick={() => updateRegistration("register")} className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50">
+          Register
         </button>
       ) : (
         <button type="button" disabled className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60">
@@ -241,32 +269,9 @@ export default function ContestDetails() {
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-        <div className="academic-card p-4">
-          <h2 className="font-serif text-base font-bold text-foreground">Problem Preview</h2>
-          <div className="mt-4 grid gap-2">
-            {(contest.questions || []).map((problem, index) => (
-              <div key={problem._id} className="rounded-sm border border-border bg-background p-3">
-                <div className="flex items-start gap-3">
-                  <span className="font-mono text-xs text-muted-foreground">{index + 1}</span>
-                  <div className="min-w-0">
-                    <div className="line-clamp-2 text-sm font-semibold text-foreground">{problem.title}</div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {problem.difficulty} / {problem.questionType}{problem.topic ? ` / ${problem.topic}` : ""}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {(contest.questions || []).length === 0 && (
-              <p className="text-sm text-muted-foreground">Problem set will be visible after admin attaches approved problems.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="academic-card p-4">
+      <div className="academic-card p-4">
           <h2 className="font-serif text-base font-bold text-foreground">Rules</h2>
-          <ul className="mt-4 space-y-2 text-sm leading-relaxed text-muted-foreground">
+          <ul className="mt-4 grid gap-2 text-sm leading-relaxed text-muted-foreground md:grid-cols-2">
             {(contest.rules || []).map((rule) => (
               <li key={rule} className="flex gap-2">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.45)]" />
@@ -277,7 +282,6 @@ export default function ContestDetails() {
               <li>Contest rules will follow the configured scoring, timing, and answer-key release settings.</li>
             )}
           </ul>
-        </div>
       </div>
     </div>
   );

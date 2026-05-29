@@ -2,6 +2,8 @@ import ContestStanding from "../models/ContestStanding";
 import ContestRegistration from "../models/ContestRegistration";
 import RatingHistory from "../models/RatingHistory";
 import User from "../models/User";
+import Contest from "../models/Contest";
+import { recomputeContestStandings } from "./contestScoring";
 
 function expectedScore(ratingA: number, ratingB: number) {
   return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
@@ -24,13 +26,84 @@ export async function applyContestRatings(contestId: string) {
     return { applied: false, count: existing, message: "Ratings already applied" };
   }
 
+  const contest = await Contest.findById(contestId);
+  if (!contest) {
+    return { applied: false, count: 0, message: "Contest not found" };
+  }
+
+  await recomputeContestStandings(contest);
+
+  const preview = await previewContestRatings(contestId);
+  if (!preview.canApply) {
+    return { applied: false, count: preview.count, message: preview.message, changes: preview.changes };
+  }
+
+  for (const change of preview.changes) {
+    await User.updateOne({ _id: change.userId }, { rating: change.newRating });
+    await ContestRegistration.updateOne(
+      { contestId, userId: change.userId },
+      { ratingBefore: change.oldRating, ratingAfter: change.newRating }
+    );
+  }
+
+  await RatingHistory.insertMany(
+    preview.changes.map((change) => ({
+      userId: change.userId,
+      contestId,
+      oldRating: change.oldRating,
+      newRating: change.newRating,
+      delta: change.delta,
+      rank: change.rank,
+      participants: preview.participants,
+      performanceRating: change.performanceRating,
+    })),
+    { ordered: false }
+  );
+
+  return { applied: true, count: preview.changes.length, message: "Ratings applied", changes: preview.changes };
+}
+
+export async function previewContestRatings(contestId: string) {
+  const existing = await RatingHistory.countDocuments({ contestId });
+  if (existing > 0) {
+    const histories = await RatingHistory.find({ contestId })
+      .populate("userId", "fullName email")
+      .sort({ rank: 1, createdAt: 1 })
+      .lean();
+
+    return {
+      canApply: false,
+      count: histories.length,
+      participants: histories[0]?.participants || histories.length,
+      alreadyApplied: true,
+      message: "Ratings already applied",
+      changes: histories.map((history: any) => ({
+        userId: history.userId?._id || history.userId,
+        fullName: history.userId?.fullName || "User",
+        email: history.userId?.email || "",
+        oldRating: history.oldRating,
+        newRating: history.newRating,
+        delta: history.delta,
+        rank: history.rank,
+        performanceRating: history.performanceRating,
+      })),
+    };
+  }
+
   const standings = await ContestStanding.find({ contestId, disqualified: false })
-    .populate("userId", "rating")
+    .populate("userId", "fullName email rating")
     .sort({ score: -1, penaltyMinutes: 1, solvedCount: -1, lastAcceptedAt: 1, updatedAt: 1 })
     .lean();
 
-  if (standings.length < 2) {
-    return { applied: false, count: 0, message: "At least two participants are required" };
+  if (standings.length === 0) {
+    return {
+      canApply: false,
+      count: 0,
+      participants: 0,
+      alreadyApplied: existing > 0,
+      message: "Finalized without rating changes",
+      changes: [],
+    };
   }
 
   let rank = 0;
@@ -46,18 +119,16 @@ export async function applyContestRatings(contestId: string) {
     ].join(":");
     if (key !== previousKey) rank = index + 1;
     previousKey = key;
-    await ContestStanding.updateOne(
-      { _id: standing._id },
-      { rank, visibleRank: standing.visibleRank || rank, visibleScore: standing.visibleScore ?? standing.score }
-    );
     users.push({
       userId: standing.userId._id,
+      fullName: standing.userId.fullName || "User",
+      email: standing.userId.email || "",
       oldRating: Number(standing.userId.rating || 0),
       rank,
     });
   }
 
-  const histories = [];
+  const changes = [];
   for (const user of users) {
     let actual = 0;
     let expected = 0;
@@ -73,23 +144,24 @@ export async function applyContestRatings(contestId: string) {
     const delta = clamp(rawDelta, -150, 150);
     const newRating = Math.max(0, user.oldRating + delta);
 
-    await User.updateOne({ _id: user.userId }, { rating: newRating });
-    await ContestRegistration.updateOne(
-      { contestId, userId: user.userId },
-      { ratingBefore: user.oldRating, ratingAfter: newRating }
-    );
-    histories.push({
+    changes.push({
       userId: user.userId,
-      contestId,
+      fullName: user.fullName,
+      email: user.email,
       oldRating: user.oldRating,
       newRating,
       delta,
       rank: user.rank,
-      participants: users.length,
       performanceRating: user.oldRating + Math.round((actual - expected) * 400),
     });
   }
 
-  await RatingHistory.insertMany(histories, { ordered: false });
-  return { applied: true, count: histories.length, message: "Ratings applied" };
+  return {
+    canApply: existing === 0,
+    count: changes.length,
+    participants: users.length,
+    alreadyApplied: existing > 0,
+    message: existing > 0 ? "Ratings already applied" : "Ratings ready",
+    changes,
+  };
 }

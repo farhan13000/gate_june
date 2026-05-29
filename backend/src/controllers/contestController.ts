@@ -6,7 +6,9 @@ import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
 import RatingHistory from "../models/RatingHistory";
-import { getContestState, isContestOpenForArena, isPostContestState } from "../utils/contestLifecycle";
+import { getContestState, isContestOpenForArena, isContestOpenForRegistration, isPostContestState } from "../utils/contestLifecycle";
+import { recomputeContestRanks, recomputeUserStanding } from "../utils/contestScoring";
+import { syncContestLifecycleById, syncDueContestLifecycles } from "../utils/contestLifecycleSync";
 
 function normalizeNat(value: string) {
   return String(value || "").trim().toLowerCase();
@@ -61,93 +63,6 @@ function judgeAnswer(question: any, body: any) {
   return { isCorrect, marksAwarded };
 }
 
-async function recomputeUserStanding(contest: any, userId: any) {
-  const submissions = await ContestSubmission.find({ contestId: contest._id, userId })
-    .sort({ submittedAt: 1 })
-    .lean();
-  const latestByQuestion = new Map<string, any>();
-  for (const submission of submissions) {
-    latestByQuestion.set(String(submission.questionId), submission);
-  }
-
-  const problemStats = [];
-  let score = 0;
-  let solvedCount = 0;
-  let wrongAttempts = 0;
-  let penaltyMinutes = 0;
-  let lastAcceptedAt: Date | undefined;
-
-  for (const questionId of contest.questions.map((id: any) => String(id))) {
-    const questionSubs = submissions.filter((submission) => String(submission.questionId) === questionId);
-    const latest = latestByQuestion.get(questionId);
-    const isSolved = Boolean(latest?.isCorrect);
-    const wrongForQuestion = latest ? questionSubs.filter((submission) => !submission.isCorrect).length : 0;
-
-    if (isSolved) {
-      solvedCount += 1;
-      score += latest.marksAwarded;
-      wrongAttempts += wrongForQuestion;
-      const acceptedAt = new Date(latest.submittedAt);
-      const minutesFromStart = Math.max(0, Math.ceil((acceptedAt.getTime() - new Date(contest.startTime).getTime()) / 60000));
-      penaltyMinutes += minutesFromStart + wrongForQuestion * (contest.wrongPenaltyMinutes || 0);
-      lastAcceptedAt = !lastAcceptedAt || acceptedAt > lastAcceptedAt ? acceptedAt : lastAcceptedAt;
-    } else if (latest) {
-      score += latest.marksAwarded;
-      wrongAttempts += wrongForQuestion;
-    }
-
-    problemStats.push({
-      questionId,
-      attempts: questionSubs.length,
-      isCorrect: isSolved,
-      marksAwarded: latest?.marksAwarded ?? 0,
-      solvedAt: isSolved ? latest.submittedAt : undefined,
-    });
-  }
-
-  const standing = await ContestStanding.findOneAndUpdate(
-    { contestId: contest._id, userId },
-    {
-      contestId: contest._id,
-      userId,
-      score,
-      solvedCount,
-      wrongAttempts,
-      penaltyMinutes,
-      lastAcceptedAt,
-      visibleScore: score,
-      problemStats,
-    },
-    { new: true, upsert: true }
-  );
-
-  return standing;
-}
-
-async function recomputeContestRanks(contestId: any) {
-  const standings = await ContestStanding.find({ contestId, disqualified: false })
-    .sort({ score: -1, penaltyMinutes: 1, solvedCount: -1, lastAcceptedAt: 1, updatedAt: 1 })
-    .lean();
-
-  let rank = 0;
-  let previousKey = "";
-  for (let index = 0; index < standings.length; index += 1) {
-    const standing = standings[index];
-    const key = [
-      standing.score,
-      standing.penaltyMinutes,
-      standing.solvedCount,
-      standing.lastAcceptedAt ? new Date(standing.lastAcceptedAt).getTime() : 0,
-    ].join(":");
-    if (key !== previousKey) rank = index + 1;
-    previousKey = key;
-    await ContestStanding.updateOne(
-      { _id: standing._id },
-      { rank, visibleRank: standing.frozenRank || rank, visibleScore: standing.frozenScore ?? standing.score }
-    );
-  }
-}
-
 async function attachUserRegistration(contests: any[], userId?: string) {
   if (!userId || contests.length === 0) {
     return contests.map((contest) => ({
@@ -168,40 +83,112 @@ async function attachUserRegistration(contests: any[], userId?: string) {
   }));
 }
 
-export const getPublicContests = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const now = new Date();
-    const contests = await Contest.find({
+function writeSse(res: Response, event: string, data: unknown) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+async function buildPublicContests(userId?: string) {
+  await syncDueContestLifecycles();
+  const now = new Date();
+  const contests = await Contest.find({
       status: { $in: ["approved", "completed"] },
       visibility: "public",
       lifecycle: { $ne: "draft" },
-    })
-      .select(
-        "title description meta questions contestType visibility scoringMode lifecycle registrationStartTime registrationEndTime startTime endTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome status"
-      )
-      .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
-      .sort({ startTime: 1 })
-      .lean();
+  })
+    .select(
+      "title description meta questions contestType visibility scoringMode lifecycle registrationStartTime registrationEndTime startTime endTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome status"
+    )
+    .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
+    .sort({ startTime: 1 })
+    .lean();
 
-    const registrationCounts = await ContestRegistration.aggregate([
-      { $match: { contestId: { $in: contests.map((contest) => contest._id) }, status: { $ne: "withdrawn" } } },
-      { $group: { _id: "$contestId", count: { $sum: 1 } } },
-    ]);
-    const countMap = new Map(registrationCounts.map((row) => [String(row._id), row.count]));
-    const enriched = contests.map((contest) => ({
-      ...contest,
-      registrationCount: countMap.get(String(contest._id)) || 0,
-      isPast: new Date(contest.endTime) < now,
-    }));
+  const registrationCounts = await ContestRegistration.aggregate([
+    { $match: { contestId: { $in: contests.map((contest) => contest._id) }, status: { $ne: "withdrawn" } } },
+    { $group: { _id: "$contestId", count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(registrationCounts.map((row) => [String(row._id), row.count]));
+  const enriched = contests.map((contest) => ({
+    ...contest,
+    registrationCount: countMap.get(String(contest._id)) || 0,
+    isPast: new Date(contest.endTime) < now,
+  }));
 
-    res.json(await attachUserRegistration(enriched, req.currentUser?._id?.toString()));
+  return attachUserRegistration(enriched, userId);
+}
+
+async function buildContestStandingsPayload(contestId: string, currentUserId?: string) {
+  await syncContestLifecycleById(contestId);
+  const contest = await Contest.findById(contestId).lean();
+  if (!contest) return null;
+
+  await recomputeContestRanks(contest._id);
+  const state = getContestState(contest);
+  const isFrozen = ["frozen", "live"].includes(state) && contest.freezeTime && Date.now() >= new Date(contest.freezeTime).getTime();
+  const showFinal = isPostContestState(state);
+  const useVisible = Boolean(isFrozen && !showFinal);
+
+  const standings = await ContestStanding.find({ contestId: contest._id, disqualified: false })
+    .populate("userId", "fullName email rating")
+    .sort(useVisible ? { visibleRank: 1, updatedAt: 1 } : { rank: 1, updatedAt: 1 })
+    .limit(200)
+    .lean();
+
+  return {
+    contestId: contest._id,
+    contestState: state,
+    frozen: useVisible,
+    final: showFinal,
+    standings: standings.map((standing: any) => ({
+      _id: standing._id,
+      rank: useVisible ? standing.visibleRank || standing.rank : standing.rank,
+      user: {
+        _id: standing.userId?._id,
+        fullName: standing.userId?.fullName || "User",
+        rating: standing.userId?.rating || 0,
+      },
+      score: useVisible ? standing.visibleScore : standing.score,
+      solvedCount: standing.solvedCount,
+      penaltyMinutes: standing.penaltyMinutes,
+      lastAcceptedAt: standing.lastAcceptedAt,
+      isCurrentUser: currentUserId ? String(standing.userId?._id) === String(currentUserId) : false,
+    })),
+  };
+}
+
+export const getPublicContests = async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await buildPublicContests(req.currentUser?._id?.toString()));
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch contests" });
   }
 };
 
+export const streamPublicContests = async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const sendUpdate = async () => {
+    try {
+      writeSse(res, "contests-update", {
+        timestamp: new Date().toISOString(),
+        contests: await buildPublicContests(req.currentUser?._id?.toString()),
+      });
+    } catch (error) {
+      writeSse(res, "contests-error", { message: "Failed to stream contests" });
+    }
+  };
+
+  await sendUpdate();
+  const timer = setInterval(sendUpdate, 10000);
+  req.on("close", () => clearInterval(timer));
+};
+
 export const getPublicContestDetail = async (req: Request, res: Response): Promise<void> => {
   try {
+    await syncContestLifecycleById(req.params.id);
     const contest = await Contest.findOne({
       _id: req.params.id,
       status: { $in: ["approved", "completed"] },
@@ -229,14 +216,13 @@ export const getPublicContestDetail = async (req: Request, res: Response): Promi
 
 export const registerForContest = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest || contest.status !== "approved" || contest.visibility !== "public") {
       res.status(404).json({ message: "Contest not found" });
       return;
     }
 
-    const state = getContestState(contest);
-    if (!["registration_open", "upcoming"].includes(state)) {
+    if (!isContestOpenForRegistration(contest)) {
       res.status(400).json({ message: "Registration is not open for this contest" });
       return;
     }
@@ -291,7 +277,7 @@ export const withdrawFromContest = async (req: Request, res: Response): Promise<
 
 export const checkInContest = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
       return;
@@ -324,6 +310,7 @@ export const checkInContest = async (req: Request, res: Response): Promise<void>
 
 export const getContestRoom = async (req: Request, res: Response): Promise<void> => {
   try {
+    await syncContestLifecycleById(req.params.id);
     const contest = await Contest.findById(req.params.id)
       .populate("questions")
       .lean();
@@ -354,6 +341,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       userId: req.currentUser!._id,
       }).sort({ submittedAt: -1 }).lean(),
       ContestClaim.find({ contestId: contest._id, userId: req.currentUser!._id })
+        .populate("questionId", "title contentId problemId")
         .sort({ createdAt: -1 })
         .lean(),
       RatingHistory.findOne({ contestId: contest._id, userId: req.currentUser!._id }).lean(),
@@ -429,7 +417,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
 
 export const createContestClaim = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
       return;
@@ -482,7 +470,7 @@ export const getContestClaims = async (req: Request, res: Response): Promise<voi
 
 export const submitContestAnswer = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
       return;
@@ -556,7 +544,7 @@ export const submitContestAnswer = async (req: Request, res: Response): Promise<
 
 export const finishContest = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
       return;
@@ -587,45 +575,38 @@ export const finishContest = async (req: Request, res: Response): Promise<void> 
 
 export const getContestStandings = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id).lean();
-    if (!contest) {
+    const payload = await buildContestStandingsPayload(String(req.params.id), req.currentUser?._id?.toString());
+    if (!payload) {
       res.status(404).json({ message: "Contest not found" });
       return;
     }
 
-    await recomputeContestRanks(contest._id);
-    const state = getContestState(contest);
-    const isFrozen = ["frozen", "live"].includes(state) && contest.freezeTime && Date.now() >= new Date(contest.freezeTime).getTime();
-    const showFinal = isPostContestState(state);
-    const useVisible = Boolean(isFrozen && !showFinal);
-
-    const standings = await ContestStanding.find({ contestId: contest._id, disqualified: false })
-      .populate("userId", "fullName email rating")
-      .sort(useVisible ? { visibleRank: 1, updatedAt: 1 } : { rank: 1, updatedAt: 1 })
-      .limit(200)
-      .lean();
-
-    res.json({
-      contestId: contest._id,
-      contestState: state,
-      frozen: useVisible,
-      final: showFinal,
-      standings: standings.map((standing: any) => ({
-        _id: standing._id,
-        rank: useVisible ? standing.visibleRank || standing.rank : standing.rank,
-        user: {
-          _id: standing.userId?._id,
-          fullName: standing.userId?.fullName || "User",
-          rating: standing.userId?.rating || 0,
-        },
-        score: useVisible ? standing.visibleScore : standing.score,
-        solvedCount: standing.solvedCount,
-        penaltyMinutes: standing.penaltyMinutes,
-        lastAcceptedAt: standing.lastAcceptedAt,
-        isCurrentUser: req.currentUser ? String(standing.userId?._id) === String(req.currentUser._id) : false,
-      })),
-    });
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch contest standings" });
   }
+};
+
+export const streamContestStandings = async (req: Request, res: Response): Promise<void> => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const sendUpdate = async () => {
+    try {
+      const payload = await buildContestStandingsPayload(String(req.params.id), req.currentUser?._id?.toString());
+      if (!payload) {
+        writeSse(res, "standings-error", { message: "Contest not found" });
+        return;
+      }
+      writeSse(res, "standings-update", { timestamp: new Date().toISOString(), ...payload });
+    } catch {
+      writeSse(res, "standings-error", { message: "Failed to stream contest standings" });
+    }
+  };
+
+  await sendUpdate();
+  const timer = setInterval(sendUpdate, 5000);
+  req.on("close", () => clearInterval(timer));
 };

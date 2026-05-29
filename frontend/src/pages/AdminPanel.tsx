@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import AdminHomeSection from "@/components/admin/AdminHomeSection";
 import AdminContestGuide from "@/components/admin/AdminContestGuide";
 import AdminContestSection from "@/components/admin/AdminContestSection";
+import AdminContestClaimsPage from "@/components/admin/AdminContestClaimsPage";
 import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
 import { SiteContainer, MainPanel } from "@/components/layout";
 import AdminProblemManager from "@/components/admin/AdminProblemManager";
@@ -362,6 +363,7 @@ type Section =
   | "User Analytics"
   | "Content Management"
   | "Contest Factory"
+  | "Contest Claims"
   | "Contest Guide"
   | "Approval Dashboard"
   | "Content Inventory"
@@ -841,6 +843,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "Problem Bank",
     "Content Inventory",
     "Contest Factory",
+    "Contest Claims",
     "Contest Guide",
     "Approval Dashboard",
     "Platform Logs",
@@ -1596,6 +1599,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         )}
 
         {activeSection === "Contest Factory" && <AdminContestSection />}
+        {activeSection === "Contest Claims" && <AdminContestClaimsPage />}
 
         {/* ── CONTENT INVENTORY SECTION ── */}
         {activeSection === "Content Inventory" && (

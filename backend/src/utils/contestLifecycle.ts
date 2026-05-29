@@ -25,6 +25,13 @@ export function isContestOpenForArena(contest: any) {
   return ["live", "frozen"].includes(contest.lifecycle) && Date.now() < new Date(contest.endTime).getTime();
 }
 
+export function isContestOpenForRegistration(contest: any) {
+  const now = Date.now();
+  const end = new Date(contest.endTime).getTime();
+  const state = getContestState(contest);
+  return ["upcoming", "registration_open", "live"].includes(state) && contest.lifecycle !== "frozen" && now < end;
+}
+
 export function isPostContestState(state: string) {
   return ["ended", ...RELEASED_STATES].includes(state);
 }

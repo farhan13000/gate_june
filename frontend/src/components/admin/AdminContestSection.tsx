@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Award, BarChart3, Check, Eye, FileQuestion, Flag, Gavel, KeyRound, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
+import { Award, BarChart3, Check, Clock3, Eye, FileQuestion, Flag, Gavel, KeyRound, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 type Contest = {
@@ -91,6 +91,24 @@ type AdminClaim = {
   createdAt: string;
 };
 
+type RatingPreview = {
+  canApply: boolean;
+  count: number;
+  participants: number;
+  alreadyApplied: boolean;
+  message: string;
+  changes: Array<{
+    userId: string;
+    fullName: string;
+    email: string;
+    oldRating: number;
+    newRating: number;
+    delta: number;
+    rank: number;
+    performanceRating?: number;
+  }>;
+};
+
 const emptyForm = {
   title: "",
   description: "",
@@ -102,7 +120,7 @@ const emptyForm = {
   contestType: "full_mock",
   visibility: "public",
   scoringMode: "gate",
-  lifecycle: "published",
+  lifecycle: "draft",
   wrongPenaltyMinutes: 10,
   ratingEnabled: false,
   instantFeedback: false,
@@ -110,13 +128,19 @@ const emptyForm = {
 };
 
 const contestTypes = [
-  ["full_mock", "Full Mock Test"],
-  ["subject_wise", "Subject Wise Test"],
-  ["weekly", "Weekly Test"],
-  ["challenge_yourself", "Challenge Yourself"],
+  ["full_mock", "Full Mock Test", "Full-length scheduled exam simulation."],
+  ["subject_wise", "Subject Wise Test", "Focused test for one syllabus area."],
+  ["weekly", "Weekly Test", "Recurring ranked weekly practice."],
+  ["challenge_yourself", "Challenge Yourself", "Harder practice challenge with review."],
+  ["practice", "Practice Contest", "Unrated contest-style practice set."],
+  ["rated", "Rated Contest", "Rating-first contest format."],
+  ["gate_mock", "GATE Mock", "GATE-style full mock variant."],
+  ["private", "Private Contest", "Admin-controlled private contest."],
+  ["challenge", "Challenge", "Open challenge format."],
 ];
 
 const lifecycleHelp = [
+  ["draft", "Draft", "Saved in admin until published."],
   ["published", "Published", "Visible in contest hub."],
   ["registration_open", "Registration", "Users can register and prepare."],
   ["live", "Live", "Contest room accepts submissions."],
@@ -130,6 +154,7 @@ const lifecycleHelp = [
 ];
 
 type ContestForm = typeof emptyForm;
+type AdminContestView = "draft" | "new" | "upcoming" | "live" | "past" | "all";
 
 function getTimeValue(value?: string) {
   if (!value) return null;
@@ -202,10 +227,9 @@ const managerPanels = [
   { id: "problems", label: "Problems", description: "Attach approved problem set", Icon: FileQuestion },
   { id: "lifecycle", label: "Lifecycle", description: "Move contest through stages", Icon: Radio },
   { id: "monitor", label: "Monitor", description: "Review live standings", Icon: BarChart3 },
-  { id: "claims", label: "Claims", description: "Review submitted appeals", Icon: ShieldCheck },
 ] as const;
 
-type ManagerPanel = (typeof managerPanels)[number]["id"];
+type ManagerPanel = (typeof managerPanels)[number]["id"] | "claims";
 type ContestLifecycleAction = "release-answer-key" | "open-claims" | "close-claims" | "finalize-ratings";
 type LifecycleOperation = {
   stage: string;
@@ -216,6 +240,110 @@ type LifecycleOperation = {
   Icon: React.ComponentType<{ size?: number }>;
   primary?: boolean;
 };
+
+function labelize(value?: string) {
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getContestTypeLabel(type?: string) {
+  return contestTypes.find(([value]) => value === type)?.[1] || labelize(type || "contest");
+}
+
+function getLifecycleIndex(lifecycle?: string) {
+  return lifecycleHelp.findIndex(([key]) => key === lifecycle);
+}
+
+function statusForLifecycle(lifecycle?: string) {
+  if (lifecycle === "draft") return "draft";
+  if (["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(lifecycle || "")) {
+    return "completed";
+  }
+  return "approved";
+}
+
+function isPastContest(contest: Pick<Contest, "lifecycle" | "endTime">) {
+  return (
+    ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.lifecycle || "") ||
+    new Date(contest.endTime).getTime() < Date.now()
+  );
+}
+
+function claimStatusClass(status?: string) {
+  if (status === "accepted") return "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300";
+  if (status === "rejected") return "border-destructive/25 bg-destructive/10 text-destructive";
+  if (status === "under_review") return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  return "border-border bg-background text-muted-foreground";
+}
+
+function buildContestReadiness(contest: Contest | null, standings: AdminStanding[]) {
+  if (!contest) return [];
+  const now = Date.now();
+  const start = new Date(contest.startTime).getTime();
+  const end = new Date(contest.endTime).getTime();
+  const problemCount = (contest.questions || []).length;
+  const registered = standings.length;
+  const activeParticipants = standings.filter((row) => row.registrationStatus !== "withdrawn" && !row.disqualified).length;
+  const lifecycleIndex = getLifecycleIndex(contest.lifecycle);
+
+  return [
+    {
+      label: "Setup",
+      ready: Boolean(contest.title && contest.description && Number.isFinite(start) && Number.isFinite(end) && end > start),
+      detail: "Basics and timing",
+    },
+    {
+      label: "Problems",
+      ready: problemCount > 0,
+      detail: `${problemCount} attached`,
+    },
+    {
+      label: "Registration",
+      ready: lifecycleIndex >= getLifecycleIndex("registration_open") || registered > 0,
+      detail: `${registered} registered`,
+    },
+    {
+      label: "Live",
+      ready: lifecycleIndex >= getLifecycleIndex("live") || now >= start,
+      detail: now < start ? "Scheduled" : now <= end ? "Window open" : "Window closed",
+    },
+    {
+      label: "Results",
+      ready: lifecycleIndex >= getLifecycleIndex("finalized") || contest.lifecycle === "ratings_applied",
+      detail: activeParticipants > 0 ? `${activeParticipants} eligible` : "No eligible users",
+    },
+  ];
+}
+
+function getLifecycleSafetyMessage(contest: Contest, lifecycle: string, metrics: { problems: number; registered: number; submissions: number; locked: number }) {
+  const stage = labelize(lifecycle);
+  const title = contest.title || "this contest";
+  if (lifecycle === "live") {
+    return `Start "${title}" now?\n\nThis opens the contest arena for registered users.\nProblems: ${metrics.problems}\nRegistered users: ${metrics.registered}`;
+  }
+  if (lifecycle === "frozen") {
+    return `Freeze leaderboard for "${title}"?\n\nSubmissions can continue, but visible leaderboard values may be limited.`;
+  }
+  if (lifecycle === "ended") {
+    return `End "${title}" now?\n\nNew submissions and final submits will be blocked after this stage.\nResponses saved: ${metrics.submissions}\nLocked attempts: ${metrics.locked}`;
+  }
+  return `Move "${title}" to ${stage}?\n\nCurrent stage: ${labelize(contest.lifecycle || contest.status)}`;
+}
+
+function getContestActionSafetyMessage(action: ContestLifecycleAction, contest: Contest, metrics: { registered: number; submissions: number; locked: number }, preview: RatingPreview | null) {
+  const title = contest.title || "this contest";
+  if (action === "release-answer-key") {
+    return `Release answer key for "${title}"?\n\nParticipants will be able to see official answers and solutions.`;
+  }
+  if (action === "open-claims") {
+    return `Open claims for "${title}"?\n\nParticipants can submit answer-key, marking, and technical claims.`;
+  }
+  if (action === "close-claims") {
+    return `Close claims for "${title}"?\n\nParticipants will not be able to submit new claims after this.`;
+  }
+  return `Finalize results for "${title}"?\n\nThis recomputes standings and applies ratings if enabled.\nEligible participants: ${preview?.participants ?? metrics.registered}\nProjected rating changes: ${preview?.count ?? 0}\nResponses saved: ${metrics.submissions}`;
+}
 
 function AdminLifecycleRail({ current }: { current?: string }) {
   const currentIndex = Math.max(0, lifecycleHelp.findIndex(([key]) => key === current));
@@ -258,6 +386,13 @@ function getProblemId(problem: any) {
 }
 
 const lifecycleActions: LifecycleOperation[] = [
+  {
+    stage: "Registration",
+    title: "Publish Contest",
+    description: "Move a draft into the public contest hub without opening registration yet.",
+    lifecycle: "published",
+    Icon: Eye,
+  },
   {
     stage: "Registration",
     title: "Open Registration",
@@ -328,14 +463,59 @@ export default function AdminContestSection() {
   const [problemSearch, setProblemSearch] = useState("");
   const [adminStandings, setAdminStandings] = useState<AdminStanding[]>([]);
   const [adminClaims, setAdminClaims] = useState<AdminClaim[]>([]);
+  const [ratingPreview, setRatingPreview] = useState<RatingPreview | null>(null);
   const [claimResponses, setClaimResponses] = useState<Record<string, string>>({});
   const [activePanel, setActivePanel] = useState<ManagerPanel>("setup");
-  const [adminContestView, setAdminContestView] = useState<"new" | "upcoming" | "live" | "past" | "all">("new");
+  const [adminContestView, setAdminContestView] = useState<AdminContestView>("draft");
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
 
   const selectedContest = useMemo(
     () => contests.find((contest) => contest._id === selectedContestId) || null,
     [contests, selectedContestId]
+  );
+  const selectedContestReadiness = useMemo(
+    () => buildContestReadiness(selectedContest, adminStandings),
+    [adminStandings, selectedContest]
+  );
+  const selectedContestMetrics = useMemo(() => {
+    const submissions = adminStandings.reduce((sum, row) => sum + (row.submissionCount || 0), 0);
+    const locked = adminStandings.filter((row) => row.finishedAt).length;
+    return {
+      problems: selectedContest?.questions?.length || 0,
+      registered: adminStandings.length,
+      submissions,
+      locked,
+    };
+  }, [adminStandings, selectedContest]);
+  const selectedContestIsPast = selectedContest ? isPastContest(selectedContest) : false;
+  const claimSummary = useMemo(() => {
+    const byUser = new Map<string, { label: string; email: string; claims: AdminClaim[] }>();
+    for (const claim of adminClaims) {
+      const label = claim.userId?.fullName || claim.userId?.email || "Unknown user";
+      const email = claim.userId?.email || "";
+      const key = email || label;
+      const group = byUser.get(key) || { label, email, claims: [] };
+      group.claims.push(claim);
+      byUser.set(key, group);
+    }
+    return {
+      total: adminClaims.length,
+      pending: adminClaims.filter((claim) => claim.status === "pending").length,
+      review: adminClaims.filter((claim) => claim.status === "under_review").length,
+      accepted: adminClaims.filter((claim) => claim.status === "accepted").length,
+      rejected: adminClaims.filter((claim) => claim.status === "rejected").length,
+      users: Array.from(byUser.values()),
+    };
+  }, [adminClaims]);
+  const lifecycleActionGroups = useMemo(
+    () =>
+      ["Registration", "Live", "Closure", "Review", "Results"]
+        .map((stage) => ({
+          stage,
+          actions: lifecycleActions.filter((action) => action.stage === stage),
+        }))
+        .filter((group) => group.actions.length > 0),
+    []
   );
   const timingErrors = useMemo(() => getContestTimingErrors(form), [form]);
   const hasTimingErrors = Object.keys(timingErrors).length > 0;
@@ -379,6 +559,19 @@ export default function AdminContestSection() {
     if (res.ok) setAdminClaims(await res.json());
   }, [selectedContestId]);
 
+  const fetchRatingPreview = useCallback(async () => {
+    if (!selectedContestId) {
+      setRatingPreview(null);
+      return;
+    }
+    const res = await fetch(`/api/admin/contests/${selectedContestId}/rating-preview`, { credentials: "include" });
+    if (res.ok) {
+      setRatingPreview(await res.json());
+    } else {
+      setRatingPreview(null);
+    }
+  }, [selectedContestId]);
+
   useEffect(() => {
     fetchContests();
   }, [fetchContests]);
@@ -392,8 +585,30 @@ export default function AdminContestSection() {
   }, [fetchAdminStandings]);
 
   useEffect(() => {
+    if (!selectedContestId) return undefined;
+    const esUrl = `${import.meta.env.VITE_API_BASE || ""}/api/admin/contests/${selectedContestId}/standings/stream`;
+    const es = new EventSource(esUrl, { withCredentials: true });
+    es.addEventListener("admin-standings-update", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        setAdminStandings(data.standings || []);
+      } catch {
+        // Keep the current monitor data; manual refresh remains available.
+      }
+    });
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [selectedContestId]);
+
+  useEffect(() => {
     fetchAdminClaims();
   }, [fetchAdminClaims]);
+
+  useEffect(() => {
+    if (activePanel === "lifecycle") fetchRatingPreview();
+  }, [activePanel, fetchRatingPreview]);
 
   useEffect(() => {
     if (selectedContest) {
@@ -415,14 +630,16 @@ export default function AdminContestSection() {
   const adminContestGroups = useMemo(() => {
     const now = Date.now();
     const recentlyCreatedCutoff = now - 7 * 24 * 60 * 60 * 1000;
-    const isPast = (contest: Contest) =>
-      ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.lifecycle || "") ||
-      new Date(contest.endTime).getTime() < now;
     return {
-      new: contests.filter((contest: any) => new Date(contest.createdAt || contest.startTime).getTime() >= recentlyCreatedCutoff && !isPast(contest)),
-      upcoming: contests.filter((contest) => ["published", "registration_open"].includes(contest.lifecycle || "") && !isPast(contest)),
+      draft: contests.filter((contest) => (contest.lifecycle || contest.status) === "draft"),
+      new: contests.filter((contest: any) =>
+        (contest.lifecycle || contest.status) !== "draft" &&
+        new Date(contest.createdAt || contest.startTime).getTime() >= recentlyCreatedCutoff &&
+        !isPastContest(contest)
+      ),
+      upcoming: contests.filter((contest) => ["published", "registration_open"].includes(contest.lifecycle || "") && !isPastContest(contest)),
       live: contests.filter((contest) => ["live", "frozen"].includes(contest.lifecycle || "")),
-      past: contests.filter(isPast),
+      past: contests.filter(isPastContest),
       all: contests,
     };
   }, [contests]);
@@ -448,6 +665,13 @@ export default function AdminContestSection() {
     setExpandedParticipantId(null);
   };
 
+  const openContestView = (view: AdminContestView) => {
+    setAdminContestView(view);
+    if (view === "past") setActivePanel("monitor");
+    else if (view === "live") setActivePanel("lifecycle");
+    else setActivePanel("setup");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.description || !form.startTime || !form.endTime) {
@@ -465,7 +689,7 @@ export default function AdminContestSection() {
       endTime: new Date(form.endTime).toISOString(),
       registrationStartTime: form.registrationStartTime ? new Date(form.registrationStartTime).toISOString() : undefined,
       registrationEndTime: form.registrationEndTime ? new Date(form.registrationEndTime).toISOString() : undefined,
-      status: form.lifecycle === "finalized" || form.lifecycle === "ratings_applied" ? "completed" : "approved",
+      status: statusForLifecycle(form.lifecycle),
     };
 
     try {
@@ -483,6 +707,7 @@ export default function AdminContestSection() {
         setForm(emptyForm);
         setEditingId(null);
         setSelectedContestId(saved._id);
+        setAdminContestView(saved.lifecycle === "draft" ? "draft" : "upcoming");
         setSelectedQuestionIds((saved.questions || []).map(getProblemId).filter(Boolean));
         fetchContests();
       } else {
@@ -517,15 +742,37 @@ export default function AdminContestSection() {
   };
 
   const deleteContest = async (id: string) => {
-    if (!confirm("Delete this contest?")) return;
+    const contest = contests.find((item) => item._id === id);
+    const title = contest?.title || "this contest";
+    const problemCount = contest?.questions?.length || 0;
+    if (
+      !confirm(
+        `Delete "${title}"?\n\nThis removes the contest configuration from admin/public views.\nAttached problems: ${problemCount}\nCurrent stage: ${labelize(contest?.lifecycle || contest?.status)}`
+      )
+    ) {
+      return;
+    }
     try {
-      const res = await fetch(`/api/admin/contests/${id}`, {
+      const performDelete = (force = false) => fetch(`/api/admin/contests/${id}${force ? "?force=true" : ""}`, {
         method: "DELETE",
         credentials: "include",
       });
+      let res = await performDelete(false);
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        const stats = data.stats || {};
+        const ok = confirm(
+          `Force delete "${title}"?\n\nThis contest already has activity:\nRegistrations: ${stats.registrations || 0}\nSubmissions: ${stats.submissions || 0}\nStandings: ${stats.standings || 0}\nClaims: ${stats.claims || 0}\n\nThis action removes only the contest record; related records may remain for audit/history.`
+        );
+        if (!ok) return;
+        res = await performDelete(true);
+      }
       if (res.ok) {
         toast.success("Contest deleted");
         fetchContests();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.message || "Contest delete failed");
       }
     } catch {
       toast.error("Network error");
@@ -540,6 +787,15 @@ export default function AdminContestSection() {
 
   const saveContestProblems = async () => {
     if (!selectedContestId) return;
+    if (
+      selectedContest &&
+      ["live", "frozen", "ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(selectedContest.lifecycle || "") &&
+      !confirm(
+        `Update problems for "${selectedContest.title}"?\n\nThis contest is already ${labelize(selectedContest.lifecycle)}. Changing problems after launch can affect scoring and rankings.`
+      )
+    ) {
+      return;
+    }
     const res = await fetch(`/api/admin/contests/${selectedContestId}/problems`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -583,6 +839,9 @@ export default function AdminContestSection() {
 
   const runContestAction = async (action: "release-answer-key" | "open-claims" | "close-claims" | "finalize-ratings") => {
     if (!selectedContestId) return;
+    if (selectedContest && !confirm(getContestActionSafetyMessage(action, selectedContest, selectedContestMetrics, ratingPreview))) {
+      return;
+    }
     const res = await fetch(`/api/admin/contests/${selectedContestId}/${action}`, {
       method: "POST",
       credentials: "include",
@@ -593,6 +852,7 @@ export default function AdminContestSection() {
       const data = await res.json().catch(() => ({}));
       toast.success(data.rating?.message || "Contest lifecycle updated");
       fetchContests();
+      fetchRatingPreview();
     } else {
       const data = await res.json().catch(() => ({}));
       toast.error(data.message || "Contest action failed");
@@ -601,18 +861,22 @@ export default function AdminContestSection() {
 
   const setContestLifecycle = async (lifecycle: string) => {
     if (!selectedContest) return;
+    if (!confirm(getLifecycleSafetyMessage(selectedContest, lifecycle, selectedContestMetrics))) {
+      return;
+    }
     const res = await fetch(`/api/admin/contests/${selectedContest._id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
         lifecycle,
-        status: lifecycle === "ended" || lifecycle === "finalized" || lifecycle === "ratings_applied" ? "completed" : "approved",
+        status: statusForLifecycle(lifecycle),
       }),
     });
     if (res.ok) {
       toast.success(`Contest moved to ${lifecycle.replace(/_/g, " ")}`);
       fetchContests();
+      fetchRatingPreview();
     } else {
       const data = await res.json().catch(() => ({}));
       toast.error(data.message || "Failed to update contest lifecycle");
@@ -636,92 +900,291 @@ export default function AdminContestSection() {
     }
   };
 
+  const syncLifecycleNow = async () => {
+    const res = await fetch("/api/admin/contests/sync-lifecycle", {
+      method: "POST",
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      toast.success(`Lifecycle sync checked ${data.checked || 0} contests, updated ${data.changed || 0}`);
+      fetchContests();
+      fetchRatingPreview();
+      fetchAdminStandings();
+    } else {
+      toast.error(data.message || "Lifecycle sync failed");
+    }
+  };
+
   if (loading) {
     return <p className="py-8 text-sm text-muted-foreground">Loading contests...</p>;
   }
 
   return (
     <div className="w-full space-y-6">
-      <div>
-        <h2 className="font-serif text-lg font-bold text-foreground">Contest Command Center</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Build contests in focused stages, then move them through registration, live, review, and results with dedicated controls.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {managerPanels.map(({ id, label, description, Icon }) => (
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-serif text-lg font-bold text-foreground">Contest Command Center</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Build contests in focused stages, then move them through registration, live, review, and results with dedicated controls.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
           <button
-            key={id}
             type="button"
-            onClick={() => setActivePanel(id)}
-            className={`rounded-sm border p-4 text-left transition-colors ${
-              activePanel === id ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]" : "border-border bg-card hover:bg-secondary/25"
-            }`}
+            onClick={() => {
+              resetForm();
+              setAdminContestView("draft");
+              setActivePanel("setup");
+            }}
+            className="btn-primary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs"
           >
-            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-sm border border-border bg-background">
-              <Icon size={17} />
-            </div>
-            <div className="text-sm font-bold">{label}</div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+            <Plus size={13} />
+            New Contest
           </button>
-        ))}
+          <button type="button" onClick={syncLifecycleNow} className="btn-outline px-3 py-2 text-xs">
+            Sync Lifecycle
+          </button>
+        </div>
       </div>
 
-      {selectedContest && (
-        <div className="rounded-sm border border-border bg-card p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
-              <div className="mt-1 truncate text-sm font-semibold text-foreground">{selectedContest.title}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {new Date(selectedContest.startTime).toLocaleString()} / {selectedContest.contestType || "full_mock"} / {selectedContest.lifecycle || selectedContest.status}
+      <div className="grid gap-3 md:grid-cols-3">
+        {[
+          ["draft", "Draft Builder", "Create, draft, publish, and edit contest setup without mixing it with live controls.", adminContestGroups.draft.length + adminContestGroups.new.length, Plus],
+          ["upcoming", "Published Control", "Manage published contests, registration, and launch readiness.", adminContestGroups.upcoming.length + adminContestGroups.live.length, Radio],
+          ["past", "Past Archive", "Review completed contest timings, participants, responses, claims, and standings.", adminContestGroups.past.length, BarChart3],
+        ].map(([view, title, description, count, Icon]) => {
+          const PageIcon = Icon as typeof Plus;
+          const active =
+            view === "draft"
+              ? ["draft", "new"].includes(adminContestView)
+              : view === "upcoming"
+                ? ["upcoming", "live"].includes(adminContestView)
+                : adminContestView === view;
+          return (
+            <button
+              key={view as string}
+              type="button"
+              onClick={() => openContestView(view as AdminContestView)}
+              className={`rounded-sm border p-4 text-left transition-colors ${
+                active ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-card hover:bg-secondary/25"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-border bg-background">
+                  <PageIcon size={16} />
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center justify-between gap-3 text-sm font-bold">
+                    {title as string}
+                    <span className="font-mono text-xs">{String(count)}</span>
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{description as string}</span>
+                </span>
               </div>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
-              <select
-                value={selectedContestId || ""}
-                onChange={(event) => selectContest(event.target.value)}
-                className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm outline-none md:w-80"
-              >
-                {contests.map((contest) => (
-                  <option key={contest._id} value={contest._id}>{contest.title}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  resetForm();
-                  setActivePanel("setup");
-                }}
-                className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
-              >
-                <Plus size={13} />
-                New
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  startEdit(selectedContest);
-                  setActivePanel("setup");
-                }}
-                className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
-              >
-                <Pencil size={13} />
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setActivePanel("lifecycle")}
-                className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
-              >
-                <Radio size={13} />
-                Manage Stage
-              </button>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+        <aside className="academic-card overflow-hidden xl:sticky xl:top-4 xl:self-start">
+          <div className="border-b border-border bg-secondary/30 p-4">
+            <h3 className="text-sm font-bold text-foreground">Contest Library</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Choose a contest from the current workspace page.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {[
+                ["draft", "Drafts", adminContestGroups.draft.length],
+                ["new", "Recent", adminContestGroups.new.length],
+                ["upcoming", "Published", adminContestGroups.upcoming.length],
+                ["live", "Live", adminContestGroups.live.length],
+                ["past", "Archive", adminContestGroups.past.length],
+                ["all", "All", adminContestGroups.all.length],
+              ].map(([value, label, count]) => (
+                <button
+                  key={value as string}
+                  type="button"
+                  onClick={() => openContestView(value as AdminContestView)}
+                  className={`rounded-sm border px-3 py-2 text-left text-xs transition-colors ${
+                    adminContestView === value
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="block font-semibold">{label as string}</span>
+                  <span className="font-mono text-[11px]">{String(count)}</span>
+                </button>
+              ))}
             </div>
           </div>
+          <div className="max-h-[32rem] overflow-y-auto p-3">
+            {visibleAdminContests.length === 0 ? (
+              <div className="rounded-sm border border-border bg-background p-4 text-center">
+                <p className="text-xs font-semibold text-foreground">No contests here</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Switch pages or create a new draft contest.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {visibleAdminContests.map((contest) => {
+                  const selected = selectedContestId === contest._id;
+                  return (
+                    <button
+                      key={contest._id}
+                      type="button"
+                      onClick={() => selectContest(contest._id)}
+                      className={`w-full rounded-sm border p-3 text-left transition-colors ${
+                        selected ? "border-primary/40 bg-primary/10" : "border-border bg-background hover:bg-secondary/20"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-bold text-foreground">{contest.title}</div>
+                          <div className="mt-1 truncate text-[10px] text-muted-foreground">
+                            {new Date(contest.startTime).toLocaleString()}
+                          </div>
+                        </div>
+                        <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[9px] ${
+                          selected ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"
+                        }`}>
+                          {selected ? "Open" : labelize(contest.lifecycle || contest.status)}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] text-muted-foreground">
+                        <span className="rounded-sm border border-border bg-card px-1.5 py-0.5">{getContestTypeLabel(contest.contestType)}</span>
+                        <span className="rounded-sm border border-border bg-card px-1.5 py-0.5">{(contest.questions || []).length} problems</span>
+                        {contest.ratingEnabled && <span className="rounded-sm border border-green-500/25 bg-green-500/10 px-1.5 py-0.5 text-green-700">Rated</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <div className="min-w-0 space-y-5">
+          <div className="academic-card overflow-hidden">
+            <div className="border-b border-border bg-secondary/30 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Workspace</div>
+                  <h3 className="mt-1 truncate font-serif text-lg font-bold text-foreground">
+                    {selectedContest ? selectedContest.title : "No contest selected"}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedContest
+                      ? `${getContestTypeLabel(selectedContest.contestType)} / ${labelize(selectedContest.lifecycle || selectedContest.status)}`
+                      : "Choose a contest from the library or create a new one."}
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3 lg:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setAdminContestView("draft");
+                      setActivePanel("setup");
+                    }}
+                    className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-2 text-xs"
+                  >
+                    <Plus size={13} />
+                    New
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedContest}
+                    onClick={() => {
+                      if (!selectedContest) return;
+                      startEdit(selectedContest);
+                      setActivePanel("setup");
+                    }}
+                    className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
+                  >
+                    <Pencil size={13} />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedContest}
+                    onClick={() => setActivePanel("lifecycle")}
+                    className="btn-primary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
+                  >
+                    <Radio size={13} />
+                    Stage
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {selectedContest ? (
+              <div className="p-4">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    ["Problems", selectedContestMetrics.problems, FileQuestion],
+                    ["Registered", selectedContestMetrics.registered, Users],
+                    ["Responses", selectedContestMetrics.submissions, BarChart3],
+                    ["Locked", selectedContestMetrics.locked, Clock3],
+                  ].map(([label, value, Icon]) => {
+                    const MetricIcon = Icon as typeof FileQuestion;
+                    return (
+                      <div key={label as string} className="rounded-sm border border-border bg-background p-3">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          <MetricIcon size={12} />
+                          {label as string}
+                        </div>
+                        <div className="mt-1 font-mono text-lg font-bold text-foreground">{String(value)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-5">
+                  {selectedContestReadiness.map((item) => (
+                    <div
+                      key={item.label}
+                      className={`rounded-sm border p-2 ${
+                        item.ready ? "border-green-500/25 bg-green-500/10" : "border-border bg-background"
+                      }`}
+                    >
+                      <div className={`flex items-center gap-1.5 text-[10px] font-semibold ${item.ready ? "text-green-700" : "text-muted-foreground"}`}>
+                        <span className={`h-2 w-2 rounded-full ${item.ready ? "bg-green-600" : "bg-muted-foreground/40"}`} />
+                        {item.label}
+                      </div>
+                      <div className="mt-1 truncate text-[10px] text-muted-foreground">{item.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                Create a new contest or select an existing one from the library.
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {managerPanels.map(({ id, label, description, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActivePanel(id)}
+                className={`rounded-sm border p-3 text-left transition-colors ${
+                  activePanel === id ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]" : "border-border bg-card hover:bg-secondary/25"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-background">
+                    <Icon size={16} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold">{label}</span>
+                    <span className="mt-0.5 line-clamp-2 block text-[10px] leading-relaxed text-muted-foreground">{description}</span>
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      </div>
 
       {activePanel === "setup" && (
       <form onSubmit={handleSubmit} className="academic-card space-y-4 p-4 sm:p-6">
@@ -756,7 +1219,22 @@ export default function AdminContestSection() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold">Publication</label>
+            <select
+              value={form.lifecycle}
+              onChange={(e) => setForm({ ...form, lifecycle: e.target.value })}
+              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
+            >
+              <option value="draft">Draft / hidden</option>
+              <option value="published">Published / scheduled</option>
+              <option value="registration_open">Registration open</option>
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Draft stays admin-only; published and registration open appear on the user contest hub.
+            </p>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-bold">Contest Type</label>
             <select
@@ -768,6 +1246,9 @@ export default function AdminContestSection() {
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {contestTypes.find(([value]) => value === form.contestType)?.[2] || "Contest format controls how this appears to users."}
+            </p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold">Scoring</label>
@@ -883,95 +1364,66 @@ export default function AdminContestSection() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]">
         <div className="academic-card overflow-hidden">
           <div className="border-b border-border bg-secondary/30 p-4">
-            <h3 className="text-sm font-bold">Contest Library</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Separate new, upcoming, live, and past contests before attaching problems.</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {[
-                ["new", "New", adminContestGroups.new.length],
-                ["upcoming", "Upcoming", adminContestGroups.upcoming.length],
-                ["live", "Live", adminContestGroups.live.length],
-                ["past", "Past", adminContestGroups.past.length],
-                ["all", "All", adminContestGroups.all.length],
-              ].map(([value, label, count]) => (
-                <button
-                  key={value as string}
-                  type="button"
-                  onClick={() => setAdminContestView(value as typeof adminContestView)}
-                  className={`rounded-sm border px-3 py-2 text-left text-xs transition-colors ${
-                    adminContestView === value
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span className="font-semibold">{label as string}</span>
-                  <span className="ml-2 font-mono">{String(count)}</span>
-                </button>
-              ))}
-            </div>
+            <h3 className="text-sm font-bold">Problem Workspace</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Use the top Contest Library to choose old, live, or upcoming contests before editing problems.</p>
           </div>
-          {visibleAdminContests.length === 0 ? (
-            <p className="p-6 text-center text-xs text-muted-foreground">
-              No contests in this group.
-            </p>
+          {selectedContest ? (
+            <div className="p-4">
+              <div className="rounded-sm border border-border bg-background p-4">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
+                <h3 className="mt-1 line-clamp-2 text-base font-bold text-foreground">{selectedContest.title}</h3>
+                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                  <span className="rounded-sm border border-border bg-card px-2 py-0.5">{getContestTypeLabel(selectedContest.contestType)}</span>
+                  <span className="rounded-sm border border-border bg-card px-2 py-0.5">{labelize(selectedContest.lifecycle || selectedContest.status)}</span>
+                  <span className="rounded-sm border border-border bg-card px-2 py-0.5">{selectedQuestionIds.length} selected</span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startEdit(selectedContest);
+                      setActivePanel("setup");
+                    }}
+                    className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-2 text-xs"
+                  >
+                    <Pencil size={13} />
+                    Edit Setup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("lifecycle")}
+                    className="btn-primary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs"
+                  >
+                    <Radio size={13} />
+                    Manage Stage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteContest(selectedContest._id)}
+                    className="inline-flex items-center justify-center gap-2 rounded-sm border border-destructive/30 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 size={13} />
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {selectedContestReadiness.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between rounded-sm border border-border bg-background p-2 text-xs">
+                    <span className={item.ready ? "font-semibold text-green-700" : "text-muted-foreground"}>{item.label}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">{item.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
-            <div className="divide-y divide-border">
-              {visibleAdminContests.map((contest) => (
-                <button
-                  key={contest._id}
-                  type="button"
-                  onClick={() => selectContest(contest._id)}
-                  className={`flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-secondary/20 ${
-                    selectedContestId === contest._id ? "bg-primary/5" : ""
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-foreground">{contest.title}</span>
-                    <span className="mt-1 block text-[11px] text-muted-foreground">
-                      {new Date(contest.startTime).toLocaleString()} / {contest.contestType || "full_mock"} /{" "}
-                      {contest.scoringMode || "gate"}
-                    </span>
-                    <span className="mt-2 inline-flex flex-wrap gap-2">
-                      <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
-                        {contest.lifecycle || contest.status}
-                      </span>
-                      <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
-                        {(contest.questions || []).length} problems
-                      </span>
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        startEdit(contest);
-                        setActivePanel("setup");
-                      }}
-                      className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[11px]"
-                    >
-                      <Pencil size={14} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        deleteContest(contest._id);
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-sm border border-destructive/30 px-3 py-1.5 text-[11px] text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
-                  </span>
-                </button>
-              ))}
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              Select a contest from the Contest Library above, or create a new contest first.
             </div>
           )}
         </div>
 
         <div className="space-y-6">
-          <AdminLifecycleRail current={selectedContest?.lifecycle || form.lifecycle} />
           <div className="academic-card p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -1142,41 +1594,104 @@ export default function AdminContestSection() {
                 </p>
               </div>
             </div>
-          </div>
-          <div className="grid gap-3 p-4 md:grid-cols-2">
-            {lifecycleActions.map(({ stage, title, description, lifecycle, action, Icon, primary }) => {
-              const isCurrent = lifecycle && selectedContest?.lifecycle === lifecycle;
-              return (
-                <button
-                  key={title}
-                  type="button"
-                  disabled={!selectedContestId || Boolean(isCurrent)}
-                  onClick={() => lifecycle ? setContestLifecycle(lifecycle) : runContestAction(action!)}
-                  className={`rounded-sm border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                    isCurrent
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : primary
-                        ? "border-primary/35 bg-primary text-primary-foreground hover:opacity-90"
-                        : "border-border bg-background hover:bg-secondary/25"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border ${
-                      primary && !isCurrent ? "border-primary-foreground/30 bg-primary-foreground/10" : "border-border bg-card"
-                    }`}>
-                      <Icon size={17} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[10px] uppercase tracking-wide opacity-75">{stage}</span>
-                      <span className="mt-1 block text-sm font-bold">{isCurrent ? `${title} active` : title}</span>
-                      <span className={`mt-1 block text-xs leading-relaxed ${primary && !isCurrent ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                        {description}
+            {selectedContest?.ratingEnabled && (
+              <div className="mt-3 rounded-sm border border-border bg-card p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rating Preview</div>
+                    <p className="mt-1 text-xs leading-relaxed text-foreground">
+                      {ratingPreview?.message || "Open this panel to calculate projected rating changes before finalizing."}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      <span className="rounded-sm border border-border bg-background px-2 py-1">
+                        Participants: {ratingPreview?.participants ?? "-"}
                       </span>
-                    </span>
+                      <span className="rounded-sm border border-border bg-background px-2 py-1">
+                        Changes: {ratingPreview?.count ?? "-"}
+                      </span>
+                      {ratingPreview?.alreadyApplied && (
+                        <span className="rounded-sm border border-green-500/25 bg-green-500/10 px-2 py-1 text-green-700">
+                          Already applied
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </button>
-              );
-            })}
+                  <button type="button" onClick={fetchRatingPreview} className="btn-outline px-3 py-1.5 text-xs">
+                    Refresh Preview
+                  </button>
+                </div>
+                {(ratingPreview?.changes || []).length > 0 && (
+                  <div className="mt-3 max-h-48 overflow-y-auto rounded-sm border border-border">
+                    {(ratingPreview?.changes || []).slice(0, 20).map((change) => (
+                      <div key={String(change.userId)} className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-border px-3 py-2 text-xs last:border-b-0">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-foreground">{change.fullName}</div>
+                          <div className="truncate font-mono text-[10px] text-muted-foreground">Rank #{change.rank}</div>
+                        </div>
+                        <div className="font-mono text-muted-foreground">
+                          {change.oldRating} {"->"} {change.newRating}
+                        </div>
+                        <div className={`font-mono font-bold ${change.delta >= 0 ? "text-green-600" : "text-destructive"}`}>
+                          {change.delta >= 0 ? "+" : ""}{change.delta}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="space-y-4 p-4">
+            {lifecycleActionGroups.map((group) => (
+              <section key={group.stage} className="rounded-sm border border-border bg-background p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{group.stage}</h4>
+                  <span className="text-[10px] text-muted-foreground">{group.actions.length} action{group.actions.length === 1 ? "" : "s"}</span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {group.actions.map(({ stage, title, description, lifecycle, action, Icon, primary }) => {
+                    const isCurrent = lifecycle && selectedContest?.lifecycle === lifecycle;
+                    const currentIndex = getLifecycleIndex(selectedContest?.lifecycle);
+                    const targetIndex = lifecycle ? getLifecycleIndex(lifecycle) : -1;
+                    const completed = lifecycle ? currentIndex > targetIndex && targetIndex >= 0 : false;
+                    return (
+                      <button
+                        key={title}
+                        type="button"
+                        disabled={!selectedContestId || Boolean(isCurrent)}
+                        onClick={() => lifecycle ? setContestLifecycle(lifecycle) : runContestAction(action!)}
+                        className={`rounded-sm border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                          isCurrent
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : primary
+                              ? "border-primary/35 bg-primary text-primary-foreground hover:opacity-90"
+                              : completed
+                                ? "border-green-500/25 bg-green-500/10"
+                                : "border-border bg-card hover:bg-secondary/25"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border ${
+                            primary && !isCurrent ? "border-primary-foreground/30 bg-primary-foreground/10" : "border-border bg-background"
+                          }`}>
+                            <Icon size={17} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[10px] uppercase tracking-wide opacity-75">{stage}</span>
+                            <span className="mt-1 block text-sm font-bold">
+                              {isCurrent ? `${title} active` : completed ? `${title} done` : title}
+                            </span>
+                            <span className={`mt-1 block text-xs leading-relaxed ${primary && !isCurrent ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                              {description}
+                            </span>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         </div>
       </div>
@@ -1186,13 +1701,32 @@ export default function AdminContestSection() {
       <div className="academic-card overflow-hidden">
         <div className="flex flex-col gap-2 border-b border-border bg-secondary/30 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-sm font-bold">Live Monitor</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Admin view of registrations, saved responses, locks, and computed standings for the selected contest.</p>
+            <h3 className="text-sm font-bold">{selectedContestIsPast ? "Past Contest Archive" : "Live Monitor"}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {selectedContestIsPast
+                ? "Saved timings, student registrations, responses, locks, claims, and final standings for the selected contest."
+                : "Admin view of registrations, saved responses, locks, and computed standings for the selected contest."}
+            </p>
           </div>
           <button type="button" onClick={fetchAdminStandings} className="btn-outline px-3 py-1.5 text-xs">
             Refresh Standings
           </button>
         </div>
+        {selectedContest && (
+          <div className="grid gap-3 border-b border-border bg-background p-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["Stage", labelize(selectedContest.lifecycle || selectedContest.status)],
+              ["Registration", `${formatDateTime(selectedContest.registrationStartTime)} -> ${formatDateTime(selectedContest.registrationEndTime)}`],
+              ["Contest Time", `${formatDateTime(selectedContest.startTime)} -> ${formatDateTime(selectedContest.endTime)}`],
+              ["Activity", `${selectedContestMetrics.registered} students / ${selectedContestMetrics.submissions} responses`],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-sm border border-border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                <div className="mt-1 text-xs font-semibold text-foreground">{value}</div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[58rem] text-xs">
             <thead>
@@ -1315,8 +1849,8 @@ export default function AdminContestSection() {
       <div className="academic-card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border bg-secondary/30 p-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h3 className="text-sm font-bold">Claims Review</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Resolve participant appeals after claims are opened from Lifecycle.</p>
+            <h3 className="text-sm font-bold">Contest Claims Desk</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Review every user claim for this contest with question context, response notes, and final decision controls.</p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <button type="button" onClick={() => setActivePanel("lifecycle")} className="btn-primary px-3 py-2 text-xs">
@@ -1327,50 +1861,89 @@ export default function AdminContestSection() {
             </button>
           </div>
         </div>
-        <div className="divide-y divide-border">
-          {adminClaims.map((claim) => (
-            <div key={claim._id} className="p-4">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] uppercase text-muted-foreground">
-                      {claim.status}
-                    </span>
-                    <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] uppercase text-muted-foreground">
-                      {claim.type}
-                    </span>
-                  </div>
-                  <div className="mt-2 font-semibold text-foreground">{claim.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {claim.userId?.fullName || claim.userId?.email || "User"} / {claim.questionId?.contentId || claim.questionId?.problemId || "Contest"}
-                  </div>
-                  <p className="mt-2 text-sm leading-relaxed text-foreground">{claim.description}</p>
-                </div>
-                <div className="w-full shrink-0 xl:w-80">
-                  <textarea
-                    value={claimResponses[claim._id] ?? claim.adminResponse ?? ""}
-                    onChange={(event) => setClaimResponses({ ...claimResponses, [claim._id]: event.target.value })}
-                    rows={3}
-                    placeholder="Admin response"
-                    className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
-                  />
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => updateClaim(claim._id, "under_review")} className="rounded-sm border border-border px-2 py-1.5 text-[10px] hover:bg-secondary">
-                      Review
-                    </button>
-                    <button type="button" onClick={() => updateClaim(claim._id, "accepted")} className="rounded-sm border border-green-500/30 px-2 py-1.5 text-[10px] text-green-700 hover:bg-green-500/10">
-                      Accept
-                    </button>
-                    <button type="button" onClick={() => updateClaim(claim._id, "rejected")} className="rounded-sm border border-destructive/30 px-2 py-1.5 text-[10px] text-destructive hover:bg-destructive/10">
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              </div>
+        <div className="grid gap-3 border-b border-border bg-background p-4 sm:grid-cols-2 xl:grid-cols-5">
+          {[
+            ["Total", claimSummary.total],
+            ["Pending", claimSummary.pending],
+            ["Reviewing", claimSummary.review],
+            ["Accepted", claimSummary.accepted],
+            ["Rejected", claimSummary.rejected],
+          ].map(([label, value]) => (
+            <div key={label as string} className="rounded-sm border border-border bg-card p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label as string}</div>
+              <div className="mt-1 font-mono text-lg font-bold text-foreground">{String(value)}</div>
             </div>
           ))}
+        </div>
+        <div className="space-y-4 p-4">
+          {claimSummary.users.map((group) => (
+            <section key={group.email || group.label} className="rounded-sm border border-border bg-background">
+              <div className="flex flex-col gap-1 border-b border-border bg-secondary/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-foreground">{group.label}</h4>
+                  {group.email && <p className="font-mono text-[10px] text-muted-foreground">{group.email}</p>}
+                </div>
+                <span className="rounded-sm border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  {group.claims.length} claim{group.claims.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="divide-y divide-border">
+                {group.claims.map((claim) => (
+                  <div key={claim._id} className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-sm border px-2 py-0.5 text-[10px] uppercase ${claimStatusClass(claim.status)}`}>
+                          {labelize(claim.status)}
+                        </span>
+                        <span className="rounded-sm border border-border bg-card px-2 py-0.5 text-[10px] uppercase text-muted-foreground">
+                          {labelize(claim.type)}
+                        </span>
+                        <span className="rounded-sm border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {formatDateTime(claim.createdAt)}
+                        </span>
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-foreground">{claim.title}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {claim.questionId?.contentId || claim.questionId?.problemId || "Contest level"} {claim.questionId?.title ? `/ ${claim.questionId.title}` : ""}
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{claim.description}</p>
+                      {claim.adminResponse && (
+                        <div className="mt-3 rounded-sm border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
+                          <span className="mb-1 block font-bold text-primary">Current admin response</span>
+                          {claim.adminResponse}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Admin Response</label>
+                      <textarea
+                        value={claimResponses[claim._id] ?? claim.adminResponse ?? ""}
+                        onChange={(event) => setClaimResponses({ ...claimResponses, [claim._id]: event.target.value })}
+                        rows={5}
+                        placeholder="Write the decision note visible to the user"
+                        className="w-full rounded-sm border border-border bg-card px-3 py-2 text-xs outline-none focus:border-primary"
+                      />
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        <button type="button" onClick={() => updateClaim(claim._id, "under_review")} className="rounded-sm border border-border px-2 py-1.5 text-[10px] hover:bg-secondary">
+                          Review
+                        </button>
+                        <button type="button" onClick={() => updateClaim(claim._id, "accepted")} className="rounded-sm border border-green-500/30 px-2 py-1.5 text-[10px] text-green-700 hover:bg-green-500/10">
+                          Accept
+                        </button>
+                        <button type="button" onClick={() => updateClaim(claim._id, "rejected")} className="rounded-sm border border-destructive/30 px-2 py-1.5 text-[10px] text-destructive hover:bg-destructive/10">
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
           {adminClaims.length === 0 && (
-            <div className="p-8 text-center text-sm text-muted-foreground">No claims submitted for this contest.</div>
+            <div className="rounded-sm border border-border bg-background p-8 text-center text-sm text-muted-foreground">
+              No claims submitted for this contest.
+            </div>
           )}
         </div>
       </div>
