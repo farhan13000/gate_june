@@ -99,6 +99,9 @@ export default function AdminContestTestRunner() {
 
   const selectedSuiteMeta = suites.find((suite) => suite.id === selectedSuite);
   const activeRun = useMemo(() => runs.find((run) => run.id === selectedRunId) || selectedRun, [runs, selectedRun, selectedRunId]);
+  const runningRun = useMemo(() => runs.find((run) => run.status === "running") || null, [runs]);
+  const stopTargetId =
+    runningRun?.id || (activeRun?.status === "running" ? activeRun.id : "") || (selectedRun?.status === "running" ? selectedRunId : "");
 
   const groupedRuns = useMemo(() => {
     return suites.map((suite) => ({
@@ -163,28 +166,36 @@ export default function AdminContestTestRunner() {
       setLogs((current) => [...current, ...(data.lines || [])].slice(-2000));
     });
     es.addEventListener("contest-test-finished", (event: MessageEvent) => {
-      setSelectedRun(JSON.parse(event.data));
+      const run = JSON.parse(event.data) as TestRun;
+      setSelectedRun(run);
+      setRuns((current) => current.map((entry) => (entry.id === run.id ? { ...entry, ...run } : entry)));
       fetchRuns();
     });
     es.onerror = () => es.close();
     return () => es.close();
   }, [fetchRuns, selectedRunId]);
 
-  const canStopRun = activeRun?.status === "running" && Boolean(selectedRunId);
+  const canStopRun = Boolean(stopTargetId);
 
   const stopRun = async () => {
-    if (!selectedRunId || !canStopRun) return;
+    const runId = stopTargetId;
+    if (!runId) return;
     setStopping(true);
     try {
-      const res = await fetch(`/api/admin/contest-tests/runs/${selectedRunId}/stop`, {
+      const res = await fetch(`/api/admin/contest-tests/runs/${runId}/stop`, {
         method: "POST",
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to stop test run");
-      toast.success("Test run stopped");
+      const stoppedRun = (data.run || null) as TestRun | null;
+      if (stoppedRun) {
+        setSelectedRun(stoppedRun);
+        setRuns((current) => current.map((entry) => (entry.id === stoppedRun.id ? { ...entry, ...stoppedRun } : entry)));
+      }
+      toast.success(data.message === "Stop requested" ? "Stop requested — ending test run…" : "Test run stopped");
       await fetchRuns();
-      await fetchRun(selectedRunId);
+      await fetchRun(runId);
     } catch (error: any) {
       toast.error(error.message || "Failed to stop test run");
     } finally {
@@ -209,6 +220,8 @@ export default function AdminContestTestRunner() {
       if (!res.ok) throw new Error(data.message || "Failed to start test run");
       toast.success(`${data.label} started`);
       setSelectedRunId(data.id);
+      setSelectedRun(data);
+      setRuns((current) => [data, ...current.filter((entry) => entry.id !== data.id)]);
       await fetchRuns();
     } catch (error: any) {
       toast.error(error.message || "Failed to start test run");
@@ -307,7 +320,7 @@ export default function AdminContestTestRunner() {
                   type="button"
                   disabled={!canStopRun || stopping}
                   onClick={stopRun}
-                  title={canStopRun ? "Stop the selected running test" : "Select a running test to stop"}
+                  title={canStopRun ? "Stop the active test run" : "Start a test run to enable stop"}
                   className="btn-outline inline-flex shrink-0 items-center justify-center gap-2 border-destructive/40 px-4 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-60"
                 >
                   <Square size={13} />

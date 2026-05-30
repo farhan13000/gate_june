@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ChildProcess, spawn } from "child_process";
+import { ChildProcess, execFile, spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -48,22 +48,89 @@ const SUITES: Record<string, { label: string; command: string; args: string[]; a
 const runs = new Map<string, TestRun>();
 const processes = new Map<string, ChildProcess>();
 const stoppingRuns = new Set<string>();
+const stopTimeouts = new Map<string, NodeJS.Timeout>();
 const listeners = new Map<string, Set<Response>>();
 
-function killTestProcess(child: ChildProcess) {
-  if (!child.pid) return;
+function spawnSuiteProcess(suite: (typeof SUITES)[string], env: NodeJS.ProcessEnv) {
+  const cwd = backendCwd();
   if (process.platform === "win32") {
-    spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { shell: false });
-  } else {
-    child.kill("SIGTERM");
-    setTimeout(() => {
-      if (!child.killed) child.kill("SIGKILL");
-    }, 5000);
+    return spawn("cmd.exe", ["/d", "/s", "/c", suite.command, ...suite.args], {
+      cwd,
+      env,
+      windowsHide: true,
+    });
   }
+  return spawn(suite.command, suite.args, { cwd, env });
+}
+
+function killTestProcess(child: ChildProcess, onDone?: () => void) {
+  const finish = () => onDone?.();
+  if (!child.pid) {
+    try {
+      child.kill();
+    } catch {
+      // Process may already be gone.
+    }
+    finish();
+    return;
+  }
+
+  if (process.platform === "win32") {
+    execFile(
+      "taskkill",
+      ["/PID", String(child.pid), "/T", "/F"],
+      { windowsHide: true },
+      () => {
+        try {
+          child.kill();
+        } catch {
+          // Ignore if the shell already exited.
+        }
+        finish();
+      }
+    );
+    return;
+  }
+
+  child.kill("SIGTERM");
+  setTimeout(() => {
+    if (!child.killed) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // Ignore if the process already exited.
+      }
+    }
+    finish();
+  }, 1000);
+}
+
+function clearStopTimeout(runId: string) {
+  const timeout = stopTimeouts.get(runId);
+  if (timeout) {
+    clearTimeout(timeout);
+    stopTimeouts.delete(runId);
+  }
+}
+
+function scheduleForceStop(run: TestRun, runId: string, delayMs = 5000) {
+  clearStopTimeout(runId);
+  stopTimeouts.set(
+    runId,
+    setTimeout(() => {
+      stopTimeouts.delete(runId);
+      if (run.finishedAt) return;
+      stoppingRuns.add(runId);
+      processes.delete(runId);
+      appendLog(run, "[contest-qa] Run force-stopped after kill timeout\n");
+      finalizeRun(run, runId, null);
+    }, delayMs)
+  );
 }
 
 function finalizeRun(run: TestRun, runId: string, code: number | null) {
   if (run.finishedAt) return;
+  clearStopTimeout(runId);
   processes.delete(runId);
   const stopped = stoppingRuns.has(runId);
   if (stopped) stoppingRuns.delete(runId);
@@ -142,22 +209,40 @@ function loadStoredRuns() {
       if (!fs.existsSync(paths.resultPath) || runs.has(runDir.name)) continue;
       try {
         const stored = JSON.parse(fs.readFileSync(paths.resultPath, "utf8"));
-        runs.set(runDir.name, {
+        const restoredStatus = stored.status || "error";
+        const staleRunning = restoredStatus === "running" && !processes.has(runDir.name);
+        const startedAt = new Date(stored.startedAt);
+        const finishedAt = staleRunning
+          ? new Date(stored.finishedAt || Date.now())
+          : stored.finishedAt
+            ? new Date(stored.finishedAt)
+            : undefined;
+        const runRecord: TestRun = {
           id: runDir.name,
           suite: stored.suite || suiteDir.name,
           label: stored.label || SUITES[suiteDir.name]?.label || suiteDir.name,
           command: stored.command || "",
           args: [],
-          status: stored.status || "error",
-          startedAt: new Date(stored.startedAt),
-          finishedAt: stored.finishedAt ? new Date(stored.finishedAt) : undefined,
-          durationMs: stored.durationMs,
-          exitCode: stored.exitCode,
+          status: staleRunning ? "stopped" : restoredStatus,
+          startedAt,
+          finishedAt,
+          durationMs: staleRunning
+            ? finishedAt
+              ? finishedAt.getTime() - startedAt.getTime()
+              : stored.durationMs
+            : stored.durationMs,
+          exitCode: staleRunning ? stored.exitCode ?? null : stored.exitCode,
           logs: fs.existsSync(paths.logPath) ? fs.readFileSync(paths.logPath, "utf8").split(/\r?\n/).filter(Boolean) : [],
           summary: stored.summary,
           requestedBy: stored.requestedBy,
           ...paths,
-        });
+        };
+        if (staleRunning) {
+          runRecord.logs.push("[contest-qa] Run recovered as stopped after server restart\n");
+          fs.appendFileSync(paths.logPath, "[contest-qa] Run recovered as stopped after server restart\n", "utf8");
+        }
+        runs.set(runDir.name, runRecord);
+        if (staleRunning) writeResult(runRecord);
       } catch {
         // A partially written report should not block access to healthy QA runs.
       }
@@ -267,19 +352,15 @@ export const startContestTestRun = (req: Request, res: Response): void => {
   ensureRunFiles(run);
   appendLog(run, `[contest-qa] Suite: ${suite.label}\n[contest-qa] Result: ${run.resultPath}\n[contest-qa] Log: ${run.logPath}\n`);
 
-  const child = spawn(suite.command, suite.args, {
-    cwd: backendCwd(),
-    // Windows cannot reliably spawn npm.cmd directly and reports EINVAL.
-    // The command and args are selected from the fixed suite whitelist above.
-    shell: process.platform === "win32",
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      JWT_SECRET: process.env.JWT_SECRET || "contest-test-secret",
-      MONGO_TEST_URI: mongoTestUri,
-      FORCE_COLOR: "0",
-    },
-  });
+  const childEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    JWT_SECRET: process.env.JWT_SECRET || "contest-test-secret",
+    MONGO_TEST_URI: mongoTestUri,
+    FORCE_COLOR: "0",
+  };
+
+  const child = spawnSuiteProcess(suite, childEnv);
 
   processes.set(id, child);
 
@@ -304,6 +385,7 @@ export const startContestTestRun = (req: Request, res: Response): void => {
 
 export const stopContestTestRun = (req: Request, res: Response): void => {
   const runId = String(req.params.id);
+  loadStoredRuns();
   const run = runs.get(runId);
   if (!run) {
     res.status(404).json({ message: "Test run not found" });
@@ -313,13 +395,18 @@ export const stopContestTestRun = (req: Request, res: Response): void => {
     res.status(400).json({ message: "Test run is not running" });
     return;
   }
+
+  stoppingRuns.add(runId);
   const child = processes.get(runId);
+
   if (!child) {
-    res.status(409).json({ message: "No active process for this run" });
+    appendLog(run, "[contest-qa] No active process found; marking run as stopped\n");
+    finalizeRun(run, runId, null);
+    res.json({ message: "Run stopped", run: publicRun(run) });
     return;
   }
-  stoppingRuns.add(runId);
-  killTestProcess(child);
+
+  killTestProcess(child, () => scheduleForceStop(run, runId));
   res.status(202).json({ message: "Stop requested", run: publicRun(run) });
 };
 
