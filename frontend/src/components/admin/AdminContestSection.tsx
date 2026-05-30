@@ -1,6 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Award, BarChart3, Check, Clock3, Eye, FileQuestion, Flag, Gavel, KeyRound, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, FileQuestion, Flag, Gavel, KeyRound, List, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
 import { toast } from "sonner";
+import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 
 type Contest = {
   _id: string;
@@ -32,6 +33,30 @@ type ProblemCandidate = {
   difficulty: string;
   questionType: string;
   topic?: string;
+  tags?: string[];
+};
+
+const emptyProblemHierarchy: HierarchyPickerValue = {
+  subjectId: "",
+  chapterId: "",
+  topicId: "",
+  subtopicId: "",
+};
+
+const emptyContestProblemForm = {
+  title: "",
+  statement: "",
+  solution: "",
+  difficulty: "Medium",
+  questionType: "MCQ",
+  positiveMarks: 2,
+  negativeMarks: 0.66,
+  options: [
+    { text: "", isCorrect: true },
+    { text: "", isCorrect: false },
+    { text: "", isCorrect: false },
+    { text: "", isCorrect: false },
+  ],
 };
 
 type AdminStanding = {
@@ -417,6 +442,10 @@ function getProblemId(problem: any) {
   return String(problem?._id || problem || "");
 }
 
+function isContestOnlyProblem(problem?: ProblemCandidate | null) {
+  return Boolean(problem?.tags?.includes("contest-only"));
+}
+
 const lifecycleActions: LifecycleOperation[] = [
   {
     stage: "Registration",
@@ -504,6 +533,14 @@ export default function AdminContestSection() {
   const [activePanel, setActivePanel] = useState<ManagerPanel>("setup");
   const [adminContestView, setAdminContestView] = useState<AdminContestView>("draft");
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [composingNewContest, setComposingNewContest] = useState(false);
+  const [showContestProblemCreator, setShowContestProblemCreator] = useState(false);
+  const [creatingContestProblem, setCreatingContestProblem] = useState(false);
+  const [problemHierarchy, setProblemHierarchy] = useState<HierarchyPickerValue>(emptyProblemHierarchy);
+  const [contestProblemForm, setContestProblemForm] = useState(emptyContestProblemForm);
+  const composingNewRef = useRef(false);
+  const initialContestSelectionRef = useRef(false);
 
   const selectedContest = useMemo(
     () => contests.find((contest) => contest._id === selectedContestId) || null,
@@ -513,6 +550,45 @@ export default function AdminContestSection() {
     () => buildContestReadiness(selectedContest, adminStandings),
     [adminStandings, selectedContest]
   );
+
+  const workspaceReadiness = useMemo(() => {
+    if (!composingNewContest) return selectedContestReadiness;
+    const pseudo: Contest = {
+      _id: "draft",
+      title: form.title,
+      description: form.description,
+      startTime: form.startTime || new Date().toISOString(),
+      endTime: form.endTime || new Date().toISOString(),
+      lifecycle: form.lifecycle,
+      status: "draft",
+      showOnHome: form.showOnHome,
+      questions: selectedQuestionIds.map((id) => ({ _id: id } as ProblemCandidate)),
+    };
+    return buildContestReadiness(pseudo, []);
+  }, [composingNewContest, form, selectedContestReadiness, selectedQuestionIds]);
+
+  const savedQuestionIds = useMemo(
+    () => (selectedContest?.questions || []).map(getProblemId).filter(Boolean),
+    [selectedContest]
+  );
+
+  const problemsDirty = useMemo(() => {
+    if (savedQuestionIds.length !== selectedQuestionIds.length) return true;
+    const saved = [...savedQuestionIds].sort().join(",");
+    const selected = [...selectedQuestionIds].sort().join(",");
+    return saved !== selected;
+  }, [savedQuestionIds, selectedQuestionIds]);
+
+  const showWorkspaceContest = Boolean(selectedContest && !composingNewContest);
+  const workspaceTitle = composingNewContest
+    ? form.title.trim() || "New Contest Draft"
+    : selectedContest?.title || "No contest selected";
+  const workspaceSubtitle = composingNewContest
+    ? "Draft setup in progress — save the contest before attaching problems or running stages."
+    : selectedContest
+      ? `${getContestTypeLabel(selectedContest.contestType)} / ${labelize(selectedContest.lifecycle || selectedContest.status)}`
+      : "Choose a contest from the library or create a new one.";
+
   const selectedContestMetrics = useMemo(() => {
     const submissions = adminStandings.reduce((sum, row) => sum + (row.submissionCount || 0), 0);
     const locked = adminStandings.filter((row) => row.finishedAt).length;
@@ -523,6 +599,15 @@ export default function AdminContestSection() {
       locked,
     };
   }, [adminStandings, selectedContest]);
+
+  const workspaceMetrics = composingNewContest
+    ? {
+        problems: selectedQuestionIds.length,
+        registered: 0,
+        submissions: 0,
+        locked: 0,
+      }
+    : selectedContestMetrics;
   const selectedContestIsPast = selectedContest ? isPastContest(selectedContest) : false;
   const claimSummary = useMemo(() => {
     const byUser = new Map<string, { label: string; email: string; claims: AdminClaim[] }>();
@@ -562,8 +647,9 @@ export default function AdminContestSection() {
       if (res.ok) {
         const data = await res.json();
         setContests(data);
-        if (!selectedContestId && data.length > 0) {
-          setSelectedContestId(data[0]._id);
+        if (!initialContestSelectionRef.current && !composingNewRef.current && data.length > 0) {
+          initialContestSelectionRef.current = true;
+          setSelectedContestId((current) => current || data[0]._id);
         }
       }
     } catch {
@@ -571,14 +657,15 @@ export default function AdminContestSection() {
     } finally {
       setLoading(false);
     }
-  }, [selectedContestId]);
+  }, []);
 
   const fetchCandidates = useCallback(async () => {
     const params = new URLSearchParams({ limit: "60" });
     if (problemSearch.trim()) params.set("search", problemSearch.trim());
+    if (selectedContestId) params.set("contestId", selectedContestId);
     const res = await fetch(`/api/admin/contests/problem-candidates?${params}`, { credentials: "include" });
     if (res.ok) setCandidates(await res.json());
-  }, [problemSearch]);
+  }, [problemSearch, selectedContestId]);
 
   const fetchAdminStandings = useCallback(async () => {
     if (!selectedContestId) return;
@@ -689,16 +776,89 @@ export default function AdminContestSection() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const resetForm = () => {
+  const beginNewContest = () => {
+    composingNewRef.current = true;
+    setComposingNewContest(true);
     setForm(emptyForm);
     setEditingId(null);
     setSelectedContestId(null);
     setSelectedQuestionIds([]);
+    setAdminStandings([]);
+    setAdminClaims([]);
+    setRatingPreview(null);
+    setExpandedParticipantId(null);
+    setAdminContestView("draft");
+    setActivePanel("setup");
+    setLibraryOpen(false);
+    setShowContestProblemCreator(false);
+  };
+
+  const resetForm = () => {
+    beginNewContest();
   };
 
   const selectContest = (contestId: string) => {
+    composingNewRef.current = false;
+    setComposingNewContest(false);
     setSelectedContestId(contestId);
+    setEditingId(null);
     setExpandedParticipantId(null);
+    setShowContestProblemCreator(false);
+  };
+
+  const createContestOnlyProblem = async () => {
+    if (!selectedContestId) {
+      toast.error("Save the contest first, then create contest-only problems");
+      return;
+    }
+    if (!problemHierarchy.subtopicId) {
+      toast.error("Select full taxonomy down to subtopic");
+      return;
+    }
+    if (!contestProblemForm.title.trim() || !contestProblemForm.statement.trim() || !contestProblemForm.solution.trim()) {
+      toast.error("Title, statement, and solution are required");
+      return;
+    }
+    setCreatingContestProblem(true);
+    try {
+      const res = await fetch(`/api/admin/contests/${selectedContestId}/contest-only-questions`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId: problemHierarchy.subjectId,
+          chapterId: problemHierarchy.chapterId,
+          topicId: problemHierarchy.topicId,
+          subtopicId: problemHierarchy.subtopicId,
+          topic: problemHierarchy.topicId,
+          title: contestProblemForm.title.trim(),
+          statement: contestProblemForm.statement.trim(),
+          solution: contestProblemForm.solution.trim(),
+          difficulty: contestProblemForm.difficulty,
+          questionType: contestProblemForm.questionType,
+          options: contestProblemForm.questionType === "NAT" ? [] : contestProblemForm.options,
+          markingScheme: {
+            positive: contestProblemForm.positiveMarks,
+            negative: contestProblemForm.negativeMarks,
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to create problem");
+      const questionId = String(data.question?._id || "");
+      if (questionId) {
+        setSelectedQuestionIds((current) => (current.includes(questionId) ? current : [...current, questionId]));
+      }
+      setContestProblemForm(emptyContestProblemForm);
+      setShowContestProblemCreator(false);
+      toast.success("Contest-only problem created and attached");
+      fetchContests();
+      fetchCandidates();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create contest-only problem");
+    } finally {
+      setCreatingContestProblem(false);
+    }
   };
 
   const openContestView = (view: AdminContestView) => {
@@ -740,6 +900,8 @@ export default function AdminContestSection() {
       if (res.ok) {
         const saved = await res.json();
         toast.success(editingId ? "Contest updated" : "Contest created");
+        composingNewRef.current = false;
+        setComposingNewContest(false);
         setForm(emptyForm);
         setEditingId(null);
         setSelectedContestId(saved._id);
@@ -756,6 +918,8 @@ export default function AdminContestSection() {
   };
 
   const startEdit = (contest: Contest) => {
+    composingNewRef.current = false;
+    setComposingNewContest(false);
     setSelectedContestId(contest._id);
     setEditingId(contest._id);
     setForm({
@@ -805,6 +969,7 @@ export default function AdminContestSection() {
       }
       if (res.ok) {
         toast.success("Contest deleted");
+        if (selectedContestId === id) beginNewContest();
         fetchContests();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -953,38 +1118,50 @@ export default function AdminContestSection() {
   };
 
   if (loading) {
-    return <p className="py-8 text-sm text-muted-foreground">Loading contests...</p>;
+    return (
+      <div className="w-full space-y-4 py-8">
+        <div className="h-24 animate-pulse rounded-sm border border-border bg-secondary/30" />
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[1, 2, 3].map((key) => (
+            <div key={key} className="h-28 animate-pulse rounded-sm border border-border bg-secondary/20" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="font-serif text-lg font-bold text-foreground">Contest Command Center</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Build contests in focused stages, then move them through registration, live, review, and results with dedicated controls.
-          </p>
+    <div className="w-full space-y-5 sm:space-y-6">
+      <section className="overflow-hidden rounded-sm border border-border bg-card">
+        <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+              <Trophy size={14} />
+              Contest Management
+            </div>
+            <h2 className="font-serif text-xl font-bold text-foreground sm:text-2xl">Contest Command Center</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Build contests in focused stages, then move them through registration, live, review, and results with dedicated controls.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:shrink-0">
+            <button
+              type="button"
+              onClick={beginNewContest}
+              className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+            >
+              <Plus size={13} />
+              New Contest
+            </button>
+            <button type="button" onClick={syncLifecycleNow} className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs">
+              <Radio size={13} />
+              Sync Lifecycle
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setAdminContestView("draft");
-              setActivePanel("setup");
-            }}
-            className="btn-primary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs"
-          >
-            <Plus size={13} />
-            New Contest
-          </button>
-          <button type="button" onClick={syncLifecycleNow} className="btn-outline px-3 py-2 text-xs">
-            Sync Lifecycle
-          </button>
-        </div>
-      </div>
+      </section>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[
           ["draft", "Draft Builder", "Create, draft, publish, and edit contest setup without mixing it with live controls.", adminContestGroups.draft.length + adminContestGroups.new.length, Plus],
           ["upcoming", "Published Control", "Manage published contests, registration, and launch readiness.", adminContestGroups.upcoming.length + adminContestGroups.live.length, Radio],
@@ -1001,7 +1178,7 @@ export default function AdminContestSection() {
             <button
               key={view as string}
               type="button"
-              onClick={() => openContestView(view as AdminContestView)}
+              onClick={() => (view === "draft" ? beginNewContest() : openContestView(view as AdminContestView))}
               className={`rounded-sm border p-4 text-left transition-colors ${
                 active ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-card hover:bg-secondary/25"
               }`}
@@ -1023,12 +1200,26 @@ export default function AdminContestSection() {
         })}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
-        <aside className="academic-card overflow-hidden xl:sticky xl:top-4 xl:self-start">
+      <div className="flex flex-col gap-3 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setLibraryOpen((open) => !open)}
+          className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-xs"
+        >
+          <List size={14} />
+          {libraryOpen ? "Hide Contest Library" : "Show Contest Library"}
+          {libraryOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:gap-6">
+        <aside
+          className={`academic-card overflow-hidden lg:sticky lg:top-4 lg:self-start ${libraryOpen ? "block" : "hidden lg:block"}`}
+        >
           <div className="border-b border-border bg-secondary/30 p-4">
             <h3 className="text-sm font-bold text-foreground">Contest Library</h3>
             <p className="mt-1 text-xs text-muted-foreground">Choose a contest from the current workspace page.</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
               {[
                 ["draft", "Drafts", adminContestGroups.draft.length],
                 ["new", "Recent", adminContestGroups.new.length],
@@ -1067,7 +1258,10 @@ export default function AdminContestSection() {
                     <button
                       key={contest._id}
                       type="button"
-                      onClick={() => selectContest(contest._id)}
+                      onClick={() => {
+                        selectContest(contest._id);
+                        setLibraryOpen(false);
+                      }}
                       className={`w-full rounded-sm border p-3 text-left transition-colors ${
                         selected ? "border-primary/40 bg-primary/10" : "border-border bg-background hover:bg-secondary/20"
                       }`}
@@ -1102,31 +1296,22 @@ export default function AdminContestSection() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Workspace</div>
-                  <h3 className="mt-1 truncate font-serif text-lg font-bold text-foreground">
-                    {selectedContest ? selectedContest.title : "No contest selected"}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedContest
-                      ? `${getContestTypeLabel(selectedContest.contestType)} / ${labelize(selectedContest.lifecycle || selectedContest.status)}`
-                      : "Choose a contest from the library or create a new one."}
-                  </p>
+                  <h3 className="mt-1 truncate font-serif text-lg font-bold text-foreground">{workspaceTitle}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">{workspaceSubtitle}</p>
+                  {composingNewContest && (
+                    <span className="mt-2 inline-flex rounded-sm border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-700 dark:text-sky-300">
+                      New draft
+                    </span>
+                  )}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-3 lg:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetForm();
-                      setAdminContestView("draft");
-                      setActivePanel("setup");
-                    }}
-                    className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-2 text-xs"
-                  >
+                  <button type="button" onClick={beginNewContest} className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-2 text-xs">
                     <Plus size={13} />
                     New
                   </button>
                   <button
                     type="button"
-                    disabled={!selectedContest}
+                    disabled={!showWorkspaceContest}
                     onClick={() => {
                       if (!selectedContest) return;
                       startEdit(selectedContest);
@@ -1139,7 +1324,7 @@ export default function AdminContestSection() {
                   </button>
                   <button
                     type="button"
-                    disabled={!selectedContest}
+                    disabled={!showWorkspaceContest}
                     onClick={() => setActivePanel("lifecycle")}
                     className="btn-primary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
                   >
@@ -1150,14 +1335,14 @@ export default function AdminContestSection() {
               </div>
             </div>
 
-            {selectedContest ? (
+            {showWorkspaceContest || composingNewContest ? (
               <div className="p-4">
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   {[
-                    ["Problems", selectedContestMetrics.problems, FileQuestion],
-                    ["Registered", selectedContestMetrics.registered, Users],
-                    ["Responses", selectedContestMetrics.submissions, BarChart3],
-                    ["Locked", selectedContestMetrics.locked, Clock3],
+                    ["Problems", workspaceMetrics.problems, FileQuestion],
+                    ["Registered", workspaceMetrics.registered, Users],
+                    ["Responses", workspaceMetrics.submissions, BarChart3],
+                    ["Locked", workspaceMetrics.locked, Clock3],
                   ].map(([label, value, Icon]) => {
                     const MetricIcon = Icon as typeof FileQuestion;
                     return (
@@ -1171,8 +1356,8 @@ export default function AdminContestSection() {
                     );
                   })}
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-5">
-                  {selectedContestReadiness.map((item) => (
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                  {workspaceReadiness.map((item) => (
                     <div
                       key={item.label}
                       className={`rounded-sm border p-2 ${
@@ -1195,33 +1380,43 @@ export default function AdminContestSection() {
             )}
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-            {managerPanels.map(({ id, label, description, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActivePanel(id)}
-                className={`rounded-sm border p-3 text-left transition-colors ${
-                  activePanel === id ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]" : "border-border bg-card hover:bg-secondary/25"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-background">
-                    <Icon size={16} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-xs font-bold">{label}</span>
-                    <span className="mt-0.5 line-clamp-2 block text-[10px] leading-relaxed text-muted-foreground">{description}</span>
-                  </span>
-                </div>
-              </button>
-            ))}
+          <div className="rounded-sm border border-border bg-card p-2">
+            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Workspace Panels</div>
+            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:grid lg:grid-cols-5 lg:overflow-visible lg:pb-0">
+              {managerPanels.map(({ id, label, description, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActivePanel(id)}
+                  className={`min-w-[9.5rem] shrink-0 rounded-sm border p-3 text-left transition-colors lg:min-w-0 ${
+                    activePanel === id
+                      ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]"
+                      : "border-border bg-background hover:bg-secondary/25"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-card">
+                      <Icon size={15} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold">{label}</span>
+                      <span className="mt-0.5 line-clamp-2 block text-[10px] leading-relaxed text-muted-foreground">{description}</span>
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {activePanel === "setup" && (
-      <form onSubmit={handleSubmit} className="academic-card space-y-4 p-4 sm:p-6">
+      <form onSubmit={handleSubmit} className="academic-card space-y-6 p-4 sm:p-6">
+        <section className="space-y-4">
+          <div className="border-b border-border pb-2">
+            <h3 className="text-sm font-bold text-foreground">Contest Basics</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Name, summary, and how the contest appears to users.</p>
+          </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-bold">Contest Name</label>
@@ -1252,8 +1447,14 @@ export default function AdminContestSection() {
             className="w-full resize-none rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
           />
         </div>
+        </section>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="space-y-4">
+          <div className="border-b border-border pb-2">
+            <h3 className="text-sm font-bold text-foreground">Format & Rules</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Publication stage, contest type, and scoring settings.</p>
+          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-bold">Publication</label>
             <select
@@ -1306,7 +1507,13 @@ export default function AdminContestSection() {
             />
           </div>
         </div>
+        </section>
 
+        <section className="space-y-4">
+          <div className="border-b border-border pb-2">
+            <h3 className="text-sm font-bold text-foreground">Schedule</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Contest window and registration timing.</p>
+          </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-bold">Start Date & Time</label>
@@ -1356,6 +1563,7 @@ export default function AdminContestSection() {
             </p>
           </div>
         </div>
+        </section>
 
         {hasTimingErrors && (
           <div className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1363,7 +1571,12 @@ export default function AdminContestSection() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-3">
+        <section className="space-y-3 border-t border-border pt-4">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Visibility & Features</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Optional contest behavior flags.</p>
+          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             ["showOnHome", "Show on home"],
             ["ratingEnabled", "Rated contest"],
@@ -1379,6 +1592,7 @@ export default function AdminContestSection() {
             </label>
           ))}
         </div>
+        </section>
 
         <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
           {editingId && (
@@ -1395,13 +1609,46 @@ export default function AdminContestSection() {
       )}
 
       {activePanel === "problems" && (
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]">
+      <div className="space-y-4">
+        <div className="academic-card p-4">
+          <h3 className="text-sm font-bold text-foreground">Problem Workspace Checklist</h3>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Contest saved", showWorkspaceContest, "Save setup before adding problems"],
+              ["At least 1 problem", selectedQuestionIds.length > 0, `${selectedQuestionIds.length} selected`],
+              ["Changes saved", showWorkspaceContest && !problemsDirty, problemsDirty ? "Unsaved problem changes" : "Problem set matches server"],
+              ["Ready to publish", showWorkspaceContest && selectedQuestionIds.length > 0 && !problemsDirty, "Save problems, then move lifecycle"],
+            ].map(([label, ready, detail]) => (
+              <div
+                key={label as string}
+                className={`rounded-sm border p-3 text-xs ${ready ? "border-green-500/25 bg-green-500/10" : "border-border bg-background"}`}
+              >
+                <div className={`font-semibold ${ready ? "text-green-700" : "text-foreground"}`}>{label as string}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">{detail as string}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]">
         <div className="academic-card overflow-hidden">
           <div className="border-b border-border bg-secondary/30 p-4">
             <h3 className="text-sm font-bold">Problem Workspace</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Use the top Contest Library to choose old, live, or upcoming contests before editing problems.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Attach approved bank problems or create contest-only problems that stay off the public problem bank.
+            </p>
           </div>
-          {selectedContest ? (
+          {composingNewContest ? (
+            <div className="space-y-3 p-6 text-center">
+              <p className="text-sm font-semibold text-foreground">Save the contest first</p>
+              <p className="text-xs text-muted-foreground">
+                Finish setup and click <strong>Save Contest</strong>. Problem attachment unlocks after the contest has an ID.
+              </p>
+              <button type="button" onClick={() => setActivePanel("setup")} className="btn-primary px-4 py-2 text-xs">
+                Go to Setup
+              </button>
+            </div>
+          ) : showWorkspaceContest && selectedContest ? (
             <div className="p-4">
               <div className="rounded-sm border border-border bg-background p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected Contest</div>
@@ -1410,6 +1657,29 @@ export default function AdminContestSection() {
                   <span className="rounded-sm border border-border bg-card px-2 py-0.5">{getContestTypeLabel(selectedContest.contestType)}</span>
                   <span className="rounded-sm border border-border bg-card px-2 py-0.5">{labelize(selectedContest.lifecycle || selectedContest.status)}</span>
                   <span className="rounded-sm border border-border bg-card px-2 py-0.5">{selectedQuestionIds.length} selected</span>
+                  {problemsDirty && (
+                    <span className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-700">Unsaved</span>
+                  )}
+                </div>
+                <div className="mt-4 grid gap-2 text-xs">
+                  <div className="rounded-sm border border-border bg-card p-2">
+                    <div className="text-[10px] uppercase text-muted-foreground">Contest window</div>
+                    <div className="mt-1 font-mono text-[10px] leading-relaxed text-foreground">
+                      {formatDateTime(selectedContest.startTime)} → {formatDateTime(selectedContest.endTime)}
+                    </div>
+                  </div>
+                  <div className="rounded-sm border border-border bg-card p-2">
+                    <div className="text-[10px] uppercase text-muted-foreground">Registration</div>
+                    <div className="mt-1 font-mono text-[10px] leading-relaxed text-foreground">
+                      {formatDateTime(selectedContest.registrationStartTime)} → {formatDateTime(selectedContest.registrationEndTime)}
+                    </div>
+                  </div>
+                  <div className="rounded-sm border border-border bg-card p-2">
+                    <div className="text-[10px] uppercase text-muted-foreground">Scoring</div>
+                    <div className="mt-1 font-semibold text-foreground">
+                      {labelize(selectedContest.scoringMode || "gate")} · penalty {selectedContest.wrongPenaltyMinutes ?? 10}m
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
                   <button
@@ -1442,7 +1712,7 @@ export default function AdminContestSection() {
                 </div>
               </div>
               <div className="mt-4 grid gap-2">
-                {selectedContestReadiness.map((item) => (
+                {workspaceReadiness.map((item) => (
                   <div key={item.label} className="flex items-center justify-between rounded-sm border border-border bg-background p-2 text-xs">
                     <span className={item.ready ? "font-semibold text-green-700" : "text-muted-foreground"}>{item.label}</span>
                     <span className="font-mono text-[10px] text-muted-foreground">{item.detail}</span>
@@ -1452,7 +1722,7 @@ export default function AdminContestSection() {
             </div>
           ) : (
             <div className="p-6 text-center text-sm text-muted-foreground">
-              Select a contest from the Contest Library above, or create a new contest first.
+              Select a saved contest from the library, or create and save a new contest first.
             </div>
           )}
         </div>
@@ -1463,7 +1733,7 @@ export default function AdminContestSection() {
               <div>
                 <h3 className="text-sm font-bold">Selected Problems</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  These problems are currently attached to the selected contest.
+                  Attached to this contest. {problemsDirty ? "You have unsaved changes." : "Saved on server."}
                 </p>
               </div>
               <span className="rounded-sm border border-border bg-background px-2 py-1 font-mono text-xs text-foreground">
@@ -1476,7 +1746,14 @@ export default function AdminContestSection() {
                   <div className="flex items-start gap-3">
                     <span className="font-mono text-xs text-primary">{index + 1}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</div>
+                        {isContestOnlyProblem(problem) && (
+                          <span className="shrink-0 rounded-sm border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:text-violet-300">
+                            Contest-only
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
                         {problem.contentId || problem.problemId || problem._id} / {problem.difficulty} / {problem.questionType}
                       </div>
@@ -1515,10 +1792,125 @@ export default function AdminContestSection() {
             </div>
           </div>
           <div className="academic-card p-4">
-            <div className="mb-4">
-              <h3 className="text-sm font-bold">Add Approved Problems</h3>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold">Create Contest-Only Problem</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  New problems created here are approved for this contest only and do not appear in the public problem bank.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!showWorkspaceContest}
+                onClick={() => setShowContestProblemCreator((open) => !open)}
+                className="btn-outline inline-flex shrink-0 items-center gap-2 px-3 py-1.5 text-[10px] disabled:opacity-50"
+              >
+                <Sparkles size={12} />
+                {showContestProblemCreator ? "Hide" : "Create"}
+              </button>
+            </div>
+            {showContestProblemCreator && showWorkspaceContest && (
+              <div className="mb-4 space-y-3 rounded-sm border border-violet-500/20 bg-violet-500/5 p-3">
+                <HierarchyPicker value={problemHierarchy} onChange={setProblemHierarchy} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground">Title</label>
+                    <input
+                      value={contestProblemForm.title}
+                      onChange={(e) => setContestProblemForm({ ...contestProblemForm, title: e.target.value })}
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground">Type</label>
+                    <select
+                      value={contestProblemForm.questionType}
+                      onChange={(e) => setContestProblemForm({ ...contestProblemForm, questionType: e.target.value })}
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
+                    >
+                      <option value="MCQ">MCQ</option>
+                      <option value="MSQ">MSQ</option>
+                      <option value="NAT">NAT</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground">Difficulty</label>
+                    <select
+                      value={contestProblemForm.difficulty}
+                      onChange={(e) => setContestProblemForm({ ...contestProblemForm, difficulty: e.target.value })}
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground">Statement</label>
+                    <textarea
+                      value={contestProblemForm.statement}
+                      onChange={(e) => setContestProblemForm({ ...contestProblemForm, statement: e.target.value })}
+                      rows={3}
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-[10px] font-bold uppercase text-muted-foreground">Solution</label>
+                    <textarea
+                      value={contestProblemForm.solution}
+                      onChange={(e) => setContestProblemForm({ ...contestProblemForm, solution: e.target.value })}
+                      rows={3}
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                {contestProblemForm.questionType !== "NAT" && (
+                  <div className="space-y-2">
+                    {contestProblemForm.options.map((option, index) => (
+                      <label key={index} className="flex items-center gap-2 rounded-sm border border-border bg-background px-2 py-1.5 text-xs">
+                        <input
+                          type="radio"
+                          name="contest-correct-option"
+                          checked={option.isCorrect}
+                          onChange={() =>
+                            setContestProblemForm({
+                              ...contestProblemForm,
+                              options: contestProblemForm.options.map((entry, i) => ({ ...entry, isCorrect: i === index })),
+                            })
+                          }
+                        />
+                        <input
+                          value={option.text}
+                          onChange={(e) =>
+                            setContestProblemForm({
+                              ...contestProblemForm,
+                              options: contestProblemForm.options.map((entry, i) =>
+                                i === index ? { ...entry, text: e.target.value } : entry
+                              ),
+                            })
+                          }
+                          placeholder={`Option ${index + 1}`}
+                          className="min-w-0 flex-1 bg-transparent outline-none"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={creatingContestProblem}
+                  onClick={createContestOnlyProblem}
+                  className="btn-primary w-full px-4 py-2 text-xs disabled:opacity-60"
+                >
+                  {creatingContestProblem ? "Creating..." : "Create & attach to contest"}
+                </button>
+              </div>
+            )}
+
+            <div className="mb-4 border-t border-border pt-4">
+              <h3 className="text-sm font-bold">Add From Approved Bank</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Search and add approved problems. Selected items appear in the panel above.
+                Search platform problems already approved for general use. Selected items appear above.
               </p>
             </div>
             <div className="relative mb-3">
@@ -1549,6 +1941,11 @@ export default function AdminContestSection() {
                     </span>
                     <span className="min-w-0">
                       <span className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</span>
+                      {isContestOnlyProblem(problem) && (
+                        <span className="mt-1 inline-block rounded-sm border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-violet-700">
+                          Contest-only
+                        </span>
+                      )}
                       <span className="mt-1 block truncate font-mono text-[10px] text-muted-foreground">
                         {problem.contentId || problem.problemId || problem._id} / {problem.difficulty} / {problem.questionType}
                       </span>
@@ -1559,19 +1956,20 @@ export default function AdminContestSection() {
             </div>
             <button
               type="button"
-              disabled={!selectedContestId}
+              disabled={!showWorkspaceContest}
               onClick={saveContestProblems}
               className="btn-primary mt-4 w-full px-4 py-2 text-xs disabled:opacity-50"
             >
-              Save {selectedQuestionIds.length} Problems
+              {problemsDirty ? `Save ${selectedQuestionIds.length} Problems` : `Saved (${selectedQuestionIds.length})`}
             </button>
           </div>
         </div>
       </div>
+      </div>
       )}
 
       {activePanel === "lifecycle" && (
-      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
         <div className="space-y-4">
           <AdminLifecycleRail current={selectedContest?.lifecycle || form.lifecycle} />
           {selectedContest && (
@@ -1752,24 +2150,114 @@ export default function AdminContestSection() {
             ].map(([label, value]) => (
               <div key={label} className="rounded-sm border border-border bg-card p-3">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-                <div className="mt-1 text-xs font-semibold text-foreground">{value}</div>
+                <div className="mt-1 break-words text-xs font-semibold leading-relaxed text-foreground">{value}</div>
               </div>
             ))}
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[58rem] text-xs">
+        <div className="space-y-3 p-3 sm:p-4 lg:hidden">
+          {adminStandings.map((row) => {
+            const expanded = expandedParticipantId === row._id;
+            return (
+              <article key={row._id} className="rounded-sm border border-border bg-card">
+                <div className="flex items-start justify-between gap-3 border-b border-border bg-secondary/15 p-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[10px] text-muted-foreground">Rank #{row.rank || "-"}</div>
+                    <div className="mt-0.5 truncate text-sm font-bold text-foreground">{row.user.fullName}</div>
+                    <div className="truncate font-mono text-[10px] text-muted-foreground">{row.user.email}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-lg font-bold text-foreground">{row.score}</div>
+                    <div className="text-[10px] text-muted-foreground">score</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-3 text-xs">
+                  <div>
+                    <div className="text-[10px] uppercase text-muted-foreground">Status</div>
+                    <div className="font-semibold">{row.finishedAt ? "locked" : row.registrationStatus || "standing"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-muted-foreground">Responses</div>
+                    <div className="font-mono">{row.attemptedQuestions ?? 0} q / {row.submissionCount ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-muted-foreground">Solved</div>
+                    <div className="font-mono">{row.solvedCount}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-muted-foreground">Wrong</div>
+                    <div className="font-mono">{row.wrongAttempts}</div>
+                  </div>
+                </div>
+                <div className="border-t border-border px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedParticipantId(expanded ? null : row._id)}
+                    className="btn-outline w-full px-3 py-1.5 text-[10px]"
+                  >
+                    {expanded ? "Hide details" : "View details"}
+                  </button>
+                </div>
+                {expanded && (
+                  <div className="space-y-3 border-t border-border bg-secondary/10 p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        ["Registered", formatDateTime(row.registeredAt)],
+                        ["Started", formatDateTime(row.startedAt)],
+                        ["Locked", formatDateTime(row.finishedAt)],
+                        ["Last Response", formatDateTime(row.lastSubmittedAt)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-sm border border-border bg-background p-2">
+                          <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+                          <div className="mt-0.5 font-mono text-[10px]">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-sm border border-border bg-background">
+                      <div className="border-b border-border px-3 py-2 text-xs font-bold">Saved Responses</div>
+                      <div className="max-h-64 space-y-0 divide-y divide-border overflow-y-auto">
+                        {(row.responses || []).map((response) => (
+                          <div key={response._id} className="space-y-1 p-3 text-xs">
+                            <div className="font-semibold text-foreground">
+                              {response.question?.contentId || response.question?.problemId || response.question?._id || "Question"}
+                            </div>
+                            <div className="text-muted-foreground">{response.question?.title || "Question details unavailable"}</div>
+                            <div className="text-foreground">{formatAdminAnswer(response)}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">
+                              {response.judgeStatus} / {response.marksAwarded} · {formatDateTime(response.submittedAt)}
+                            </div>
+                          </div>
+                        ))}
+                        {(row.responses || []).length === 0 && (
+                          <div className="p-4 text-center text-xs text-muted-foreground">No saved responses yet.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+          {adminStandings.length === 0 && (
+            <div className="rounded-sm border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              No registrations or standings yet for this contest.
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
+          <table className="w-full min-w-[52rem] text-xs">
             <thead>
               <tr className="border-b border-border bg-secondary/10">
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Rank</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">User</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Responses</th>
-                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Score</th>
-                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Visible</th>
-                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Solved</th>
-                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Wrong</th>
-                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Penalty</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground sm:px-4">Rank</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground sm:px-4">User</th>
+                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground md:table-cell sm:px-4">Status</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground sm:px-4">Responses</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground sm:px-4">Score</th>
+                <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground lg:table-cell sm:px-4">Visible</th>
+                <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground xl:table-cell sm:px-4">Solved</th>
+                <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground xl:table-cell sm:px-4">Wrong</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground sm:px-4">Penalty</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -1783,20 +2271,20 @@ export default function AdminContestSection() {
                         <div className="font-semibold text-foreground">{row.user.fullName}</div>
                         <div className="font-mono text-[10px] text-muted-foreground">{row.user.email}</div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden px-3 py-3 md:table-cell sm:px-4">
                         <div className="font-semibold text-foreground">{row.finishedAt ? "locked" : row.registrationStatus || "standing"}</div>
                         <div className="font-mono text-[10px] text-muted-foreground">
                           {formatDateTime(row.lastSubmittedAt || row.startedAt || row.registeredAt)}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                      <td className="px-3 py-3 text-right font-mono text-muted-foreground sm:px-4">
                         {row.attemptedQuestions ?? 0} q / {row.submissionCount ?? 0}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-foreground">{row.score}</td>
-                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.visibleScore}</td>
-                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.solvedCount}</td>
-                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.wrongAttempts}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-3 text-right font-mono font-bold text-foreground sm:px-4">{row.score}</td>
+                      <td className="hidden px-3 py-3 text-right font-mono text-muted-foreground lg:table-cell sm:px-4">{row.visibleScore}</td>
+                      <td className="hidden px-3 py-3 text-right font-mono text-muted-foreground xl:table-cell sm:px-4">{row.solvedCount}</td>
+                      <td className="hidden px-3 py-3 text-right font-mono text-muted-foreground xl:table-cell sm:px-4">{row.wrongAttempts}</td>
+                      <td className="px-3 py-3 text-right sm:px-4">
                         <div className="flex items-center justify-end gap-3">
                           <span className="font-mono text-muted-foreground">{row.penaltyMinutes}</span>
                           <button

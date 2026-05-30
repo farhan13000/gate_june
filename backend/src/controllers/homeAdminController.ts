@@ -588,22 +588,28 @@ export const updateContestProblems = async (req: Request, res: Response): Promis
     }
 
     const uniqueIds = [...new Set(questionIds.map((id: string) => String(id)).filter(Boolean))];
-    const questions = await Question.find({ _id: { $in: uniqueIds }, status: "approved" }).select("_id");
-    if (questions.length !== uniqueIds.length) {
-      res.status(400).json({ message: "All contest questions must exist and be approved" });
+    const questions = await Question.find({ _id: { $in: uniqueIds } }).select("_id status tags");
+    const contestTag = `contest:${contest._id}`;
+    const validQuestions = questions.filter(
+      (question) =>
+        question.status === "approved" &&
+        (!question.tags?.includes("contest-only") || question.tags?.includes(contestTag))
+    );
+    if (validQuestions.length !== uniqueIds.length) {
+      res.status(400).json({ message: "All contest questions must exist, be approved, and belong to this contest when marked contest-only" });
       return;
     }
 
-    contest.questions = questions.map((question) => question._id);
+    contest.questions = validQuestions.map((question) => question._id);
     await contest.save();
     await recordContestAdminEvent({
       req,
       contest,
       action: "contest_problem_set_updated",
-      message: `Problem set for "${contest.title}" updated with ${questions.length} approved problems.`,
+      message: `Problem set for "${contest.title}" updated with ${validQuestions.length} approved problems.`,
       details: {
-        questionCount: questions.length,
-        questionIds: questions.map((question) => String(question._id)),
+        questionCount: validQuestions.length,
+        questionIds: validQuestions.map((question) => String(question._id)),
       },
     });
     invalidateHomeCache();
@@ -618,21 +624,121 @@ export const updateContestProblems = async (req: Request, res: Response): Promis
   }
 };
 
+export const createContestOnlyQuestion = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contest = await Contest.findById(req.params.id);
+    if (!contest) {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+
+    const {
+      subjectId,
+      chapterId,
+      topicId,
+      subtopicId,
+      topic,
+      title,
+      statement,
+      solution,
+      difficulty,
+      questionType,
+      options,
+      markingScheme,
+      estimatedTime,
+      tags,
+    } = req.body;
+
+    if (!subtopicId || !title?.trim() || !statement?.trim() || !solution) {
+      res.status(400).json({ message: "Taxonomy, title, statement, and solution are required" });
+      return;
+    }
+
+    const normalizedType = String(questionType || "MCQ").toUpperCase();
+    if (!["MCQ", "MSQ", "NAT"].includes(normalizedType)) {
+      res.status(400).json({ message: "Invalid question type" });
+      return;
+    }
+
+    const question = new Question({
+      subjectId,
+      chapterId,
+      topicId,
+      subtopicId,
+      topic: topic || topicId,
+      title: String(title).trim(),
+      statement: String(statement).trim(),
+      solution,
+      difficulty: difficulty || "Medium",
+      questionType: normalizedType,
+      options: normalizedType === "NAT" ? [] : options || [],
+      markingScheme: markingScheme || { positive: 2, negative: 0.66 },
+      estimatedTime: estimatedTime || 180,
+      tags: [...(Array.isArray(tags) ? tags : []), "contest-only", `contest:${contest._id}`],
+      status: "approved",
+      createdBy: req.currentUser!._id,
+      approvedBy: req.currentUser!._id,
+      auditLog: [
+        {
+          action: "Created for contest",
+          note: `Contest-only problem for "${contest.title}"`,
+          performedBy: req.currentUser!._id,
+        },
+      ],
+    });
+
+    await question.save();
+
+    const questionId = String(question._id);
+    if (!contest.questions.some((id) => String(id) === questionId)) {
+      contest.questions.push(question._id);
+      await contest.save();
+    }
+
+    await recordContestAdminEvent({
+      req,
+      contest,
+      action: "contest_only_problem_created",
+      message: `Contest-only problem "${question.title}" created for "${contest.title}".`,
+      details: { questionId, contentId: question.contentId },
+    });
+    invalidateHomeCache();
+
+    const populated = await Contest.findById(contest._id).populate(
+      "questions",
+      "title contentId problemId difficulty questionType status topic markingScheme tags"
+    );
+    res.status(201).json({ question, contest: populated });
+  } catch (error: any) {
+    res.status(400).json({ message: error.message || "Failed to create contest-only problem" });
+  }
+};
+
 export const getContestProblemCandidates = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { search = "", difficulty = "", questionType = "", limit = "50" } = req.query;
-    const query: Record<string, any> = { status: "approved" };
-    if (difficulty) query.difficulty = difficulty;
-    if (questionType) query.questionType = questionType;
+    const { search = "", difficulty = "", questionType = "", limit = "50", contestId = "" } = req.query;
+    const contestKey = String(contestId || "").trim();
+    const searchFilter: Record<string, any> = {};
+    if (difficulty) searchFilter.difficulty = difficulty;
+    if (questionType) searchFilter.questionType = questionType;
     if (String(search).trim()) {
       const needle = String(search).trim();
-      query.$or = [
+      searchFilter.$or = [
         { title: { $regex: needle, $options: "i" } },
         { contentId: { $regex: needle, $options: "i" } },
         { problemId: { $regex: needle, $options: "i" } },
         { topic: { $regex: needle, $options: "i" } },
       ];
     }
+
+    const query: Record<string, any> = contestKey
+      ? {
+          $or: [
+            { status: "approved", tags: { $nin: ["contest-only"] }, ...searchFilter },
+            { tags: `contest:${contestKey}`, ...searchFilter },
+          ],
+        }
+      : { status: "approved", tags: { $nin: ["contest-only"] }, ...searchFilter };
 
     const questions = await Question.find(query)
       .select("title contentId problemId difficulty questionType topic markingScheme")

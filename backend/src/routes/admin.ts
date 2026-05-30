@@ -30,6 +30,7 @@ import {
   updateContest,
   updateContestClaim,
   updateContestProblems,
+  createContestOnlyQuestion,
   releaseContestAnswerKey,
   openContestClaims,
   closeContestClaims,
@@ -43,6 +44,7 @@ import {
   getContestTestRuns,
   getContestTestSuites,
   startContestTestRun,
+  stopContestTestRun,
   streamContestTestRun,
 } from "../controllers/contestTestController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
@@ -139,6 +141,7 @@ router.get("/contests/:id/standings/stream", streamContestAdminStandings);
 router.get("/contests/:id/claims", getContestAdminClaims);
 router.put("/contests/:id", updateContest);
 router.put("/contests/:id/problems", updateContestProblems);
+router.post("/contests/:id/contest-only-questions", createContestOnlyQuestion);
 router.post("/contests/:id/release-answer-key", releaseContestAnswerKey);
 router.post("/contests/:id/open-claims", openContestClaims);
 router.post("/contests/:id/close-claims", closeContestClaims);
@@ -151,6 +154,7 @@ router.delete("/contests/:id", deleteContest);
 router.get("/contest-tests/suites", getContestTestSuites);
 router.get("/contest-tests/runs", getContestTestRuns);
 router.post("/contest-tests/runs", startContestTestRun);
+router.post("/contest-tests/runs/:id/stop", stopContestTestRun);
 router.get("/contest-tests/runs/:id", getContestTestRun);
 router.get("/contest-tests/runs/:id/stream", streamContestTestRun);
 
