@@ -1,0 +1,29 @@
+{
+  "weights": {
+    "lifecycle": 0.15,
+    "registration": 0.1,
+    "roomAccess": 0.1,
+    "submission": 0.15,
+    "scoring": 0.15,
+    "standings": 0.1,
+    "security": 0.1,
+    "claims": 0.05,
+    "rating": 0.05,
+    "performance": 0.05
+  },
+  "results": {
+    "lifecycle": { "total": 0, "passed": 0, "failed": 0 },
+    "registration": { "total": 0, "passed": 0, "failed": 0 },
+    "roomAccess": { "total": 0, "passed": 0, "failed": 0 },
+    "submission": { "total": 0, "passed": 0, "failed": 0 },
+    "scoring": { "total": 0, "passed": 0, "failed": 0 },
+    "standings": { "total": 0, "passed": 0, "failed": 0 },
+    "security": { "total": 0, "passed": 0, "failed": 0 },
+    "claims": { "total": 0, "passed": 0, "failed": 0 },
+    "rating": { "total": 0, "passed": 0, "failed": 0 },
+    "performance": { "total": 0, "passed": 0, "failed": 0 }
+  },
+  "formula": "sum((passed / total) * weight * 100) for each area",
+  "correctnessPercentage": 0,
+  "generatedAt": ""
+}

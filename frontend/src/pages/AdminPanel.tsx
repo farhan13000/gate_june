@@ -9,6 +9,7 @@ import AdminHomeSection from "@/components/admin/AdminHomeSection";
 import AdminContestGuide from "@/components/admin/AdminContestGuide";
 import AdminContestSection from "@/components/admin/AdminContestSection";
 import AdminContestClaimsPage from "@/components/admin/AdminContestClaimsPage";
+import AdminContestTestRunner from "@/components/admin/AdminContestTestRunner";
 import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
 import { SiteContainer, MainPanel } from "@/components/layout";
 import AdminProblemManager from "@/components/admin/AdminProblemManager";
@@ -364,6 +365,7 @@ type Section =
   | "Content Management"
   | "Contest Factory"
   | "Contest Claims"
+  | "Contest QA"
   | "Contest Guide"
   | "Approval Dashboard"
   | "Content Inventory"
@@ -844,6 +846,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "Content Inventory",
     "Contest Factory",
     "Contest Claims",
+    "Contest QA",
     "Contest Guide",
     "Approval Dashboard",
     "Platform Logs",
@@ -1600,6 +1603,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
         {activeSection === "Contest Factory" && <AdminContestSection />}
         {activeSection === "Contest Claims" && <AdminContestClaimsPage />}
+        {activeSection === "Contest QA" && <AdminContestTestRunner />}
 
         {/* ── CONTENT INVENTORY SECTION ── */}
         {activeSection === "Content Inventory" && (

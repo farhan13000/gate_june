@@ -12,6 +12,7 @@ import {
   Trophy,
   CheckSquare,
   ScrollText,
+  FlaskConical,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -26,7 +27,9 @@ export type AdminSectionId =
   | "Problem Bank"
   | "Content Inventory"
   | "Contest Factory"
+  | "Contest Claims"
   | "Contest Guide"
+  | "Contest QA"
   | "Approval Dashboard"
   | "Platform Logs";
 
@@ -58,6 +61,8 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { id: "Home Management", label: "Home & News", icon: Home },
       { id: "Contest Factory", label: "Contests", icon: Trophy },
+      { id: "Contest Claims", label: "Claims", icon: CheckSquare },
+      { id: "Contest QA", label: "Contest QA", icon: FlaskConical },
       { id: "Contest Guide", label: "Contest Guide", icon: BookOpenCheck },
       { id: "User Analytics", label: "Users", icon: Users },
       { id: "Platform Logs", label: "Logs", icon: ScrollText },

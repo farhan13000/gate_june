@@ -1,0 +1,12 @@
+# Local environment files
+.env
+.env.*
+*,env*
+
+# Generated dependencies and caches
+node_modules/
+.vite/
+
+# Contest QA runtime output
+tests/contest/reports/runs/*
+!tests/contest/reports/runs/.gitignore

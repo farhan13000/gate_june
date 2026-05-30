@@ -8,7 +8,15 @@
     "dev": "nodemon --exec ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "seed:taxonomy": "ts-node scripts/seedTaxonomy.ts"
+    "seed:taxonomy": "ts-node scripts/seedTaxonomy.ts",
+    "test:contest": "vitest run --config ../vitest.contest.config.ts ../tests/contest",
+    "test:contest:admin": "vitest run --config ../vitest.contest.config.ts ../tests/contest/admin",
+    "test:contest:user": "vitest run --config ../vitest.contest.config.ts ../tests/contest/user",
+    "test:contest:scoring": "vitest run --config ../vitest.contest.config.ts ../tests/contest/scoring",
+    "test:contest:standings": "vitest run --config ../vitest.contest.config.ts ../tests/contest/standings",
+    "test:contest:security": "vitest run --config ../vitest.contest.config.ts ../tests/contest/security",
+    "test:contest:performance": "vitest run --config ../vitest.contest.config.ts ../tests/contest/performance",
+    "test:contest:e2e": "vitest run --config ../vitest.contest.config.ts ../tests/contest/e2e"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -33,8 +41,11 @@
     "@types/node": "^22.10.5",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.16",
+    "@types/supertest": "^6.0.3",
     "nodemon": "^3.1.9",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
   }
 }

@@ -38,6 +38,13 @@ import {
   finalizeContestAndApplyRatings,
   deleteContest,
 } from "../controllers/homeAdminController";
+import {
+  getContestTestRun,
+  getContestTestRuns,
+  getContestTestSuites,
+  startContestTestRun,
+  streamContestTestRun,
+} from "../controllers/contestTestController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 import {
   adminGetSubjects,
@@ -139,5 +146,12 @@ router.get("/contests/:id/rating-preview", previewContestRatingChanges);
 router.post("/contests/:id/finalize-ratings", finalizeContestAndApplyRatings);
 router.put("/contests/:id/claims/:claimId", updateContestClaim);
 router.delete("/contests/:id", deleteContest);
+
+// Contest QA test runner
+router.get("/contest-tests/suites", getContestTestSuites);
+router.get("/contest-tests/runs", getContestTestRuns);
+router.post("/contest-tests/runs", startContestTestRun);
+router.get("/contest-tests/runs/:id", getContestTestRun);
+router.get("/contest-tests/runs/:id/stream", streamContestTestRun);
 
 export default router;
