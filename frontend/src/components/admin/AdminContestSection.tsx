@@ -49,6 +49,8 @@ type AdminStanding = {
   registeredAt?: string;
   startedAt?: string;
   finishedAt?: string;
+  ratingBefore?: number;
+  ratingAfter?: number;
   submissionCount?: number;
   attemptedQuestions?: number;
   lastSubmittedAt?: string;
@@ -1758,7 +1760,7 @@ export default function AdminContestSection() {
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[58rem] text-xs">
+          <table className="w-full min-w-[64rem] text-xs">
             <thead>
               <tr className="border-b border-border bg-secondary/10">
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Rank</th>
@@ -1766,6 +1768,7 @@ export default function AdminContestSection() {
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Responses</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Score</th>
+                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Rating</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Visible</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Solved</th>
                 <th className="px-4 py-2 text-right font-medium text-muted-foreground">Wrong</th>
@@ -1793,6 +1796,15 @@ export default function AdminContestSection() {
                         {row.attemptedQuestions ?? 0} q / {row.submissionCount ?? 0}
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-foreground">{row.score}</td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                        {typeof row.ratingAfter === "number" ? (
+                          <span>
+                            {row.ratingBefore ?? row.user.rating} {"->"} {row.ratingAfter}
+                          </span>
+                        ) : (
+                          row.user.rating
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.visibleScore}</td>
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.solvedCount}</td>
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground">{row.wrongAttempts}</td>
@@ -1811,7 +1823,7 @@ export default function AdminContestSection() {
                     </tr>
                     {expanded && (
                       <tr className="bg-secondary/10">
-                        <td colSpan={9} className="px-4 py-4">
+                        <td colSpan={10} className="px-4 py-4">
                           <div className="grid gap-3 lg:grid-cols-4">
                             {[
                               ["Registered", formatDateTime(row.registeredAt)],
@@ -1864,7 +1876,7 @@ export default function AdminContestSection() {
               })}
               {adminStandings.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No registrations or standings yet for this contest.
                   </td>
                 </tr>

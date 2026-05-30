@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Play,
   RefreshCw,
+  Square,
   ScrollText,
   ShieldCheck,
   TerminalSquare,
@@ -27,7 +28,7 @@ type TestRun = {
   id: string;
   suite: string;
   label: string;
-  status: "queued" | "running" | "passed" | "failed" | "error";
+  status: "queued" | "running" | "passed" | "failed" | "error" | "stopped";
   startedAt: string;
   finishedAt?: string;
   durationMs?: number;
@@ -62,6 +63,7 @@ const suiteStyles: Record<string, string> = {
 function statusClass(status?: string) {
   if (status === "passed") return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
   if (status === "failed" || status === "error") return "border-destructive/25 bg-destructive/10 text-destructive";
+  if (status === "stopped") return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
   if (status === "running") return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300";
   return "border-border bg-background text-muted-foreground";
 }
@@ -80,6 +82,7 @@ function formatDuration(value?: number) {
 function statusIcon(status?: string) {
   if (status === "passed") return CheckCircle2;
   if (status === "failed" || status === "error") return XCircle;
+  if (status === "stopped") return Square;
   return Activity;
 }
 
@@ -92,6 +95,7 @@ export default function AdminContestTestRunner() {
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   const selectedSuiteMeta = suites.find((suite) => suite.id === selectedSuite);
   const activeRun = useMemo(() => runs.find((run) => run.id === selectedRunId) || selectedRun, [runs, selectedRun, selectedRunId]);
@@ -165,6 +169,28 @@ export default function AdminContestTestRunner() {
     es.onerror = () => es.close();
     return () => es.close();
   }, [fetchRuns, selectedRunId]);
+
+  const canStopRun = activeRun?.status === "running" && Boolean(selectedRunId);
+
+  const stopRun = async () => {
+    if (!selectedRunId || !canStopRun) return;
+    setStopping(true);
+    try {
+      const res = await fetch(`/api/admin/contest-tests/runs/${selectedRunId}/stop`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to stop test run");
+      toast.success("Test run stopped");
+      await fetchRuns();
+      await fetchRun(selectedRunId);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to stop test run");
+    } finally {
+      setStopping(false);
+    }
+  };
 
   const startRun = async () => {
     if (!mongoTestUri.trim()) {
@@ -267,15 +293,30 @@ export default function AdminContestTestRunner() {
                   Use a local or clearly marked test database. Production-looking URIs are rejected.
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={starting}
-                onClick={startRun}
-                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-60"
-              >
-                <Play size={13} />
-                {starting ? "Starting..." : `Run ${selectedSuiteMeta?.label || "Suite"}`}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={starting}
+                  onClick={startRun}
+                  className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-60"
+                >
+                  <Play size={13} />
+                  {starting ? "Starting..." : "Run"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canStopRun || stopping}
+                  onClick={stopRun}
+                  className="btn-outline inline-flex items-center justify-center gap-2 border-destructive/40 px-4 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-60"
+                >
+                  <Square size={13} />
+                  {stopping ? "Stopping..." : "Stop"}
+                </button>
+              </div>
+              <p className="text-center text-[10px] text-muted-foreground">
+                {selectedSuiteMeta?.label || "Suite"}
+                {canStopRun ? " · run in progress" : ""}
+              </p>
             </div>
           </div>
 
