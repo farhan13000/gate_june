@@ -189,10 +189,18 @@ export default function ContestDetails() {
         </div>
       );
     }
-    if (["registration_open", "upcoming"].includes(contest.contestState)) {
+    if (contest.contestState === "registration_open") {
       return (
         <button type="button" disabled={busy} onClick={() => updateRegistration("register")} className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50">
           Register
+        </button>
+      );
+    }
+    if (contest.contestState === "upcoming") {
+      return (
+        <button type="button" disabled className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60">
+          <Lock size={13} />
+          Registration Not Open
         </button>
       );
     }

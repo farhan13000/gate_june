@@ -29,7 +29,7 @@ export function isContestOpenForRegistration(contest: any) {
   const now = Date.now();
   const end = new Date(contest.endTime).getTime();
   const state = getContestState(contest);
-  return ["upcoming", "registration_open", "live"].includes(state) && contest.lifecycle !== "frozen" && now < end;
+  return state === "registration_open" && contest.lifecycle === "registration_open" && now < end;
 }
 
 export function isPostContestState(state: string) {
