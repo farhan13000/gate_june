@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
+import { DEFAULT_CONTEST_RATING } from "../utils/ratingDefaults";
 
 export interface IUser extends Document {
   _id: mongoose.Types.ObjectId;
@@ -64,7 +65,7 @@ const userSchema = new Schema<IUser>(
     },
     rating: {
       type: Number,
-      default: 0,
+      default: DEFAULT_CONTEST_RATING,
     },
 
     // Auth

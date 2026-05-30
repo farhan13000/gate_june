@@ -40,4 +40,51 @@ describe("admin contest rating", () => {
     const second = await request(app).post(`/api/admin/contests/${contest._id}/finalize-ratings`).set("Cookie", authCookie(admin));
     expect(second.body.rating.applied).toBe(false);
   });
+
+  it("uses the default rating baseline for legacy zero-rated users", async () => {
+    const { user: admin } = await createAuthedAgent(app, "admin");
+    const q = await createMCQQuestion({ createdBy: admin._id });
+    const contest = await createEndedContest({ createdBy: admin._id, questions: [q._id], ratingEnabled: true });
+    const user = await createTestUser("student", 0);
+    await seedCheckedInUser(contest, user);
+    await submitDirect(contest, user, q, { mcqSelected: String(q.options![0]._id) }, true, 2);
+    await recomputeAll(contest, [user]);
+
+    const response = await request(app).post(`/api/admin/contests/${contest._id}/finalize-ratings`).set("Cookie", authCookie(admin));
+    expect(response.status).toBe(200);
+    expect(response.body.rating.applied).toBe(true);
+
+    const updated = await User.findById(user._id).lean();
+    const history = await RatingHistory.findOne({ contestId: contest._id, userId: user._id }).lean();
+    expect(updated?.rating).toBe(1200);
+    expect(history?.oldRating).toBe(1200);
+    expect(history?.newRating).toBe(1200);
+  });
+
+  it("repairs rating history created by the legacy zero-rating behavior", async () => {
+    const { user: admin } = await createAuthedAgent(app, "admin");
+    const contest = await createEndedContest({ createdBy: admin._id, ratingEnabled: true });
+    const user = await createTestUser("student", 0);
+    await seedCheckedInUser(contest, user);
+    await RatingHistory.create({
+      contestId: contest._id,
+      userId: user._id,
+      oldRating: 0,
+      newRating: 0,
+      delta: 0,
+      rank: 1,
+      participants: 1,
+      performanceRating: 0,
+    });
+
+    const response = await request(app).post(`/api/admin/contests/${contest._id}/finalize-ratings`).set("Cookie", authCookie(admin));
+    expect(response.status).toBe(200);
+    expect(response.body.rating.repaired).toBe(1);
+
+    const updated = await User.findById(user._id).lean();
+    const history = await RatingHistory.findOne({ contestId: contest._id, userId: user._id }).lean();
+    expect(updated?.rating).toBe(1200);
+    expect(history?.oldRating).toBe(1200);
+    expect(history?.newRating).toBe(1200);
+  });
 });

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import User from "../models/User";
 import { generateToken } from "../utils/jwt";
+import { DEFAULT_CONTEST_RATING } from "../utils/ratingDefaults";
 
 /**
  * POST /api/auth/register
@@ -33,7 +34,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       passwordHash: password, // Will be hashed by the pre-save hook
       authProvider: "local",
       role: "student",
-      rating: 0,
+      rating: DEFAULT_CONTEST_RATING,
       domains: ["GATE_DA"],
       institution: institution?.trim(),
       targetGateYear: targetGateYear ? Number(targetGateYear) : undefined,

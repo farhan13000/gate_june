@@ -4,6 +4,7 @@ import RatingHistory from "../models/RatingHistory";
 import User from "../models/User";
 import Contest from "../models/Contest";
 import { recomputeContestStandings } from "./contestScoring";
+import { normalizeContestRating } from "./ratingDefaults";
 
 function expectedScore(ratingA: number, ratingB: number) {
   return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
@@ -20,10 +21,44 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+async function repairLegacyZeroRatings(contestId: string) {
+  const histories = await RatingHistory.find({
+    contestId,
+    $or: [{ oldRating: { $lte: 0 } }, { newRating: { $lte: 0 } }],
+  });
+
+  for (const history of histories) {
+    const oldRating = normalizeContestRating(history.oldRating);
+    const newRating = Math.max(0, oldRating + history.delta);
+    history.oldRating = oldRating;
+    history.newRating = newRating;
+    history.performanceRating = normalizeContestRating(history.performanceRating);
+    await history.save();
+    await User.updateOne(
+      { _id: history.userId, $or: [{ rating: { $lte: 0 } }, { rating: { $exists: false } }] },
+      { rating: newRating }
+    );
+    await ContestRegistration.updateOne(
+      { contestId, userId: history.userId },
+      { ratingBefore: oldRating, ratingAfter: newRating }
+    );
+  }
+
+  return histories.length;
+}
+
 export async function applyContestRatings(contestId: string) {
   const existing = await RatingHistory.countDocuments({ contestId });
   if (existing > 0) {
-    return { applied: false, count: existing, message: "Ratings already applied" };
+    const repaired = await repairLegacyZeroRatings(contestId);
+    const preview = await previewContestRatings(contestId);
+    return {
+      applied: repaired > 0,
+      repaired,
+      count: existing,
+      message: repaired > 0 ? `Repaired ${repaired} legacy zero rating record(s)` : "Ratings already applied",
+      changes: preview.changes,
+    };
   }
 
   const contest = await Contest.findById(contestId);
@@ -123,7 +158,7 @@ export async function previewContestRatings(contestId: string) {
       userId: standing.userId._id,
       fullName: standing.userId.fullName || "User",
       email: standing.userId.email || "",
-      oldRating: Number(standing.userId.rating || 0),
+      oldRating: normalizeContestRating(standing.userId.rating),
       rank,
     });
   }

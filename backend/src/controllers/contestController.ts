@@ -6,6 +6,7 @@ import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
 import RatingHistory from "../models/RatingHistory";
+import { normalizeContestRating } from "../utils/ratingDefaults";
 import { getContestState, isContestOpenForArena, isContestOpenForRegistration, isPostContestState } from "../utils/contestLifecycle";
 import { recomputeContestRanks, recomputeUserStanding } from "../utils/contestScoring";
 import { syncContestLifecycleById, syncDueContestLifecycles } from "../utils/contestLifecycleSync";
@@ -248,7 +249,7 @@ export const registerForContest = async (req: Request, res: Response): Promise<v
       {
         $set: {
           status: "registered",
-          ratingBefore: req.currentUser!.rating || 0,
+          ratingBefore: normalizeContestRating(req.currentUser!.rating),
         },
         $setOnInsert: { registeredAt: new Date() },
       },
