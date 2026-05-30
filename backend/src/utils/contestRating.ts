@@ -21,13 +21,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function ratingMessage(participants: number, applied = false) {
-  if (participants < 2) {
-    return `${applied ? "Ratings applied" : "Ratings ready"}. Rating delta is 0 because at least two eligible participants are required for Elo comparison.`;
-  }
-  return applied ? "Ratings applied" : "Ratings ready";
-}
-
 async function repairLegacyZeroRatings(contestId: string) {
   const histories = await RatingHistory.find({
     contestId,
@@ -102,12 +95,7 @@ export async function applyContestRatings(contestId: string) {
     { ordered: false }
   );
 
-  return {
-    applied: true,
-    count: preview.changes.length,
-    message: ratingMessage(preview.participants, true),
-    changes: preview.changes,
-  };
+  return { applied: true, count: preview.changes.length, message: "Ratings applied", changes: preview.changes };
 }
 
 export async function previewContestRatings(contestId: string) {
@@ -123,10 +111,7 @@ export async function previewContestRatings(contestId: string) {
       count: histories.length,
       participants: histories[0]?.participants || histories.length,
       alreadyApplied: true,
-      message:
-        (histories[0]?.participants || histories.length) < 2
-          ? "Ratings already applied. Rating delta is 0 because at least two eligible participants are required for Elo comparison."
-          : "Ratings already applied",
+      message: "Ratings already applied",
       changes: histories.map((history: any) => ({
         userId: history.userId?._id || history.userId,
         fullName: history.userId?.fullName || "User",
@@ -211,7 +196,7 @@ export async function previewContestRatings(contestId: string) {
     count: changes.length,
     participants: users.length,
     alreadyApplied: existing > 0,
-    message: existing > 0 ? "Ratings already applied" : ratingMessage(users.length),
+    message: existing > 0 ? "Ratings already applied" : "Ratings ready",
     changes,
   };
 }

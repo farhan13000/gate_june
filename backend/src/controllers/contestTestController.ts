@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { ChildProcess, spawn } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 
-type TestRunStatus = "queued" | "running" | "passed" | "failed" | "error" | "stopped";
+type TestRunStatus = "queued" | "running" | "passed" | "failed" | "error";
 
 type TestRun = {
   id: string;
@@ -46,36 +46,7 @@ const SUITES: Record<string, { label: string; command: string; args: string[]; a
 };
 
 const runs = new Map<string, TestRun>();
-const processes = new Map<string, ChildProcess>();
-const stoppingRuns = new Set<string>();
 const listeners = new Map<string, Set<Response>>();
-
-function killTestProcess(child: ChildProcess) {
-  if (!child.pid) return;
-  if (process.platform === "win32") {
-    spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { shell: false });
-  } else {
-    child.kill("SIGTERM");
-    setTimeout(() => {
-      if (!child.killed) child.kill("SIGKILL");
-    }, 5000);
-  }
-}
-
-function finalizeRun(run: TestRun, runId: string, code: number | null) {
-  if (run.finishedAt) return;
-  processes.delete(runId);
-  const stopped = stoppingRuns.has(runId);
-  if (stopped) stoppingRuns.delete(runId);
-  run.exitCode = code;
-  run.status = stopped ? "stopped" : code === 0 ? "passed" : "failed";
-  run.finishedAt = new Date();
-  run.durationMs = run.finishedAt.getTime() - run.startedAt.getTime();
-  if (stopped) appendLog(run, "[contest-qa] Run stopped by user\n");
-  run.summary = summarizeLogs(run.logs);
-  writeResult(run);
-  broadcast(runId, "contest-test-finished", publicRun(run));
-}
 
 function npmBin() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
@@ -281,14 +252,9 @@ export const startContestTestRun = (req: Request, res: Response): void => {
     },
   });
 
-  processes.set(id, child);
-
   child.stdout.on("data", (chunk) => appendLog(run, chunk));
   child.stderr.on("data", (chunk) => appendLog(run, chunk));
   child.on("error", (error) => {
-    processes.delete(id);
-    stoppingRuns.delete(id);
-    if (run.finishedAt) return;
     run.status = "error";
     run.finishedAt = new Date();
     run.durationMs = run.finishedAt.getTime() - run.startedAt.getTime();
@@ -297,30 +263,17 @@ export const startContestTestRun = (req: Request, res: Response): void => {
     writeResult(run);
     broadcast(id, "contest-test-finished", publicRun(run));
   });
-  child.on("close", (code) => finalizeRun(run, id, code));
+  child.on("close", (code) => {
+    run.exitCode = code;
+    run.status = code === 0 ? "passed" : "failed";
+    run.finishedAt = new Date();
+    run.durationMs = run.finishedAt.getTime() - run.startedAt.getTime();
+    run.summary = summarizeLogs(run.logs);
+    writeResult(run);
+    broadcast(id, "contest-test-finished", publicRun(run));
+  });
 
   res.status(202).json(publicRun(run));
-};
-
-export const stopContestTestRun = (req: Request, res: Response): void => {
-  const runId = String(req.params.id);
-  const run = runs.get(runId);
-  if (!run) {
-    res.status(404).json({ message: "Test run not found" });
-    return;
-  }
-  if (run.status !== "running") {
-    res.status(400).json({ message: "Test run is not running" });
-    return;
-  }
-  const child = processes.get(runId);
-  if (!child) {
-    res.status(409).json({ message: "No active process for this run" });
-    return;
-  }
-  stoppingRuns.add(runId);
-  killTestProcess(child);
-  res.status(202).json({ message: "Stop requested", run: publicRun(run) });
 };
 
 export const streamContestTestRun = (req: Request, res: Response): void => {

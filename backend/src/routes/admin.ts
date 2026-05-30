@@ -44,7 +44,6 @@ import {
   getContestTestSuites,
   startContestTestRun,
   streamContestTestRun,
-  stopContestTestRun,
 } from "../controllers/contestTestController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 import {
@@ -152,7 +151,6 @@ router.delete("/contests/:id", deleteContest);
 router.get("/contest-tests/suites", getContestTestSuites);
 router.get("/contest-tests/runs", getContestTestRuns);
 router.post("/contest-tests/runs", startContestTestRun);
-router.post("/contest-tests/runs/:id/stop", stopContestTestRun);
 router.get("/contest-tests/runs/:id", getContestTestRun);
 router.get("/contest-tests/runs/:id/stream", streamContestTestRun);
 
