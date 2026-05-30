@@ -432,11 +432,30 @@ export const createContestClaim = async (req: Request, res: Response): Promise<v
       res.status(400).json({ message: "type, title, and description are required" });
       return;
     }
+    if (!["answer_key", "ambiguous_question", "marking", "technical", "other"].includes(type)) {
+      res.status(400).json({ message: "Invalid claim type" });
+      return;
+    }
 
     if (questionId && !contest.questions.map((id) => String(id)).includes(String(questionId))) {
       res.status(400).json({ message: "Question is not part of this contest" });
       return;
     }
+
+    const [question, latestSubmission] = await Promise.all([
+      questionId
+        ? Question.findById(questionId).select("title contentId problemId questionType").lean()
+        : Promise.resolve(null),
+      questionId
+        ? ContestSubmission.findOne({
+            contestId: contest._id,
+            questionId,
+            userId: req.currentUser!._id,
+          })
+            .sort({ submittedAt: -1 })
+            .lean()
+        : Promise.resolve(null),
+    ]);
 
     const claim = await ContestClaim.create({
       contestId: contest._id,
@@ -445,6 +464,32 @@ export const createContestClaim = async (req: Request, res: Response): Promise<v
       type,
       title: String(title).trim(),
       description: String(description).trim(),
+      contestLifecycleAtCreate: getContestState(contest),
+      questionSnapshot: question
+        ? {
+            title: question.title,
+            contentId: question.contentId,
+            problemId: question.problemId,
+            questionType: question.questionType,
+          }
+        : undefined,
+      userAnswerSnapshot: latestSubmission
+        ? {
+            submissionId: latestSubmission._id,
+            answer: latestSubmission.answer,
+            isCorrect: latestSubmission.isCorrect,
+            marksAwarded: latestSubmission.marksAwarded,
+            submittedAt: latestSubmission.submittedAt,
+          }
+        : undefined,
+      statusHistory: [
+        {
+          status: "open",
+          note: "Claim submitted by participant",
+          performedBy: req.currentUser!._id,
+          timestamp: new Date(),
+        },
+      ],
     });
 
     res.status(201).json(claim);

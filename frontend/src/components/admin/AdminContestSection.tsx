@@ -227,9 +227,10 @@ const managerPanels = [
   { id: "problems", label: "Problems", description: "Attach approved problem set", Icon: FileQuestion },
   { id: "lifecycle", label: "Lifecycle", description: "Move contest through stages", Icon: Radio },
   { id: "monitor", label: "Monitor", description: "Review live standings", Icon: BarChart3 },
+  { id: "claims", label: "Claims", description: "Review and resolve participant claims", Icon: Gavel },
 ] as const;
 
-type ManagerPanel = (typeof managerPanels)[number]["id"] | "claims";
+type ManagerPanel = (typeof managerPanels)[number]["id"];
 type ContestLifecycleAction = "release-answer-key" | "open-claims" | "close-claims" | "finalize-ratings";
 type LifecycleOperation = {
   stage: string;
@@ -237,6 +238,7 @@ type LifecycleOperation = {
   description: string;
   lifecycle?: string;
   action?: ContestLifecycleAction;
+  completesAt?: string;
   Icon: React.ComponentType<{ size?: number }>;
   primary?: boolean;
 };
@@ -253,6 +255,35 @@ function getContestTypeLabel(type?: string) {
 
 function getLifecycleIndex(lifecycle?: string) {
   return lifecycleHelp.findIndex(([key]) => key === lifecycle);
+}
+
+function hasReachedLifecycle(current?: string, target?: string) {
+  const currentIndex = getLifecycleIndex(current);
+  const targetIndex = getLifecycleIndex(target);
+  return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
+}
+
+function lifecycleBadgeClass(lifecycle?: string, selected = false) {
+  if (lifecycle === "draft") return selected ? "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300" : "border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300";
+  if (["published", "registration_open"].includes(lifecycle || "")) return selected ? "border-sky-500/35 bg-sky-500/12 text-sky-700 dark:text-sky-300" : "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  if (["live", "frozen"].includes(lifecycle || "")) return selected ? "border-emerald-500/35 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300" : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  if (["ended", "answer_key_released", "claims_open", "claims_closed"].includes(lifecycle || "")) return selected ? "border-amber-500/35 bg-amber-500/12 text-amber-700 dark:text-amber-300" : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (["finalized", "ratings_applied"].includes(lifecycle || "")) return selected ? "border-green-500/40 bg-green-500/15 text-green-700 dark:text-green-300" : "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300";
+  return selected ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground";
+}
+
+function lifecycleActionClass(state: "current" | "done" | "primary" | "idle") {
+  if (state === "current") return "border-sky-500/45 bg-sky-500/12 text-sky-700 shadow-[0_0_0_1px_hsl(199_89%_48%/0.10)] dark:text-sky-300";
+  if (state === "done") return "border-green-500/35 bg-green-500/10 text-green-700 dark:text-green-300";
+  if (state === "primary") return "border-primary/35 bg-primary text-primary-foreground hover:opacity-90";
+  return "border-border bg-card hover:bg-secondary/25";
+}
+
+function lifecycleActionIconClass(state: "current" | "done" | "primary" | "idle") {
+  if (state === "current") return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  if (state === "done") return "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300";
+  if (state === "primary") return "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground";
+  return "border-border bg-background";
 }
 
 function statusForLifecycle(lifecycle?: string) {
@@ -274,6 +305,7 @@ function claimStatusClass(status?: string) {
   if (status === "accepted") return "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300";
   if (status === "rejected") return "border-destructive/25 bg-destructive/10 text-destructive";
   if (status === "under_review") return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "open") return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300";
   return "border-border bg-background text-muted-foreground";
 }
 
@@ -426,6 +458,7 @@ const lifecycleActions: LifecycleOperation[] = [
     title: "Release Answer Key",
     description: "Show official answers and solutions to participants.",
     action: "release-answer-key",
+    completesAt: "answer_key_released",
     Icon: KeyRound,
   },
   {
@@ -433,6 +466,7 @@ const lifecycleActions: LifecycleOperation[] = [
     title: "Open Claims",
     description: "Let participants submit answer-key or marking claims.",
     action: "open-claims",
+    completesAt: "claims_open",
     Icon: Gavel,
   },
   {
@@ -440,6 +474,7 @@ const lifecycleActions: LifecycleOperation[] = [
     title: "Close Claims",
     description: "Stop new claims after the review window ends.",
     action: "close-claims",
+    completesAt: "claims_closed",
     Icon: Gavel,
   },
   {
@@ -447,6 +482,7 @@ const lifecycleActions: LifecycleOperation[] = [
     title: "Finalize Results",
     description: "Lock ranks and apply ratings for rated contests.",
     action: "finalize-ratings",
+    completesAt: "finalized",
     Icon: Award,
     primary: true,
   },
@@ -500,7 +536,7 @@ export default function AdminContestSection() {
     }
     return {
       total: adminClaims.length,
-      pending: adminClaims.filter((claim) => claim.status === "pending").length,
+      pending: adminClaims.filter((claim) => claim.status === "open").length,
       review: adminClaims.filter((claim) => claim.status === "under_review").length,
       accepted: adminClaims.filter((claim) => claim.status === "accepted").length,
       rejected: adminClaims.filter((claim) => claim.status === "rejected").length,
@@ -1043,10 +1079,8 @@ export default function AdminContestSection() {
                             {new Date(contest.startTime).toLocaleString()}
                           </div>
                         </div>
-                        <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[9px] ${
-                          selected ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"
-                        }`}>
-                          {selected ? "Open" : labelize(contest.lifecycle || contest.status)}
+                        <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold ${lifecycleBadgeClass(contest.lifecycle || contest.status, selected)}`}>
+                          {labelize(contest.lifecycle || contest.status)}
                         </span>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] text-muted-foreground">
@@ -1649,31 +1683,27 @@ export default function AdminContestSection() {
                   <span className="text-[10px] text-muted-foreground">{group.actions.length} action{group.actions.length === 1 ? "" : "s"}</span>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {group.actions.map(({ stage, title, description, lifecycle, action, Icon, primary }) => {
-                    const isCurrent = lifecycle && selectedContest?.lifecycle === lifecycle;
-                    const currentIndex = getLifecycleIndex(selectedContest?.lifecycle);
-                    const targetIndex = lifecycle ? getLifecycleIndex(lifecycle) : -1;
-                    const completed = lifecycle ? currentIndex > targetIndex && targetIndex >= 0 : false;
+                  {group.actions.map(({ stage, title, description, lifecycle, action, completesAt, Icon, primary }) => {
+                    const targetLifecycle = lifecycle || completesAt;
+                    const currentLifecycle = selectedContest?.lifecycle;
+                    const actionCompleted = Boolean(action && hasReachedLifecycle(currentLifecycle, completesAt));
+                    const isCurrent = Boolean(!action && targetLifecycle && currentLifecycle === targetLifecycle);
+                    const completed = actionCompleted || Boolean(
+                      targetLifecycle &&
+                      hasReachedLifecycle(currentLifecycle, targetLifecycle) &&
+                      currentLifecycle !== targetLifecycle
+                    );
+                    const actionState = isCurrent ? "current" : completed ? "done" : primary ? "primary" : "idle";
                     return (
                       <button
                         key={title}
                         type="button"
-                        disabled={!selectedContestId || Boolean(isCurrent)}
+                        disabled={!selectedContestId || Boolean(isCurrent) || actionCompleted}
                         onClick={() => lifecycle ? setContestLifecycle(lifecycle) : runContestAction(action!)}
-                        className={`rounded-sm border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                          isCurrent
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : primary
-                              ? "border-primary/35 bg-primary text-primary-foreground hover:opacity-90"
-                              : completed
-                                ? "border-green-500/25 bg-green-500/10"
-                                : "border-border bg-card hover:bg-secondary/25"
-                        }`}
+                        className={`rounded-sm border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-80 ${lifecycleActionClass(actionState)}`}
                       >
                         <div className="flex items-start gap-3">
-                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border ${
-                            primary && !isCurrent ? "border-primary-foreground/30 bg-primary-foreground/10" : "border-border bg-background"
-                          }`}>
+                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border ${lifecycleActionIconClass(actionState)}`}>
                             <Icon size={17} />
                           </span>
                           <span className="min-w-0">
@@ -1681,7 +1711,7 @@ export default function AdminContestSection() {
                             <span className="mt-1 block text-sm font-bold">
                               {isCurrent ? `${title} active` : completed ? `${title} done` : title}
                             </span>
-                            <span className={`mt-1 block text-xs leading-relaxed ${primary && !isCurrent ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                            <span className={`mt-1 block text-xs leading-relaxed ${actionState === "primary" ? "text-primary-foreground/80" : actionState === "done" || actionState === "current" ? "opacity-80" : "text-muted-foreground"}`}>
                               {description}
                             </span>
                           </span>
@@ -1864,7 +1894,7 @@ export default function AdminContestSection() {
         <div className="grid gap-3 border-b border-border bg-background p-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
             ["Total", claimSummary.total],
-            ["Pending", claimSummary.pending],
+            ["Open", claimSummary.pending],
             ["Reviewing", claimSummary.review],
             ["Accepted", claimSummary.accepted],
             ["Rejected", claimSummary.rejected],

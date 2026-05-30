@@ -104,6 +104,7 @@ function claimStatusClass(status?: string) {
   if (status === "accepted") return "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300";
   if (status === "rejected") return "border-destructive/25 bg-destructive/10 text-destructive";
   if (status === "under_review") return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "open") return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300";
   return "border-border bg-background text-muted-foreground";
 }
 
@@ -202,6 +203,17 @@ export default function ContestRoom() {
     room?.standing?.problemStats?.forEach((stat: any) => map.set(String(stat.questionId), stat));
     return map;
   }, [room?.standing?.problemStats]);
+  const claimsByQuestion = useMemo(() => {
+    const map = new Map<string, any[]>();
+    (room?.claims || []).forEach((claim: any) => {
+      const key = String(claim.questionId?._id || claim.questionId || "");
+      if (!key) return;
+      const list = map.get(key) || [];
+      list.push(claim);
+      map.set(key, list);
+    });
+    return map;
+  }, [room?.claims]);
 
   useEffect(() => {
     const submitted = activeQuestion?._id ? submittedByQuestion.get(String(activeQuestion._id)) : null;
@@ -227,7 +239,7 @@ export default function ContestRoom() {
     const claims = room?.claims || [];
     return {
       total: claims.length,
-      pending: claims.filter((claim) => claim.status === "pending").length,
+      open: claims.filter((claim) => claim.status === "open").length,
       review: claims.filter((claim) => claim.status === "under_review").length,
       accepted: claims.filter((claim) => claim.status === "accepted").length,
       rejected: claims.filter((claim) => claim.status === "rejected").length,
@@ -313,6 +325,18 @@ export default function ContestRoom() {
     } catch (error: any) {
       toast.error(error.message || "Failed to submit claim");
     }
+  };
+
+  const openClaimForQuestion = (question: ContestQuestion) => {
+    setClaimQuestionId(question._id);
+    setClaimForm({
+      type: "answer_key",
+      title: claimForm.title || `Review Q${activeIndex + 1}: ${question.contentId || question.title}`,
+      description: claimForm.description,
+    });
+    window.setTimeout(() => {
+      document.getElementById("contest-claims-center")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   };
 
   if (loading) {
@@ -500,7 +524,19 @@ export default function ContestRoom() {
 
           {resultsVisible && (
             <div className="mt-6 border-t border-border pt-5">
-              <h3 className="mb-3 font-serif text-base font-bold">Answer Key</h3>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="font-serif text-base font-bold">Answer Key</h3>
+                {room.claimsOpen && (
+                  <button
+                    type="button"
+                    onClick={() => openClaimForQuestion(activeQuestion)}
+                    className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs"
+                  >
+                    <Gavel size={13} />
+                    Claim this question
+                  </button>
+                )}
+              </div>
               <div className="rounded-sm border border-primary/20 bg-primary/10 p-3 text-sm text-foreground">
                 {Array.isArray(getCorrectAnswer(activeQuestion)) ? (
                   <div className="space-y-2">
@@ -515,6 +551,29 @@ export default function ContestRoom() {
                   <LatexRenderer latex={String(getCorrectAnswer(activeQuestion) || "See editorial")} />
                 )}
               </div>
+              {(claimsByQuestion.get(String(activeQuestion._id)) || []).length > 0 && (
+                <div className="mt-4 rounded-sm border border-border bg-background p-3">
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Your claims for this question</div>
+                  <div className="space-y-2">
+                    {(claimsByQuestion.get(String(activeQuestion._id)) || []).map((claim) => (
+                      <div key={claim._id} className="rounded-sm border border-border bg-card p-2 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-sm border px-2 py-0.5 text-[10px] uppercase ${claimStatusClass(claim.status)}`}>
+                            {labelize(claim.status)}
+                          </span>
+                          <span className="font-semibold text-foreground">{claim.title}</span>
+                        </div>
+                        {claim.adminResponse && (
+                          <div className="mt-2 rounded-sm border border-primary/20 bg-primary/5 p-2 text-foreground">
+                            <span className="font-bold text-primary">Admin response: </span>
+                            {claim.adminResponse}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {activeQuestion.solution && (
                 <div className="mt-5">
                   <h3 className="mb-3 font-serif text-base font-bold">Editorial</h3>
@@ -630,7 +689,7 @@ export default function ContestRoom() {
         </aside>
       </div>
 
-      <div className="mt-5 academic-card overflow-hidden">
+      <div id="contest-claims-center" className="mt-5 academic-card overflow-hidden scroll-mt-6">
         <div className="flex flex-col gap-2 border-b border-border bg-secondary/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-serif text-base font-bold text-foreground">{resultsVisible ? "Final Standings" : "Live Standings"}</h2>
@@ -687,7 +746,7 @@ export default function ContestRoom() {
           <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
             {[
               ["All", claimStats.total],
-              ["Pending", claimStats.pending],
+              ["Open", claimStats.open],
               ["Review", claimStats.review],
               ["Accepted", claimStats.accepted],
               ["Rejected", claimStats.rejected],

@@ -21,6 +21,20 @@ type AdminClaim = {
   adminResponse?: string;
   userId?: { fullName?: string; email?: string };
   questionId?: { title?: string; contentId?: string; problemId?: string };
+  contestLifecycleAtCreate?: string;
+  questionSnapshot?: { title?: string; contentId?: string; problemId?: string; questionType?: string };
+  userAnswerSnapshot?: {
+    answer?: { mcqSelected?: string | null; msqSelected?: string[]; natAnswer?: string };
+    isCorrect?: boolean;
+    marksAwarded?: number;
+    submittedAt?: string;
+  };
+  statusHistory?: Array<{
+    status: string;
+    note?: string;
+    timestamp?: string;
+    performedBy?: { fullName?: string; email?: string };
+  }>;
   createdAt: string;
   reviewedAt?: string;
   reviewedBy?: { fullName?: string; email?: string };
@@ -41,7 +55,16 @@ function claimStatusClass(status?: string) {
   if (status === "accepted") return "border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300";
   if (status === "rejected") return "border-destructive/25 bg-destructive/10 text-destructive";
   if (status === "under_review") return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "open") return "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300";
   return "border-border bg-background text-muted-foreground";
+}
+
+function formatAnswer(answer?: AdminClaim["userAnswerSnapshot"]["answer"]) {
+  if (!answer) return "No saved answer snapshot";
+  if (answer.natAnswer) return `NAT: ${answer.natAnswer}`;
+  if (answer.msqSelected?.length) return `MSQ: ${answer.msqSelected.join(", ")}`;
+  if (answer.mcqSelected) return `MCQ: ${answer.mcqSelected}`;
+  return "Blank answer";
 }
 
 export default function AdminContestClaimsPage() {
@@ -132,7 +155,7 @@ export default function AdminContestClaimsPage() {
   const summary = useMemo(
     () => ({
       total: claims.length,
-      pending: claims.filter((claim) => claim.status === "pending").length,
+      open: claims.filter((claim) => claim.status === "open").length,
       review: claims.filter((claim) => claim.status === "under_review").length,
       accepted: claims.filter((claim) => claim.status === "accepted").length,
       rejected: claims.filter((claim) => claim.status === "rejected").length,
@@ -241,7 +264,7 @@ export default function AdminContestClaimsPage() {
                     className="rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none"
                   >
                     <option value="all">All statuses</option>
-                    <option value="pending">Pending</option>
+                    <option value="open">Open</option>
                     <option value="under_review">Under review</option>
                     <option value="accepted">Accepted</option>
                     <option value="rejected">Rejected</option>
@@ -253,7 +276,7 @@ export default function AdminContestClaimsPage() {
             <div className="grid gap-3 border-b border-border bg-background p-4 sm:grid-cols-2 xl:grid-cols-5">
               {[
                 ["Total", summary.total, BarChart3],
-                ["Pending", summary.pending, Clock3],
+                ["Open", summary.open, Clock3],
                 ["Review", summary.review, Gavel],
                 ["Accepted", summary.accepted, CheckCircle2],
                 ["Rejected", summary.rejected, XCircle],
@@ -301,13 +324,45 @@ export default function AdminContestClaimsPage() {
                         </div>
                         <div className="mt-2 text-sm font-semibold text-foreground">{claim.title}</div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {claim.questionId?.contentId || claim.questionId?.problemId || "Contest level"} {claim.questionId?.title ? `/ ${claim.questionId.title}` : ""}
+                          {claim.questionId?.contentId || claim.questionId?.problemId || claim.questionSnapshot?.contentId || claim.questionSnapshot?.problemId || "Contest level"} {claim.questionId?.title || claim.questionSnapshot?.title ? `/ ${claim.questionId?.title || claim.questionSnapshot?.title}` : ""}
                         </div>
                         <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{claim.description}</p>
+                        <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
+                          <div className="rounded-sm border border-border bg-background p-2">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Lifecycle</div>
+                            <div className="mt-1 font-semibold text-foreground">{labelize(claim.contestLifecycleAtCreate || "unknown")}</div>
+                          </div>
+                          <div className="rounded-sm border border-border bg-background p-2">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Submitted Answer</div>
+                            <div className="mt-1 break-words font-mono text-[11px] text-foreground">{formatAnswer(claim.userAnswerSnapshot?.answer)}</div>
+                          </div>
+                          <div className="rounded-sm border border-border bg-background p-2">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Snapshot Marks</div>
+                            <div className="mt-1 font-mono text-[11px] text-foreground">
+                              {claim.userAnswerSnapshot?.marksAwarded ?? "-"} {claim.userAnswerSnapshot?.submittedAt ? `/ ${formatDateTime(claim.userAnswerSnapshot.submittedAt)}` : ""}
+                            </div>
+                          </div>
+                        </div>
                         {claim.adminResponse && (
                           <div className="mt-3 rounded-sm border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
                             <span className="mb-1 block font-bold text-primary">Current admin response</span>
                             {claim.adminResponse}
+                          </div>
+                        )}
+                        {(claim.statusHistory || []).length > 0 && (
+                          <div className="mt-3 rounded-sm border border-border bg-background p-3">
+                            <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Trace History</div>
+                            <div className="space-y-2">
+                              {(claim.statusHistory || []).map((entry, index) => (
+                                <div key={`${entry.status}-${entry.timestamp}-${index}`} className="flex flex-col gap-0.5 border-l border-border pl-3 text-xs">
+                                  <div className="font-semibold text-foreground">
+                                    {labelize(entry.status)} by {entry.performedBy?.fullName || entry.performedBy?.email || "System"}
+                                  </div>
+                                  <div className="font-mono text-[10px] text-muted-foreground">{formatDateTime(entry.timestamp)}</div>
+                                  {entry.note && <div className="text-muted-foreground">{entry.note}</div>}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>

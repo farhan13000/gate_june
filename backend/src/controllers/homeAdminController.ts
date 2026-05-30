@@ -833,6 +833,7 @@ export const getContestAdminClaims = async (req: Request, res: Response): Promis
       .populate("userId", "fullName email")
       .populate("questionId", "title contentId problemId")
       .populate("reviewedBy", "fullName email")
+      .populate("statusHistory.performedBy", "fullName email")
       .sort({ createdAt: -1 })
       .lean();
     res.json(claims);
@@ -850,10 +851,22 @@ export const updateContestClaim = async (req: Request, res: Response): Promise<v
     }
 
     const { status, adminResponse } = req.body;
-    if (status !== undefined) claim.status = status;
+    if (status !== undefined) {
+      if (!["open", "under_review", "accepted", "rejected", "resolved"].includes(status)) {
+        res.status(400).json({ message: "Invalid claim status" });
+        return;
+      }
+      claim.status = status;
+    }
     if (adminResponse !== undefined) claim.adminResponse = String(adminResponse).trim();
     claim.reviewedBy = req.currentUser!._id;
     claim.reviewedAt = new Date();
+    claim.statusHistory.push({
+      status: claim.status,
+      note: claim.adminResponse || `Moved to ${claim.status}`,
+      performedBy: req.currentUser!._id,
+      timestamp: new Date(),
+    });
     await claim.save();
     const contest = await Contest.findById(req.params.id).select("title contestType lifecycle status");
     if (contest) {
