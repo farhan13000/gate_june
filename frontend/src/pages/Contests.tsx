@@ -251,12 +251,14 @@ export default function Contests() {
 
   const visibleContests = useMemo(() => {
     const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
-    if (contestView === "registered") return contests.filter(registered);
-    if (contestView === "past") return contests.filter((contest) => postContestStates.includes(contest.contestState));
+    const newestFirst = (items: Contest[]) =>
+      [...items].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+    if (contestView === "registered") return newestFirst(contests.filter(registered));
+    if (contestView === "past") return newestFirst(contests.filter((contest) => postContestStates.includes(contest.contestState)));
     if (contestView === "results") {
-      return contests.filter((contest) => registered(contest) && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState));
+      return newestFirst(contests.filter((contest) => registered(contest) && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState)));
     }
-    return contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState));
+    return newestFirst(contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)));
   }, [contestView, contests]);
 
   const grouped = useMemo(() => {

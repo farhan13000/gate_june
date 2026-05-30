@@ -100,7 +100,7 @@ async function buildPublicContests(userId?: string) {
       "title description meta questions contestType visibility scoringMode lifecycle registrationStartTime registrationEndTime startTime endTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome status"
     )
     .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
-    .sort({ startTime: 1 })
+    .sort({ startTime: -1 })
     .lean();
 
   const registrationCounts = await ContestRegistration.aggregate([
@@ -139,7 +139,11 @@ async function buildContestStandingsPayload(contestId: string, currentUserId?: s
     contestState: state,
     frozen: useVisible,
     final: showFinal,
-    standings: standings.map((standing: any) => ({
+    standings: standings.map((standing: any) => {
+      const attemptedCount = Array.isArray(standing.problemStats)
+        ? standing.problemStats.filter((stat: any) => Number(stat.attempts || 0) > 0).length
+        : 0;
+      return {
       _id: standing._id,
       rank: useVisible ? standing.visibleRank || standing.rank : standing.rank,
       user: {
@@ -148,11 +152,12 @@ async function buildContestStandingsPayload(contestId: string, currentUserId?: s
         rating: standing.userId?.rating || 0,
       },
       score: useVisible ? standing.visibleScore : standing.score,
-      solvedCount: standing.solvedCount,
+      solvedCount: showFinal ? standing.solvedCount : attemptedCount,
       penaltyMinutes: standing.penaltyMinutes,
       lastAcceptedAt: standing.lastAcceptedAt,
       isCurrentUser: currentUserId ? String(standing.userId?._id) === String(currentUserId) : false,
-    })),
+      };
+    }),
   };
 }
 

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Clock3, Eye, Flag, Gavel, Send } from "lucide-react";
 import { toast } from "sonner";
 import LatexRenderer from "@/components/LatexRenderer";
 import EditorialRenderer from "@/components/EditorialRenderer";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ContestQuestion = {
   _id: string;
@@ -110,6 +111,8 @@ function claimStatusClass(status?: string) {
 
 export default function ContestRoom() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -250,6 +253,10 @@ export default function ContestRoom() {
     if (!claimQuestionId && activeQuestion?._id) setClaimQuestionId(activeQuestion._id);
   }, [activeQuestion?._id, claimQuestionId]);
 
+  useEffect(() => {
+    if (room?.ratingChange) refreshUser();
+  }, [refreshUser, room?.ratingChange]);
+
   const canSubmitAnswer = () => {
     if (!room?.canSubmit || !activeQuestion || activeLocked) return false;
     if (activeQuestion.questionType === "MCQ") return Boolean(mcqSelected);
@@ -297,7 +304,7 @@ export default function ContestRoom() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to finish contest");
       toast.success("Contest attempt locked. Results will be shown after answer key release.");
-      await loadRoom();
+      navigate("/contests");
     } catch (error: any) {
       toast.error(error.message || "Failed to finish contest");
     } finally {
@@ -694,7 +701,7 @@ export default function ContestRoom() {
           <div>
             <h2 className="font-serif text-base font-bold text-foreground">{resultsVisible ? "Final Standings" : "Live Standings"}</h2>
             <p className="text-xs text-muted-foreground">
-              {standingMeta.final || resultsVisible ? "Final leaderboard and result summary" : standingMeta.frozen ? "Scoreboard is frozen" : "Auto-refreshes every few seconds"}
+              {standingMeta.final || resultsVisible ? "Final leaderboard and result summary" : standingMeta.frozen ? "Scoreboard is frozen" : "Auto-refreshes every few seconds. Attempts are counted until the answer key is released."}
             </p>
           </div>
           <button type="button" onClick={loadStandings} className="btn-outline px-3 py-1.5 text-xs">
@@ -708,7 +715,7 @@ export default function ContestRoom() {
                 <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Rank</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">User</th>
                 <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Score</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Solved</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">{resultsVisible ? "Solved" : "Attempted"}</th>
                 <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Penalty</th>
               </tr>
             </thead>
