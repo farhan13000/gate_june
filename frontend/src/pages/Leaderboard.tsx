@@ -91,8 +91,8 @@ export default function Leaderboard() {
                 <td colSpan={5} className="py-12 text-center text-xs text-muted-foreground">No leaderboard data available.</td>
               </tr>
             ) : (
-              leaders.map((entry) => (
-                <tr key={entry.handle} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
+              leaders.map((entry, index) => (
+                <tr key={`${entry.handle}-${index}`} className="border-b border-border/50 hover:bg-secondary/40 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
                     {entry.rank <= 3 ? (
                       <span className={entry.rank === 1 ? "text-foreground font-bold" : "text-foreground/70"}>{entry.rank}</span>

@@ -199,7 +199,7 @@ export default function AdminContestClaimsPage() {
         </button>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]">
         <aside className="academic-card overflow-hidden xl:sticky xl:top-4 xl:self-start">
           <div className="border-b border-border bg-secondary/30 p-4">
             <h3 className="text-sm font-bold text-foreground">Contest</h3>
@@ -273,7 +273,7 @@ export default function AdminContestClaimsPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 border-b border-border bg-background p-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 border-b border-border bg-background p-4 sm:grid-cols-3 md:grid-cols-5">
               {[
                 ["Total", summary.total, BarChart3],
                 ["Open", summary.open, Clock3],
@@ -309,7 +309,7 @@ export default function AdminContestClaimsPage() {
                 </div>
                 <div className="divide-y divide-border">
                   {group.claims.map((claim) => (
-                    <div key={claim._id} className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+                    <div key={claim._id} className="grid gap-6 p-4 lg:grid-cols-[minmax(0,1fr)_16rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-sm border px-2 py-0.5 text-[10px] uppercase ${claimStatusClass(claim.status)}`}>
