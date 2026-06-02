@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import './AnalyticsVectors.css';
 import analyticsImg from '../../assets/analytics_vectors.png';
+import FloatingShapes from './FloatingShapes';
 
 export default function AnalyticsVectors() {
   return (
     <section className="analytics-vectors-section">
+      <FloatingShapes />
       <div className="analytics-container">
         {/* Left Content */}
         <div className="analytics-content">

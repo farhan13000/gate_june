@@ -13,6 +13,8 @@
   display: flex;
   justify-content: center;
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
 }
 
 .analytics-container {

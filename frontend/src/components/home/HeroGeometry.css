@@ -8,15 +8,16 @@
 
 .hero-geometry-section {
   width: 100%;
-  min-height: 680px;
-  padding: 72px 64px 24px;
+  min-height: 90vh;
+  padding: 80px 64px;
   background-color: #ffffff;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   position: relative;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-sizing: border-box;
 }
 
 /* Very faint grid background behind everything */

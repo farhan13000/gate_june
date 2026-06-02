@@ -22,18 +22,19 @@ function AnnouncementLink({
 }) {
   const inner = (
     <>
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="font-medium text-[#2563eb] truncate">{title}</span>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[#0b6fe8] opacity-70 group-hover:opacity-100 transition-opacity"></div>
+        <span className="font-medium text-[#10213f] truncate group-hover:text-[#0b6fe8] transition-colors">{title}</span>
         {isNew && (
-          <span className="shrink-0 rounded-none bg-[#eff6ff] px-1.5 py-0.5 text-[9px] font-bold uppercase text-[#2563eb] border border-[#bfdbfe]">
+          <span className="shrink-0 rounded bg-[#eff6ff] px-2 py-0.5 text-[10px] font-bold uppercase text-[#0b6fe8] border border-[#bfdbfe]">
             New
           </span>
         )}
-      </span>
-      <span className="shrink-0 font-mono text-[10px] text-[#94a3b8] flex items-center gap-1">
-        <Calendar size={10} />
+      </div>
+      <div className="shrink-0 font-mono text-[11px] text-[#64748b] flex items-center gap-1.5">
+        <Calendar size={12} className="opacity-50" />
         {date}
-      </span>
+      </div>
     </>
   );
 
@@ -43,14 +44,18 @@ function AnnouncementLink({
         href={link}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] py-3 text-sm transition-colors hover:bg-[#f8fafc] px-2"
+        className="group flex items-center justify-between gap-4 border-b border-[#f1f5f9] py-3.5 px-3 text-sm transition-all hover:bg-[#f8fafc]"
       >
         {inner}
       </a>
     );
   }
 
-  return <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] py-3 text-sm px-2">{inner}</div>;
+  return (
+    <div className="group flex items-center justify-between gap-4 border-b border-[#f1f5f9] py-3.5 px-3 text-sm">
+      {inner}
+    </div>
+  );
 }
 
 export default function Index() {

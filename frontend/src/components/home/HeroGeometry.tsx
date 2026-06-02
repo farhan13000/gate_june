@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { Target, TrendingUp, Search, Trophy } from 'lucide-react';
 import './HeroGeometry.css';
 import heroImg from '../../assets/hero_geometry.png';
+import FloatingShapes from './FloatingShapes';
 
 export default function HeroGeometry() {
   return (
     <section className="hero-geometry-section">
+      <FloatingShapes />
       <div className="hero-container">
         {/* Left Content */}
         <div className="hero-content">

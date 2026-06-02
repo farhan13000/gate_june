@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import './OptimizationSection.css';
 import optImg from '../../assets/optimization_mesh.png';
+import FloatingShapes from './FloatingShapes';
 
 export default function OptimizationSection() {
   return (
     <section className="optimization-section">
+      <FloatingShapes />
       <div className="optimization-container">
         
         {/* Left Illustration */}
