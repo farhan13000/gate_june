@@ -18,7 +18,7 @@ export default function LearningIntelligence() {
         const token = localStorage.getItem("token");
         
         const [miiRes] = await Promise.all([
-          fetch("http://localhost:5000/api/dashboard/intelligence-index", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard/intelligence-index`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         const miiJson = await miiRes.json();

@@ -16,8 +16,8 @@ export default function ProblemAnalytics() {
         const token = localStorage.getItem("token");
         
         const [phaseRes, summaryRes] = await Promise.all([
-          fetch("http://localhost:5000/api/dashboard/problems/phase-diagram", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("http://localhost:5000/api/dashboard/problems/summary?viewType=difficulty", { headers: { Authorization: `Bearer ${token}` } })
+          fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard/problems/phase-diagram`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard/problems/summary?viewType=difficulty`, { headers: { Authorization: `Bearer ${token}` } })
         ]);
 
         const phaseJson = await phaseRes.json();
