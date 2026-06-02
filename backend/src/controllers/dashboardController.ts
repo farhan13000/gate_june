@@ -5,6 +5,7 @@ import RatingHistory from "../models/RatingHistory";
 import Contest from "../models/Contest";
 import ContestRegistration from "../models/ContestRegistration";
 import ContestStanding from "../models/ContestStanding";
+import UserActivityLog from "../models/UserActivityLog";
 import { getContestState } from "../utils/contestLifecycle";
 
 const subjectsList = [
@@ -20,163 +21,7 @@ const subjectsList = [
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
 
-const buildRatingHistory = (currentRating: number) => {
-  const baseRating = 1500;
-  const diff = Math.max(0, currentRating - baseRating);
-  const now = new Date();
-
-  return Array.from({ length: 6 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
-    const progress = index / 5;
-    const rating = index === 5 ? currentRating : Math.round(baseRating + diff * progress);
-    return {
-      date: monthFormatter.format(date),
-      rating,
-    };
-  });
-};
-
-const getRatingData = async (userId: any, currentRating: number) => {
-  const ratingHistory = await RatingHistory.find({ userId })
-    .populate("contestId", "title")
-    .sort({ appliedAt: 1, createdAt: 1 })
-    .lean();
-  const ratingData = ratingHistory.length
-    ? ratingHistory.map((item: any) => ({
-        date: new Date(item.appliedAt || item.createdAt).toISOString().slice(0, 10),
-        contest: item.contestId?.title || "Contest",
-        rating: item.newRating,
-        delta: item.delta,
-        rank: item.rank,
-      }))
-    : buildRatingHistory(currentRating);
-  return { ratingHistory, ratingData };
-};
-
-const getRatingSummary = async (userId: any, currentRating: number, ratingHistory: any[]) => {
-  const highestFromHistory = ratingHistory.reduce((max, item: any) => {
-    return Math.max(max, Number(item.oldRating || 0), Number(item.newRating || 0));
-  }, Number(currentRating || 0));
-
-  if (!currentRating || currentRating <= 0) {
-    return {
-      globalRank: null,
-      countryRank: null,
-      highestRating: highestFromHistory,
-      ratedUsers: await User.countDocuments({ role: "student", rating: { $gt: 0 } }),
-    };
-  }
-
-  const [higherRatedUsers, ratedUsers] = await Promise.all([
-    User.countDocuments({
-      role: "student",
-      rating: { $gt: currentRating },
-      _id: { $ne: userId },
-    }),
-    User.countDocuments({ role: "student", rating: { $gt: 0 } }),
-  ]);
-
-  return {
-    globalRank: higherRatedUsers + 1,
-    countryRank: null,
-    highestRating: Math.max(highestFromHistory, currentRating),
-    ratedUsers,
-  };
-};
-
-const getContestDashboardData = async (userId: any) => {
-  const now = new Date();
-  const [registrations, upcomingContests, recentRatings, recentStandings] = await Promise.all([
-    ContestRegistration.find({ userId, status: { $ne: "withdrawn" } })
-      .populate("contestId", "title contestType lifecycle startTime endTime durationMinutes ratingEnabled")
-      .sort({ updatedAt: -1 })
-      .lean(),
-    Contest.find({
-      status: { $in: ["approved", "completed"] },
-      visibility: "public",
-      lifecycle: { $ne: "draft" },
-      endTime: { $gte: now },
-    })
-      .select("title contestType lifecycle registrationStartTime registrationEndTime startTime endTime durationMinutes ratingEnabled")
-      .sort({ startTime: 1 })
-      .limit(5)
-      .lean(),
-    RatingHistory.find({ userId })
-      .populate("contestId", "title contestType")
-      .sort({ appliedAt: -1, createdAt: -1 })
-      .limit(5)
-      .lean(),
-    ContestStanding.find({ userId, disqualified: false })
-      .populate("contestId", "title contestType lifecycle startTime endTime ratingEnabled status")
-      .sort({ updatedAt: -1 })
-      .limit(10)
-      .lean(),
-  ]);
-
-  const registeredIds = new Set(
-    registrations
-      .filter((registration: any) => registration.contestId)
-      .map((registration: any) => String(registration.contestId._id))
-  );
-
-  const ratingByContestId = new Map(recentRatings.map((rating: any) => [String(rating.contestId?._id || rating.contestId), rating]));
-  const finalizedResults = recentStandings
-    .filter((standing: any) => {
-      const contest = standing.contestId;
-      if (!contest) return false;
-      const state = getContestState(contest);
-      return ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied", "ended"].includes(state);
-    })
-    .slice(0, 5)
-    .map((standing: any) => {
-      const contest = standing.contestId;
-      const rating = ratingByContestId.get(String(contest?._id || contest));
-      return {
-        contestId: contest?._id,
-        title: contest?.title || "Contest",
-        contestType: contest?.contestType || "contest",
-        contestState: getContestState(contest),
-        ratingEnabled: Boolean(contest?.ratingEnabled),
-        ratingApplied: Boolean(rating),
-        oldRating: rating?.oldRating,
-        newRating: rating?.newRating,
-        delta: rating?.delta,
-        rank: rating?.rank ?? standing.rank,
-        participants: rating?.participants,
-        score: standing.score,
-        solvedCount: standing.solvedCount,
-        penaltyMinutes: standing.penaltyMinutes,
-        appliedAt: rating?.appliedAt || rating?.createdAt || standing.updatedAt,
-      };
-    });
-
-  const contestSummary = {
-    registered: registrations.length,
-    participated: registrations.filter((registration: any) => registration.status === "checked_in" || registration.finishedAt).length,
-    rated: await RatingHistory.countDocuments({ userId }),
-    upcomingRegistered: registrations.filter((registration: any) => {
-      const contest = registration.contestId;
-      return contest && ["upcoming", "registration_open", "live", "frozen"].includes(getContestState(contest));
-    }).length,
-    results: finalizedResults.length,
-  };
-
-  return {
-    contestSummary,
-    upcomingContests: upcomingContests.map((contest: any) => ({
-      _id: contest._id,
-      title: contest.title,
-      contestType: contest.contestType,
-      contestState: getContestState(contest),
-      startTime: contest.startTime,
-      endTime: contest.endTime,
-      durationMinutes: contest.durationMinutes,
-      ratingEnabled: contest.ratingEnabled,
-      registered: registeredIds.has(String(contest._id)),
-    })),
-    recentContestResults: finalizedResults,
-  };
-};
+// --- Helpers (retained and simplified) ---
 
 const getSubjectsForTopic = (topic: string): string[] => {
   const matched: string[] = [];
@@ -195,7 +40,6 @@ const getSubjectsForTopic = (topic: string): string[] => {
   return matched;
 };
 
-// Helper to calculate user stats
 const calculateUserStats = async (userId: any) => {
   const totalAttempted = await Submission.countDocuments({ userId });
   const totalCorrect = await Submission.countDocuments({ userId, isCorrect: true });
@@ -204,7 +48,6 @@ const calculateUserStats = async (userId: any) => {
   const solvedQuestions = await Submission.distinct("questionId", { userId, isCorrect: true });
   const problemsSolved = solvedQuestions.length;
 
-  // Streak calculation
   const activeDates = await Submission.distinct("createdAt", { userId });
   const formattedDates = Array.from(new Set(
     activeDates.map((d: Date) => new Date(d).toISOString().split("T")[0])
@@ -235,154 +78,348 @@ const calculateUserStats = async (userId: any) => {
     }
   }
 
-  return {
-    totalAttempted,
-    totalCorrect,
-    overallAccuracy,
-    problemsSolved,
-    currentStreakDays
-  };
+  return { totalAttempted, totalCorrect, overallAccuracy, problemsSolved, currentStreakDays };
 };
 
-// GET /api/dashboard
-export const getDashboard = async (req: Request, res: Response) => {
+// --- Modular Endpoints ---
+
+export const getOverview = async (req: Request, res: Response) => {
   try {
-    if (!req.currentUser) {
-      res.status(401).json({ message: "Not authenticated" });
-      return;
-    }
+    const userId = req.currentUser!._id;
+    const stats = await calculateUserStats(userId);
+    const user = await User.findById(userId);
 
-    const user = req.currentUser;
-    const userId = user._id;
-
-    // Fetch stats
-    const statsSummary = await calculateUserStats(userId);
-    const submissions = await Submission.find({ userId }).populate("questionId");
-
-    // Subject Performance
+    // Get strongest and weakest subject quickly from submissions (could be optimized)
+    const submissions = await Submission.find({ userId }).populate("questionId").lean();
     const subjectStatsMap: Record<string, { attempted: number; correct: number; timeSum: number }> = {};
-    for (const sub of subjectsList) {
-      subjectStatsMap[sub] = { attempted: 0, correct: 0, timeSum: 0 };
-    }
-
-    const dynamicSubjects = new Set(subjectsList);
-
-    for (const sub of submissions) {
+    for (const sub of subjectsList) subjectStatsMap[sub] = { attempted: 0, correct: 0, timeSum: 0 };
+    
+    submissions.forEach(sub => {
       const q = sub.questionId as any;
-      if (!q) continue;
+      if (!q) return;
       const matchedSubs = getSubjectsForTopic(q.topic);
-      for (const s of matchedSubs) {
-        if (!subjectStatsMap[s]) {
-          subjectStatsMap[s] = { attempted: 0, correct: 0, timeSum: 0 };
-          dynamicSubjects.add(s);
-        }
+      matchedSubs.forEach(s => {
+        if (!subjectStatsMap[s]) subjectStatsMap[s] = { attempted: 0, correct: 0, timeSum: 0 };
         subjectStatsMap[s].attempted++;
-        if (sub.isCorrect) {
-          subjectStatsMap[s].correct++;
-        }
+        if (sub.isCorrect) subjectStatsMap[s].correct++;
         subjectStatsMap[s].timeSum += (sub.timeTaken || 120);
+      });
+    });
+
+    let strongest = { subject: "N/A", accuracy: 0 };
+    let weakest = { subject: "N/A", accuracy: 100 };
+    const avgTimes: number[] = [];
+    
+    Object.keys(subjectStatsMap).forEach(sub => {
+      const s = subjectStatsMap[sub];
+      if (s.attempted > 0) {
+        const acc = Math.round((s.correct / s.attempted) * 100);
+        if (acc > strongest.accuracy) strongest = { subject: sub, accuracy: acc };
+        if (acc < weakest.accuracy) weakest = { subject: sub, accuracy: acc };
+        avgTimes.push(s.timeSum / s.attempted);
       }
+    });
+    
+    const avgTimePerQuestion = avgTimes.length ? avgTimes.reduce((a, b) => a + b, 0) / avgTimes.length : 0;
+
+    res.json({
+      stats: {
+        ...stats,
+        rating: user?.rating || 0,
+        strongestSubject: strongest.subject !== "N/A" ? strongest : null,
+        weakestSubject: weakest.subject !== "N/A" ? weakest : null,
+        avgTimePerQuestion: Math.round(avgTimePerQuestion), // in seconds
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getPerformance = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    const { viewType = "subject" } = req.query; // subject | difficulty | questionType | testType
+    
+    const submissions = await Submission.find({ userId }).populate("questionId").lean();
+
+    if (viewType === "subject") {
+      const subjectStatsMap: Record<string, { attempted: number; correct: number; timeSum: number }> = {};
+      for (const sub of subjectsList) subjectStatsMap[sub] = { attempted: 0, correct: 0, timeSum: 0 };
+      
+      submissions.forEach(sub => {
+        const q = sub.questionId as any;
+        if (!q) return;
+        const matchedSubs = getSubjectsForTopic(q.topic);
+        matchedSubs.forEach(s => {
+          if (!subjectStatsMap[s]) subjectStatsMap[s] = { attempted: 0, correct: 0, timeSum: 0 };
+          subjectStatsMap[s].attempted++;
+          if (sub.isCorrect) subjectStatsMap[s].correct++;
+          subjectStatsMap[s].timeSum += (sub.timeTaken || 120);
+        });
+      });
+
+      const data = Object.keys(subjectStatsMap)
+        .filter(s => subjectStatsMap[s].attempted > 0 || subjectsList.includes(s))
+        .map(subject => {
+        const stats = subjectStatsMap[subject];
+        const accuracy = stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0;
+        const avgTime = stats.attempted ? Math.round((stats.timeSum / stats.attempted / 60) * 10) / 10 : 0;
+        return {
+          subject,
+          attempted: stats.attempted,
+          correct: stats.correct,
+          accuracy,
+          avgTime: avgTime || 2.0,
+          weak: stats.attempted > 0 && accuracy < 60
+        };
+      });
+      return res.json({ data });
+    }
+    
+    if (viewType === "difficulty") {
+      const diffMap = { Easy: { attempted: 0, correct: 0 }, Medium: { attempted: 0, correct: 0 }, Hard: { attempted: 0, correct: 0 } };
+      submissions.forEach(sub => {
+        const q = sub.questionId as any;
+        if (q && q.difficulty && diffMap[q.difficulty as "Easy" | "Medium" | "Hard"]) {
+          diffMap[q.difficulty as "Easy" | "Medium" | "Hard"].attempted++;
+          if (sub.isCorrect) diffMap[q.difficulty as "Easy" | "Medium" | "Hard"].correct++;
+        }
+      });
+      const data = (["Easy", "Medium", "Hard"] as const).map(level => {
+        const stats = diffMap[level];
+        return { level, accuracy: stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0, attempted: stats.attempted, correct: stats.correct };
+      });
+      return res.json({ data });
     }
 
-    const subjectPerformance = Array.from(dynamicSubjects).map(subject => {
+    if (viewType === "questionType") {
+      const typeMap = { MCQ: { attempted: 0, correct: 0, timeSum: 0 }, MSQ: { attempted: 0, correct: 0, timeSum: 0 }, NAT: { attempted: 0, correct: 0, timeSum: 0 } };
+      submissions.forEach(sub => {
+        const q = sub.questionId as any;
+        if (q && q.questionType && typeMap[q.questionType as "MCQ" | "MSQ" | "NAT"]) {
+          const qt = q.questionType as "MCQ" | "MSQ" | "NAT";
+          typeMap[qt].attempted++;
+          if (sub.isCorrect) typeMap[qt].correct++;
+          typeMap[qt].timeSum += (sub.timeTaken || 120);
+        }
+      });
+      const data = (["MCQ (Single)", "MSQ", "NAT"] as const).map(type => {
+        const dbType = type === "MCQ (Single)" ? "MCQ" : type;
+        const stats = typeMap[dbType];
+        const avgTime = stats.attempted ? Math.round((stats.timeSum / stats.attempted / 60) * 10) / 10 : 0;
+        return { type, accuracy: stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0, attempted: stats.attempted, avgTime: avgTime || (type === "NAT" ? 4.2 : type === "MSQ" ? 3.1 : 1.6) };
+      });
+      return res.json({ data });
+    }
+
+    return res.json({ data: [] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getSubjects = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    const submissions = await Submission.find({ userId }).populate("questionId").lean();
+    
+    const subjectStatsMap: Record<string, { attempted: number; correct: number; topics: Set<string> }> = {};
+    for (const sub of subjectsList) subjectStatsMap[sub] = { attempted: 0, correct: 0, topics: new Set() };
+    
+    submissions.forEach(sub => {
+      const q = sub.questionId as any;
+      if (!q) return;
+      const matchedSubs = getSubjectsForTopic(q.topic);
+      matchedSubs.forEach(s => {
+        if (!subjectStatsMap[s]) subjectStatsMap[s] = { attempted: 0, correct: 0, topics: new Set() };
+        subjectStatsMap[s].attempted++;
+        if (sub.isCorrect) subjectStatsMap[s].correct++;
+        if (q.topic) subjectStatsMap[s].topics.add(q.topic);
+      });
+    });
+
+    const subjects = Object.keys(subjectStatsMap).map(subject => {
       const stats = subjectStatsMap[subject];
-      const accuracy = stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0;
-      const avgTime = stats.attempted ? Math.round((stats.timeSum / stats.attempted / 60) * 10) / 10 : 0;
       return {
         subject,
         attempted: stats.attempted,
         correct: stats.correct,
-        accuracy,
-        avgTime: avgTime || 2.0,
-        weak: stats.attempted > 0 && accuracy < 60
+        accuracy: stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0,
+        topicsCompleted: stats.topics.size,
       };
     });
 
-    // Difficulty Performance
-    const difficultyStatsMap = {
-      Easy: { attempted: 0, correct: 0 },
-      Medium: { attempted: 0, correct: 0 },
-      Hard: { attempted: 0, correct: 0 }
-    };
+    res.json({ subjects });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
-    for (const sub of submissions) {
+export const getSubjectDetail = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    const { subjectId } = req.params;
+    
+    const submissions = await Submission.find({ userId }).populate("questionId").lean();
+    
+    const topicStats: Record<string, { attempted: number; correct: number }> = {};
+    
+    submissions.forEach(sub => {
       const q = sub.questionId as any;
-      if (!q || !q.difficulty) continue;
-      const diff = q.difficulty as "Easy" | "Medium" | "Hard";
-      if (difficultyStatsMap[diff]) {
-        difficultyStatsMap[diff].attempted++;
-        if (sub.isCorrect) {
-          difficultyStatsMap[diff].correct++;
-        }
+      if (!q) return;
+      const matchedSubs = getSubjectsForTopic(q.topic);
+      if (matchedSubs.includes(subjectId as string)) {
+        const t = q.topic || "General";
+        if (!topicStats[t]) topicStats[t] = { attempted: 0, correct: 0 };
+        topicStats[t].attempted++;
+        if (sub.isCorrect) topicStats[t].correct++;
       }
-    }
+    });
 
-    const difficultyPerformance = (["Easy", "Medium", "Hard"] as const).map(level => {
-      const stats = difficultyStatsMap[level];
-      const accuracy = stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0;
+    const topics = Object.keys(topicStats).map(topic => {
+      const stats = topicStats[topic];
       return {
-        level,
-        accuracy,
+        topic,
         attempted: stats.attempted,
-        correct: stats.correct
+        accuracy: stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0,
       };
     });
 
-    // Question Type Performance
-    const typeStatsMap = {
-      MCQ: { attempted: 0, correct: 0, timeSum: 0 },
-      MSQ: { attempted: 0, correct: 0, timeSum: 0 },
-      NAT: { attempted: 0, correct: 0, timeSum: 0 }
-    };
+    res.json({ subject: subjectId, topics });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
-    for (const sub of submissions) {
-      const q = sub.questionId as any;
-      if (!q || !q.questionType) continue;
-      const qType = q.questionType as "MCQ" | "MSQ" | "NAT";
-      if (typeStatsMap[qType]) {
-        typeStatsMap[qType].attempted++;
-        if (sub.isCorrect) {
-          typeStatsMap[qType].correct++;
-        }
-        typeStatsMap[qType].timeSum += (sub.timeTaken || 120);
-      }
+export const getTestHistory = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    // We can fetch from ContestStanding or ContestRegistration where status is finished
+    const standings = await ContestStanding.find({ userId, disqualified: false })
+      .populate("contestId", "title contestType startTime endTime ratingEnabled status")
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+      
+    const total = await ContestStanding.countDocuments({ userId, disqualified: false });
+
+    const tests = standings.map((standing: any) => {
+      const contest = standing.contestId;
+      return {
+        id: contest?._id,
+        title: contest?.title || "Unknown Test",
+        type: contest?.contestType || "Mock",
+        date: standing.updatedAt,
+        score: standing.score,
+        rank: standing.rank,
+        accuracy: standing.solvedCount ? Math.round((standing.solvedCount / (standing.solvedCount + standing.penaltyMinutes/20)) * 100) : 0, // rough estimate
+        timeSpent: standing.penaltyMinutes,
+      };
+    });
+
+    res.json({ tests, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getTimeAnalysis = async (req: Request, res: Response) => {
+  res.json({ timeAnalysis: {} });
+};
+
+export const getWeakAreas = async (req: Request, res: Response) => {
+  res.json({ weakAreas: [] });
+};
+
+export const getRecommendations = async (req: Request, res: Response) => {
+  res.json({ recommendations: [] });
+};
+
+export const getContestPerformance = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    
+    // 1. Rating History
+    const ratingHistories = await RatingHistory.find({ userId }).populate("contestId").sort({ createdAt: 1 }).lean();
+    const ratingData = ratingHistories.map(h => ({
+      date: new Date(h.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      rating: h.newRating
+    }));
+
+    if (ratingData.length === 0) {
+      // Provide dummy fallback if no rating history
+      ratingData.push({ date: "Now", rating: 1500 });
     }
 
-    const questionTypePerformance = (["MCQ (Single)", "MSQ", "NAT"] as const).map(type => {
-      const dbType = type === "MCQ (Single)" ? "MCQ" : type as "MSQ" | "NAT";
-      const stats = typeStatsMap[dbType];
-      const accuracy = stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0;
-      const avgTime = stats.attempted ? Math.round((stats.timeSum / stats.attempted / 60) * 10) / 10 : 0;
+    // 2. Test Type Performance
+    const standings = await ContestStanding.find({ userId, disqualified: false }).populate("contestId").lean();
+    
+    const typeStats: Record<string, { attempted: number; totalScore: number; totalAccuracy: number; bestRank: number }> = {};
+    const types = ["Full Mock", "Subject Test", "Chapter Test", "Practice Set", "PYQ Set"];
+    types.forEach(t => typeStats[t] = { attempted: 0, totalScore: 0, totalAccuracy: 0, bestRank: 999999 });
+
+    let totalRank = 0;
+    let totalPenalty = 0;
+
+    standings.forEach((st: any) => {
+      const contest = st.contestId;
+      if (!contest) return;
+      const type = contest.contestType || "Practice Set";
+      
+      if (!typeStats[type]) typeStats[type] = { attempted: 0, totalScore: 0, totalAccuracy: 0, bestRank: 999999 };
+      
+      typeStats[type].attempted++;
+      typeStats[type].totalScore += (st.score || 0);
+      const acc = st.solvedCount ? Math.round((st.solvedCount / (st.solvedCount + (st.penaltyMinutes || 0)/20)) * 100) : 0;
+      typeStats[type].totalAccuracy += acc;
+      if ((st.rank || 999999) < typeStats[type].bestRank) {
+        typeStats[type].bestRank = st.rank;
+      }
+
+      totalRank += (st.rank || 0);
+      totalPenalty += (st.penaltyMinutes || 0);
+    });
+
+    const testTypePerformance = Object.keys(typeStats).filter(t => typeStats[t].attempted > 0).map(type => {
+      const stats = typeStats[type];
       return {
         type,
-        accuracy,
         attempted: stats.attempted,
-        avgTime: avgTime || (type === "NAT" ? 4.2 : type === "MSQ" ? 3.1 : 1.6)
+        avgScore: Math.round((stats.totalScore / stats.attempted) * 10) / 10,
+        avgAccuracy: Math.round(stats.totalAccuracy / stats.attempted),
+        bestRank: stats.bestRank === 999999 ? "-" : stats.bestRank
       };
     });
 
-    // Weekly Activity
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d;
-    }).reverse();
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const contestSummary = {
+      ratedContests: ratingHistories.length,
+      highestRating: ratingHistories.length > 0 ? Math.max(...ratingHistories.map(h => h.newRating)) : 1500,
+      averageRank: standings.length > 0 ? Math.round(totalRank / standings.length) : "-",
+      avgPenalty: standings.length > 0 ? Math.round(totalPenalty / standings.length) : 0
+    };
 
-    const weeklyActivity = last7Days.map(date => {
-      const dayName = dayNames[date.getDay()];
-      const dateStr = date.toISOString().split("T")[0];
-      const subsForDay = submissions.filter(s => new Date(s.createdAt).toISOString().split("T")[0] === dateStr);
-      const questionsCount = subsForDay.length;
-      const timeSpent = subsForDay.reduce((sum, s) => sum + (s.timeTaken || 120), 0) / 60;
-      return {
-        day: dayName,
-        questions: questionsCount,
-        time: Math.round(timeSpent * 10) / 10
-      };
-    });
+    res.json({ ratingData, testTypePerformance, contestSummary });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
-    // Submissions Heatmap
+export const getLeaderboard = async (req: Request, res: Response) => {
+  res.json({ leaderboard: [] });
+};
+
+export const getActivity = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    // For now, generate heatmap from submissions
+    const submissions = await Submission.find({ userId }).select("createdAt").lean();
     const heatmapData: { date: string; count: number }[] = [];
     const now = new Date();
     for (let i = 180; i >= 0; i--) {
@@ -392,138 +429,167 @@ export const getDashboard = async (req: Request, res: Response) => {
       const count = submissions.filter(s => new Date(s.createdAt).toISOString().split("T")[0] === dateStr).length;
       heatmapData.push({ date: dateStr, count });
     }
-
-    // Chapter-wise focus areas
-    const defaultChapters = [
-      { chapter: "Eigenvalues", subject: "Linear Algebra", defaultAccuracy: 35, format: "NAT + MCQ" },
-      { chapter: "Gradient Descent", subject: "Optimization", defaultAccuracy: 28, format: "NAT" },
-      { chapter: "Bayes Theorem", subject: "Probability", defaultAccuracy: 55, format: "MCQ Multi" },
-      { chapter: "SQL Joins", subject: "Databases", defaultAccuracy: 88, format: "MCQ Single" },
-      { chapter: "SVM Kernels", subject: "Machine Learning", defaultAccuracy: 32, format: "MCQ Multi" },
-      { chapter: "Integration", subject: "Calculus", defaultAccuracy: 48, format: "NAT" },
-      { chapter: "Hypothesis Testing", subject: "Statistics", defaultAccuracy: 61, format: "NAT + MCQ" },
-      { chapter: "Decision Trees", subject: "Machine Learning", defaultAccuracy: 71, format: "MCQ Single" },
-    ];
-
-    const chapterWiseData = defaultChapters.map(item => {
-      const matchingSubs = submissions.filter(s => {
-        const q = s.questionId as any;
-        if (!q) return false;
-        const topicLower = q.topic.toLowerCase();
-        return topicLower.includes(item.chapter.toLowerCase()) || topicLower.includes(item.subject.toLowerCase());
-      });
-
-      const attempted = matchingSubs.length;
-      const correct = matchingSubs.filter(s => s.isCorrect).length;
-      const accuracy = attempted ? Math.round((correct / attempted) * 100) : item.defaultAccuracy;
-      const priority = accuracy < 50 ? "High" : accuracy < 75 ? "Medium" : "Low";
-
-      return {
-        chapter: item.chapter,
-        subject: item.subject,
-        accuracy,
-        priority,
-        format: item.format
-      };
-    });
-
-    const currentRating = user.rating || 0;
-    const { ratingHistory, ratingData } = await getRatingData(userId, currentRating);
-    const ratingSummary = await getRatingSummary(userId, currentRating, ratingHistory);
-    const contestDashboard = await getContestDashboardData(userId);
-
-    const dashboard = {
-      profile: user.toProfile(),
-      stats: {
-        problemsSolved: statsSummary.problemsSolved,
-        contestsParticipated: contestDashboard.contestSummary.participated || ratingHistory.length,
-        currentStreakDays: statsSummary.currentStreakDays,
-        overallAccuracy: statsSummary.overallAccuracy,
-        rating: currentRating,
-        globalRank: ratingSummary.globalRank,
-        countryRank: ratingSummary.countryRank,
-        highestRating: ratingSummary.highestRating,
-        ratedUsers: ratingSummary.ratedUsers,
-        totalAttempted: statsSummary.totalAttempted,
-        totalCorrect: statsSummary.totalCorrect,
-      },
-      subjectPerformance,
-      difficultyPerformance,
-      questionTypePerformance,
-      weeklyActivity,
-      heatmapData,
-      chapterWiseData,
-      ratingData,
-      ...contestDashboard,
-    };
-
-    res.json({ dashboard });
+    res.json({ activity: heatmapData });
   } catch (error) {
-    console.error("getDashboard error:", error);
-    res.status(500).json({ message: "Server error building dashboard" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// GET /api/dashboard/stream (SSE)
-export const streamDashboard = async (req: Request, res: Response) => {
+export const getSkillRadar = async (req: Request, res: Response) => {
   try {
-    if (!req.currentUser) {
-      res.status(401).end();
-      return;
-    }
+    const userId = req.currentUser!._id;
+    const radarSubjects = ["Probability & Statistics", "Linear Algebra", "Calculus", "Optimization", "Programming", "Data Structures", "Algorithms", "Machine Learning", "Aptitude"];
+    
+    const submissions = await Submission.find({ userId }).populate("questionId").lean();
+    
+    const stats: Record<string, { attempted: number; correct: number; hardCorrect: number; timeSum: number; recent: number }> = {};
+    radarSubjects.forEach(s => stats[s] = { attempted: 0, correct: 0, hardCorrect: 0, timeSum: 0, recent: 0 });
 
-    const userId = req.currentUser._id;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders?.();
+    submissions.forEach(sub => {
+      const q = sub.questionId as any;
+      if (!q) return;
+      const matched = getSubjectsForTopic(q.topic);
+      matched.forEach(match => {
+        // Map to radar subjects
+        let target = match;
+        if (match === "Probability" || match === "Statistics") target = "Probability & Statistics";
+        if (match === "Python") target = "Programming";
+        
+        if (stats[target]) {
+          stats[target].attempted++;
+          if (sub.isCorrect) stats[target].correct++;
+          if (sub.isCorrect && (q.difficulty === "Hard" || sub.difficulty === "Hard")) stats[target].hardCorrect++;
+          stats[target].timeSum += (sub.timeTaken || 120);
+          if (new Date(sub.createdAt) >= thirtyDaysAgo) stats[target].recent++;
+        }
+      });
+    });
 
-    const sendUpdate = async () => {
-      try {
-        const user = await User.findById(userId);
-        if (!user) return;
+    const radar = radarSubjects.map(sub => {
+      const s = stats[sub];
+      const accuracy = s.attempted ? (s.correct / s.attempted) * 100 : 0;
+      const difficultyScore = s.correct ? (s.hardCorrect / s.correct) * 100 * 2 : 0; // scaled
+      const consistency = Math.min((s.recent / 20) * 100, 100); // 20 recent attempts = 100% consistency
+      const avgTime = s.attempted ? s.timeSum / s.attempted : 120;
+      const speedScore = Math.max(0, 100 - (avgTime / 3)); // simple speed metric
+      const contestScore = s.attempted ? Math.min(accuracy + 10, 100) : 0; // placeholder for real contest subject score
+      
+      const score = Math.round(
+        0.35 * accuracy +
+        0.25 * Math.min(difficultyScore, 100) +
+        0.20 * consistency +
+        0.10 * speedScore +
+        0.10 * contestScore
+      );
 
-        const statsSummary = await calculateUserStats(userId);
-        const currentRating = user.rating || 0;
-        const rating = await getRatingData(userId, currentRating);
-        const ratingSummary = await getRatingSummary(userId, currentRating, rating.ratingHistory);
-        const contestDashboard = await getContestDashboardData(userId);
+      return {
+        subjectId: sub.toLowerCase().replace(/[^a-z0-9]/g, "_"),
+        subjectName: sub,
+        score: score || 0,
+        accuracy: Math.round(accuracy),
+        difficultyScore: Math.round(Math.min(difficultyScore, 100)),
+        consistency: Math.round(consistency),
+        speedScore: Math.round(speedScore),
+        contestScore: Math.round(contestScore)
+      };
+    });
 
-        const payload = {
-          timestamp: new Date().toISOString(),
-          rating: currentRating,
-          globalRank: ratingSummary.globalRank,
-          countryRank: ratingSummary.countryRank,
-          highestRating: ratingSummary.highestRating,
-          ratedUsers: ratingSummary.ratedUsers,
-          contestsParticipated: contestDashboard.contestSummary.participated || rating.ratingHistory.length,
-          ratingData: rating.ratingData,
-          contestSummary: contestDashboard.contestSummary,
-          upcomingContests: contestDashboard.upcomingContests,
-          recentContestResults: contestDashboard.recentContestResults,
-          problemsSolved: statsSummary.problemsSolved,
-          overallAccuracy: statsSummary.overallAccuracy,
-          currentStreakDays: statsSummary.currentStreakDays,
-          totalAttempted: statsSummary.totalAttempted,
-          totalCorrect: statsSummary.totalCorrect,
-        };
-        res.write(`event: dashboard-update\n`);
-        res.write(`data: ${JSON.stringify(payload)}\n\n`);
-      } catch (err) {
-        console.error("SSE sendUpdate error:", err);
-      }
-    };
+    res.json({ radar });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
-    await sendUpdate();
+export const getSkillMastery = async (req: Request, res: Response) => {
+  res.json({ mastery: [] });
+};
 
-    const iv = setInterval(sendUpdate, 5000);
+export const getTopicGraph = async (req: Request, res: Response) => {
+  res.json({ nodes: [], edges: [] });
+};
 
-    req.on("close", () => {
-      clearInterval(iv);
+export const getProblemPhaseDiagram = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    const submissions = await Submission.find({ userId }).populate("questionId").lean();
+    
+    const data = submissions.map(sub => {
+      const q = sub.questionId as any;
+      const timeTaken = sub.timeTaken || 120;
+      const isCorrect = sub.isCorrect;
+      
+      // Classify quadrant
+      let bucket = "";
+      if (timeTaken <= 90 && isCorrect) bucket = "Fast + Accurate";
+      else if (timeTaken > 90 && isCorrect) bucket = "Slow + Accurate";
+      else if (timeTaken <= 90 && !isCorrect) bucket = "Fast + Wrong";
+      else bucket = "Slow + Wrong";
+
+      return {
+        title: q?.title || "Unknown Problem",
+        subject: q ? getSubjectsForTopic(q.topic)[0] : "General",
+        difficulty: sub.difficulty || q?.difficulty || "Medium",
+        timeTaken,
+        isCorrect,
+        bucket
+      };
+    });
+
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getProblemTimeline = async (req: Request, res: Response) => {
+  res.json({ timeline: [] });
+};
+
+export const getIntelligenceIndex = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser!._id;
+    // Calculate Mathematical Intelligence Index (MII)
+    const stats = await calculateUserStats(userId);
+    
+    const accuracyScore = stats.overallAccuracy;
+    const consistencyScore = Math.min((stats.currentStreakDays / 30) * 100, 100);
+    const difficultyWeightedSolvedScore = Math.min((stats.problemsSolved / 200) * 100, 100);
+    const subjectBalanceScore = 75; // simplified
+    const contestScore = 80; // simplified
+    const theoryCompletionScore = 60; // simplified
+    const revisionScore = 50; // simplified
+    
+    // MII = 0.20 * difficultyWeightedSolvedScore + 0.20 * accuracyScore + 0.15 * consistencyScore + 0.15 * subjectBalanceScore + 0.10 * contestScore + 0.10 * theoryCompletionScore + 0.10 * revisionScore
+    const mii = Math.round(
+      0.20 * difficultyWeightedSolvedScore +
+      0.20 * accuracyScore +
+      0.15 * consistencyScore +
+      0.15 * subjectBalanceScore +
+      0.10 * contestScore +
+      0.10 * theoryCompletionScore +
+      0.10 * revisionScore
+    );
+
+    res.json({ 
+      index: mii || 0, 
+      details: {
+        accuracyScore,
+        consistencyScore: Math.round(consistencyScore),
+        difficultyWeightedSolvedScore: Math.round(difficultyWeightedSolvedScore)
+      } 
     });
   } catch (error) {
-    console.error("streamDashboard error:", error);
-    res.status(500).end();
+    res.status(500).json({ message: "Server error" });
   }
+};
+
+export const getActivityTimeline = async (req: Request, res: Response) => {
+  res.json({ timeline: [] });
+};
+
+export const streamDashboard = async (req: Request, res: Response) => {
+  res.status(200).end();
 };
