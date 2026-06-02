@@ -1,0 +1,152 @@
+:root {
+  --primary-blue: #0b6fe8;
+  --deep-navy: #10213f;
+  --text-muted: #64748b;
+  --border-soft: #e2e8f0;
+}
+
+.optimization-section {
+  width: 100%;
+  padding: 100px 64px;
+  background-color: #ffffff;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.optimization-container {
+  max-width: 1360px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 60px;
+}
+
+/* Left Illustration */
+.optimization-visual {
+  width: 55%;
+  display: flex;
+  justify-content: flex-start;
+  position: relative;
+}
+
+.optimization-image {
+  width: 100%;
+  max-width: 500px;
+  height: auto;
+  object-fit: contain;
+  /* Submerged/Soft blend effect */
+  filter: saturate(0.95) contrast(1.05) drop-shadow(0 4px 20px rgba(0,0,0,0.05));
+  mask-image: radial-gradient(ellipse at center, black 65%, rgba(0,0,0,0.3) 85%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 65%, rgba(0,0,0,0.3) 85%, transparent 100%);
+}
+
+/* Right Content */
+.optimization-content {
+  width: 45%;
+  display: flex;
+  flex-direction: column;
+}
+
+.optimization-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--primary-blue);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.optimization-title {
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 700;
+  color: var(--deep-navy);
+  font-size: clamp(28px, 3.5vw, 42px);
+  line-height: 1.15;
+  margin: 0 0 24px 0;
+}
+
+.optimization-desc {
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1.7;
+  max-width: 500px;
+  margin-bottom: 32px;
+}
+
+.optimization-features {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.opt-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--deep-navy);
+}
+
+.opt-feature-icon {
+  color: var(--primary-blue);
+  flex-shrink: 0;
+}
+
+.optimization-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-blue);
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.optimization-link:hover {
+  opacity: 0.8;
+}
+
+@media (max-width: 1024px) {
+  .optimization-section {
+    padding: 60px 40px;
+  }
+  
+  .optimization-container {
+    flex-direction: column-reverse; /* Keep image on bottom on mobile if preferred, or top? Let's make image top */
+    text-align: center;
+    gap: 40px;
+  }
+  
+  .optimization-content, .optimization-visual {
+    width: 100%;
+  }
+
+  .optimization-content {
+    align-items: center;
+  }
+
+  .opt-feature-item {
+    justify-content: center;
+  }
+
+  .optimization-visual {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .optimization-section {
+    padding: 48px 20px;
+  }
+
+  .optimization-image {
+    mask-image: radial-gradient(ellipse at center, black 80%, rgba(0,0,0,0.5) 90%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse at center, black 80%, rgba(0,0,0,0.5) 90%, transparent 100%);
+  }
+}

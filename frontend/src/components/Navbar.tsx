@@ -54,13 +54,13 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#111111] shadow-sm">
-      <SiteContainer className="flex h-16 items-center justify-between gap-3">
-        <Link to="/" className="shrink-0 text-base font-semibold uppercase tracking-[0.2em] text-white sm:text-lg sm:tracking-[0.25em]">
-          GATE <span className="text-[#2563eb]">DA</span>
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white shadow-sm h-[72px] flex items-center">
+      <SiteContainer className="flex w-full items-center justify-between gap-3">
+        <Link to="/" className="shrink-0 text-base font-bold uppercase tracking-[0.1em] text-[#10213f] sm:text-xl">
+          GATE <span className="text-[#0b6fe8]">DA</span>
         </Link>
 
-        <nav className="hidden xl:flex flex-1 justify-center gap-6 2xl:gap-8">
+        <nav className="hidden xl:flex flex-1 justify-center gap-8 2xl:gap-10 h-full items-center">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -70,8 +70,8 @@ export default function Navbar() {
               <Link
                 key={item.href}
                 to={item.href}
-                className={`text-sm transition-colors duration-150 ${
-                  isActive ? "text-white font-semibold" : "text-white/70 hover:text-white"
+                className={`text-[15px] font-medium h-[72px] flex items-center border-b-2 transition-colors duration-150 ${
+                  isActive ? "border-[#0b6fe8] text-[#10213f]" : "border-transparent text-[#56657f] hover:text-[#10213f]"
                 }`}
               >
                 {item.label}
@@ -80,36 +80,37 @@ export default function Navbar() {
           })}
         </nav>
 
-        <div className="hidden xl:flex items-center gap-3">
+        <div className="hidden xl:flex items-center gap-4">
           {isAuthenticated && user ? (
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/90 transition hover:border-white/20"
+                className="flex items-center gap-3 rounded-full border border-gray-200 bg-gray-50 px-2 py-2 text-gray-700 transition hover:border-gray-300 hover:bg-gray-100"
               >
                 {user.avatarUrl ? (
                   <img
                     src={user.avatarUrl}
                     alt={user.fullName}
-                    className="h-9 w-9 rounded-full border border-white/20 object-cover"
+                    className="h-8 w-8 rounded-full border border-gray-200 object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2563eb] text-sm font-semibold text-white">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0b6fe8] text-sm font-semibold text-white">
                     {user.fullName.charAt(0).toUpperCase()}
                   </div>
                 )}
               </button>
 
               {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-[12px] border border-white/10 bg-[#111111] shadow-2xl">
-                  <div className="border-b border-white/10 px-4 py-3 text-sm text-white/80">
-                    <div className="font-semibold text-white truncate">{user.fullName}</div>
-                    <div className="mt-1 text-xs text-white/60 truncate">{user.email}</div>
+                <div className="absolute right-0 mt-3 w-52 overflow-hidden rounded-[8px] border border-gray-200 bg-white shadow-lg">
+                  <div className="border-b border-gray-100 px-4 py-3 text-sm text-gray-600">
+                    <div className="font-semibold text-gray-900 truncate">{user.fullName}</div>
+                    <div className="mt-0.5 text-xs text-gray-500 truncate">{user.email}</div>
                   </div>
                   <Link
                     to="/dashboard"
                     onClick={() => setDropdownOpen(false)}
-                    className="block px-4 py-3 text-sm text-white/80 hover:bg-white/5"
+                    className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
                   >
                     Dashboard
                   </Link>
@@ -117,14 +118,14 @@ export default function Navbar() {
                     <Link
                       to="/admin"
                       onClick={() => setDropdownOpen(false)}
-                      className="block px-4 py-3 text-sm text-[#93c5fd] hover:bg-white/5"
+                      className="block px-4 py-3 text-sm text-[#0b6fe8] hover:bg-gray-50"
                     >
                       Admin Panel
                     </Link>
                   )}
                   <button
                     onClick={handleLogout}
-                    className="w-full px-4 py-3 text-left text-sm text-[#fca5a5] hover:bg-white/5"
+                    className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50"
                   >
                     Sign Out
                   </button>
@@ -134,16 +135,16 @@ export default function Navbar() {
           ) : (
             <Link
               to="/login"
-              className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white/80 transition hover:border-white/20 hover:text-white"
+              className="inline-flex h-[38px] items-center justify-center rounded-[6px] border border-gray-200 bg-white px-5 text-[14px] font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
             >
-              <LogIn size={16} />
+              Sign In
             </Link>
           )}
         </div>
 
         <button
           type="button"
-          className="xl:hidden inline-flex h-10 w-10 items-center justify-center rounded-sm border border-white/10 text-white/70 transition hover:bg-white/5 hover:text-white"
+          className="xl:hidden inline-flex h-10 w-10 items-center justify-center rounded-sm border border-gray-200 text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
           onClick={() => setOpen(!open)}
           aria-label={open ? "Close navigation" : "Open navigation"}
           aria-expanded={open}
@@ -153,7 +154,7 @@ export default function Navbar() {
       </SiteContainer>
 
       {open && (
-        <div className="xl:hidden border-t border-white/10 bg-[#111111] shadow-xl">
+        <div className="xl:hidden border-t border-gray-200 bg-white shadow-xl">
           <SiteContainer className="py-3">
             <nav className="grid grid-cols-1 gap-1 sm:grid-cols-2" aria-label="Mobile navigation">
               {navItems.map((item) => {
@@ -165,10 +166,10 @@ export default function Navbar() {
                   <Link
                     key={item.href}
                     to={item.href}
-                    className={`rounded-sm px-3 py-2.5 text-sm transition ${
+                    className={`rounded-sm px-3 py-2.5 text-[15px] transition ${
                       isActive
-                        ? "bg-white/10 font-semibold text-white"
-                        : "text-white/70 hover:bg-white/5 hover:text-white"
+                        ? "bg-gray-50 font-semibold text-[#10213f] border-l-2 border-[#0b6fe8]"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     }`}
                   >
                     {item.label}
@@ -177,44 +178,45 @@ export default function Navbar() {
               })}
             </nav>
 
-            <div className="mt-3 border-t border-white/10 pt-3">
+            <div className="mt-3 border-t border-gray-200 pt-3">
             {isAuthenticated && user ? (
               <div className="space-y-3">
-                <div className="flex min-w-0 items-center gap-3 rounded-sm border border-white/10 bg-white/5 px-3 py-3">
+                <div className="flex min-w-0 items-center gap-3 rounded-sm border border-gray-200 bg-gray-50 px-3 py-3">
                   {user.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
                       alt={user.fullName}
-                      className="h-10 w-10 shrink-0 rounded-full border border-white/20 object-cover"
+                      className="h-10 w-10 shrink-0 rounded-full border border-gray-300 object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-sm font-semibold text-white">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0b6fe8] text-sm font-semibold text-white">
                       {user.fullName.charAt(0).toUpperCase()}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-white">{user.fullName}</div>
-                    <div className="truncate text-xs text-white/60">{user.email}</div>
+                    <div className="truncate text-sm font-semibold text-gray-900">{user.fullName}</div>
+                    <div className="truncate text-xs text-gray-500">{user.email}</div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <Link
                     to="/dashboard"
-                    className="inline-flex items-center justify-center gap-2 rounded-sm border border-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+                    className="inline-flex items-center justify-center gap-2 rounded-sm border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
                     <User size={15} /> Dashboard
                   </Link>
                   {user.role === "admin" && (
                     <Link
                       to="/admin"
-                      className="inline-flex items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-sm text-[#93c5fd] hover:bg-white/5"
+                      className="inline-flex items-center justify-center rounded-sm border border-gray-200 px-3 py-2 text-sm text-[#0b6fe8] hover:bg-gray-50"
                     >
                       Admin
                     </Link>
                   )}
                   <button
                     onClick={handleLogout}
-                    className="inline-flex items-center justify-center gap-2 rounded-sm border border-white/10 px-3 py-2 text-sm text-[#fca5a5] hover:bg-white/5"
+                    className="inline-flex items-center justify-center gap-2 rounded-sm border border-gray-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                   >
                     <LogOut size={16} /> Sign Out
                   </button>
@@ -223,7 +225,7 @@ export default function Navbar() {
             ) : (
               <Link
                 to="/login"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-sm border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white/80 hover:text-white sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-sm border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 hover:text-gray-900 sm:w-auto"
               >
                 <LogIn size={16} /> Login
               </Link>
