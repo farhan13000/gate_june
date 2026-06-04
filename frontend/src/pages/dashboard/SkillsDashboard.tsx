@@ -1,173 +1,167 @@
-import { useEffect, useState } from "react";
-import { 
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
-  RadialBarChart, RadialBar, Legend, LabelList
-} from 'recharts';
-import ReactFlow, { Background, Controls, Node, Edge } from 'reactflow';
-import 'reactflow/dist/style.css';
-import { Target, TrendingUp, Network } from "lucide-react";
+import { lazy, Suspense } from "react";
+import { BarChart3, BrainCircuit, FlaskConical, Gauge, GitCompare, Sigma, Target, TrendingUp } from "lucide-react";
+import {
+  AnalyticsCard,
+  ChartContainer,
+  EmptyState,
+  HeatmapGrid,
+  ProgressBar,
+  SectionCard,
+  SkeletonLoader,
+  StatCard,
+} from "@/dashboard/components";
+import { dashboardApi } from "@/dashboard/services";
+import { useDashboardQuery } from "@/dashboard/hooks";
+
+const SkillRadarChart = lazy(() => import("@/dashboard/charts/SkillProfilingCharts").then((module) => ({ default: module.SkillRadarChart })));
+const PeerComparisonBars = lazy(() => import("@/dashboard/charts/SkillProfilingCharts").then((module) => ({ default: module.PeerComparisonBars })));
+const SkillProgressTimeline = lazy(() => import("@/dashboard/charts/SkillProfilingCharts").then((module) => ({ default: module.SkillProgressTimeline })));
+const StrengthDistributionChart = lazy(() => import("@/dashboard/charts/SkillProfilingCharts").then((module) => ({ default: module.StrengthDistributionChart })));
+const PercentileSkillMap = lazy(() => import("@/dashboard/charts/SkillProfilingCharts").then((module) => ({ default: module.PercentileSkillMap })));
+
+function ChartFallback() {
+  return <div className="h-64"><SkeletonLoader rows={4} /></div>;
+}
 
 export default function SkillsDashboard() {
-  const [radarData, setRadarData] = useState<any[]>([]);
-  const [masteryData, setMasteryData] = useState<any[]>([]);
-  const [graphData, setGraphData] = useState<{nodes: Node[], edges: Edge[]}>({ nodes: [], edges: [] });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchSkillsData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        
-        // Mock Fallbacks
-        const mockRadar = [
-          { subjectName: "Probability", score: 65 },
-          { subjectName: "Lin Alg", score: 45 },
-          { subjectName: "Calculus", score: 70 },
-          { subjectName: "Optimization", score: 30 },
-          { subjectName: "Programming", score: 85 },
-          { subjectName: "Data Structures", score: 90 },
-          { subjectName: "Algorithms", score: 75 },
-          { subjectName: "Machine Learning", score: 50 },
-          { subjectName: "Aptitude", score: 60 },
-        ];
-
-        const mockMastery = [
-          { name: "Probability", mastery: 85, fill: "#2563eb" },
-          { name: "Lin Alg", mastery: 65, fill: "#3b82f6" },
-          { name: "Calculus", mastery: 45, fill: "#60a5fa" }
-        ];
-
-        const mockGraph = {
-          nodes: [
-            { id: '1', position: { x: 250, y: 0 }, data: { label: 'Calculus Basics' }, style: { border: '1px solid #e2e8f0', borderRadius: 0, padding: 10 } },
-            { id: '2', position: { x: 100, y: 100 }, data: { label: 'Derivatives' }, style: { border: '1px solid #e2e8f0', borderRadius: 0, padding: 10 } },
-            { id: '3', position: { x: 400, y: 100 }, data: { label: 'Integrals' }, style: { border: '1px solid #e2e8f0', borderRadius: 0, padding: 10 } },
-            { id: '4', position: { x: 250, y: 200 }, data: { label: 'Optimization' }, style: { border: '2px solid #2563eb', borderRadius: 0, padding: 10, fontWeight: 'bold' } },
-          ],
-          edges: [
-            { id: 'e1-2', source: '1', target: '2', animated: true },
-            { id: 'e1-3', source: '1', target: '3', animated: true },
-            { id: 'e2-4', source: '2', target: '4' },
-            { id: 'e3-4', source: '3', target: '4' },
-          ]
-        };
-
-        let radarJson: any = {};
-        let masteryJson: any = {};
-        let graphJson: any = {};
-
-        try {
-          const [radarRes, masteryRes, graphRes] = await Promise.all([
-            fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard/skills/radar`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard/skills/mastery`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`${import.meta.env.VITE_API_BASE || ""}/api/dashboard/skills/topic-graph`, { headers: { Authorization: `Bearer ${token}` } })
-          ]);
-
-          if (radarRes.ok) radarJson = await radarRes.json();
-          if (masteryRes.ok) masteryJson = await masteryRes.json();
-          if (graphRes.ok) graphJson = await graphRes.json();
-        } catch (e) {
-          console.warn("API fetches failed, falling back to mock data", e);
-        }
-
-        // Radar Data Handling
-        const isRadarEmpty = !radarJson.radar || radarJson.radar.length === 0 || radarJson.radar.every((r: any) => r.score === 0);
-        setRadarData(isRadarEmpty ? mockRadar : radarJson.radar);
-
-        // Mastery Data Handling
-        const isMasteryEmpty = !masteryJson.mastery || masteryJson.mastery.length === 0;
-        setMasteryData(isMasteryEmpty ? mockMastery : masteryJson.mastery);
-
-        // Graph Data Handling
-        const isGraphEmpty = !graphJson.nodes || graphJson.nodes.length === 0;
-        setGraphData(isGraphEmpty ? mockGraph : graphJson);
-
-      } catch (err) {
-        console.error("Error setting up skills data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSkillsData();
+  const { data, loading, error } = useDashboardQuery(async () => {
+    const [profile, peers, progress, consistency] = await Promise.all([
+      dashboardApi.skillsProfile(),
+      dashboardApi.peerComparison(),
+      dashboardApi.skillProgress(),
+      dashboardApi.consistency(),
+    ]);
+    return { profile, peers, progress, consistency };
   }, []);
 
-  if (loading) {
-    return <div className="p-8 text-center text-[#64748b]">Loading Skills & Mastery...</div>;
-  }
+  if (loading) return <SkeletonLoader rows={7} />;
+  if (error || !data) return <EmptyState title="Skill profile unavailable" description="The skill intelligence service could not be loaded." />;
+
+  const { profile, peers, progress, consistency } = data;
+  const priority = profile.summary.prioritySkill;
+  const strongest = profile.summary.strongestSkill;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-serif font-bold text-[#0f172a] flex items-center gap-2">
-          <Target className="text-[#2563eb]" /> Skills & Mastery
-        </h1>
-        <p className="text-sm text-[#64748b] mt-1">
-          Detailed breakdown of your mathematical and analytical capabilities.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Radar Graph */}
-        <div className="bg-white border border-[#e2e8f0] p-6 shadow-sm flex flex-col h-[450px]">
-          <h3 className="font-serif font-semibold text-[#0f172a] mb-2 flex items-center gap-2">
-            <Network className="w-4 h-4 text-[#2563eb]" /> Skill Radar
-          </h3>
-          <p className="text-xs text-[#64748b] mb-6">Normalized score across 9 dimensions based on accuracy, difficulty, and consistency.</p>
-          <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                <PolarGrid stroke="#e2e8f0" />
-                <PolarAngleAxis dataKey="subjectName" tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#cbd5e1', fontSize: 10 }} />
-                <Radar name="Skill Score" dataKey="score" stroke="#2563eb" fill="#2563eb" fillOpacity={0.4} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: 0, border: '1px solid #e2e8f0', boxShadow: 'none' }}
-                  itemStyle={{ color: '#0f172a', fontFamily: 'JetBrains Mono', fontSize: 12 }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
+    <div className="space-y-5">
+      <section className="relative overflow-hidden border border-[var(--dash-border)] bg-white p-5 shadow-sm">
+        <div className="absolute inset-0 dashboard-grid-bg opacity-80" aria-hidden="true" />
+        <div className="pointer-events-none absolute right-6 top-5 hidden font-mono text-[11px] leading-6 text-[#0D6EFD]/20 lg:block" aria-hidden="true">
+          {"skill = f(accuracy, speed, consistency)\npeer_rank ∈ [0, 100]\nΔ mastery / Δ week"}
+        </div>
+        <div className="relative flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div>
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0D6EFD]">Skill profiling</p>
+            <h1 className="mt-2 text-2xl font-semibold text-[#10213F] sm:text-3xl">Multidimensional Academic Skill Profile</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#4B5563]">
+              Profile analytical capability, mathematical depth, consistency, contest temperament, speed, and conceptual stability against peer benchmarks.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:min-w-[24rem]">
+            <AnalyticsCard title="Strongest Skill" value={strongest.score} meta={strongest.skill} />
+            <AnalyticsCard title="Priority Skill" value={priority.score} meta={priority.skill} />
           </div>
         </div>
+      </section>
 
-        {/* Mastery Rings */}
-        <div className="bg-white border border-[#e2e8f0] p-6 shadow-sm flex flex-col h-[450px]">
-          <h3 className="font-serif font-semibold text-[#0f172a] mb-2 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-[#2563eb]" /> Subject Mastery
-          </h3>
-          <p className="text-xs text-[#64748b] mb-6">Mastery percentage based on topics completed and accuracy.</p>
-          <div className="flex-1 min-h-0 flex justify-center items-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadialBarChart cx="50%" cy="50%" innerRadius="20%" outerRadius="90%" barSize={20} data={masteryData}>
-                <RadialBar
-                  background={{ fill: '#f8fafc' }}
-                  dataKey="mastery"
-                  cornerRadius={0}
-                />
-                <Legend iconSize={10} layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: '#64748b' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: 0, border: '1px solid #e2e8f0', boxShadow: 'none' }}
-                  itemStyle={{ color: '#0f172a', fontFamily: 'JetBrains Mono', fontSize: 12 }}
-                />
-              </RadialBarChart>
-            </ResponsiveContainer>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Profile Score" value={profile.summary.profileScore} suffix="/100" icon={Sigma} />
+        <StatCard label="Peer Percentile" value={peers.percentile} suffix="%" icon={GitCompare} />
+        <StatCard label="Consistency" value={consistency.consistencyScore} suffix="/100" icon={Gauge} />
+        <StatCard label="Rating Delta" value={profile.summary.ratingDelta} tone={profile.summary.ratingDelta >= 0 ? "success" : "danger"} icon={TrendingUp} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <ChartContainer title="Premium Skill Radar" eyebrow="Multidimensional polygon" minWidth={620}>
+          <Suspense fallback={<ChartFallback />}>
+            <SkillRadarChart data={profile.skills} />
+          </Suspense>
+        </ChartContainer>
+
+        <ChartContainer title="Peer Comparison Overlay" eyebrow="You vs cohorts" minWidth={520}>
+          <Suspense fallback={<ChartFallback />}>
+            <PeerComparisonBars data={peers.cohorts} />
+          </Suspense>
+        </ChartContainer>
+
+        <ChartContainer title="Percentile Skill Map" eyebrow="Score / percentile / adaptive weight" minWidth={620}>
+          <Suspense fallback={<ChartFallback />}>
+            <PercentileSkillMap data={profile.matrices} />
+          </Suspense>
+        </ChartContainer>
+
+        <ChartContainer title="Skill Progression Timeline" eyebrow="Forecast trajectory" minWidth={560}>
+          <Suspense fallback={<ChartFallback />}>
+            <SkillProgressTimeline data={progress.timeline} />
+          </Suspense>
+        </ChartContainer>
+
+        <ChartContainer title="Strength Distribution" eyebrow="Current vs forecast" minWidth={580}>
+          <Suspense fallback={<ChartFallback />}>
+            <StrengthDistributionChart data={profile.skills} />
+          </Suspense>
+        </ChartContainer>
+
+        <SectionCard title="Consistency Map" eyebrow="Study discipline">
+          <HeatmapGrid data={consistency.heatmap} />
+          <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+            <div className="border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <div className="font-mono text-lg text-[#10213F]">{consistency.activeDays}</div>
+              <div className="text-[#4B5563]">Active days</div>
+            </div>
+            <div className="border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <div className="font-mono text-lg text-[#10213F]">{profile.summary.attempts}</div>
+              <div className="text-[#4B5563]">Skill samples</div>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Adaptive Skill Weighting" eyebrow="Normalized scoring system">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {profile.skills.map((skill) => (
+            <div key={skill.skill} className="border border-[#E5E7EB] bg-white p-4 shadow-sm transition hover:border-[#bfdbfe] hover:shadow-md">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-[#10213F]">{skill.skill}</h3>
+                  <p className="mt-1 text-xs text-[#4B5563]">Peer avg {skill.peerAverage}% · top {skill.topPerformer}%</p>
+                </div>
+                <BrainCircuit size={16} className="text-[#0D6EFD]" />
+              </div>
+              <div className="mt-4 space-y-3">
+                <ProgressBar label="Score" value={skill.score} />
+                <ProgressBar label="Percentile" value={skill.percentile} tone="success" />
+                <ProgressBar label="Adaptive weight" value={skill.adaptiveWeight} tone="warning" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Comparative Analytics" eyebrow="Benchmark interpretation">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+            <Target className="mb-3 text-[#0D6EFD]" size={18} />
+            <h3 className="text-sm font-semibold text-[#10213F]">Top Performer Gap</h3>
+            <p className="mt-2 text-sm leading-6 text-[#4B5563]">
+              Your largest improvement vector is {priority.skill}. Raising this by 12-15 points should improve the profile polygon noticeably.
+            </p>
+          </div>
+          <div className="border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+            <BarChart3 className="mb-3 text-[#0D6EFD]" size={18} />
+            <h3 className="text-sm font-semibold text-[#10213F]">Peer Position</h3>
+            <p className="mt-2 text-sm leading-6 text-[#4B5563]">
+              Current skill percentile is {peers.percentile}%. Compare against subject toppers and contest leaders to set the next benchmark.
+            </p>
+          </div>
+          <div className="border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+            <FlaskConical className="mb-3 text-[#0D6EFD]" size={18} />
+            <h3 className="text-sm font-semibold text-[#10213F]">Forecast</h3>
+            <p className="mt-2 text-sm leading-6 text-[#4B5563]">
+              Maintain consistency while targeting {priority.skill}; the model forecasts a stronger profile score in the next cycle.
+            </p>
           </div>
         </div>
-      </div>
-
-      {/* DAG Topology */}
-      <div className="bg-white border border-[#e2e8f0] p-6 shadow-sm h-[500px] flex flex-col">
-        <h3 className="font-serif font-semibold text-[#0f172a] mb-2 flex items-center gap-2">
-          <Network className="w-4 h-4 text-[#2563eb]" /> Topic Dependency Graph
-        </h3>
-        <p className="text-xs text-[#64748b] mb-4">Explore prerequisites and optimize your learning path based on topological dependencies.</p>
-        <div className="flex-1 border border-[#e2e8f0] bg-[#f8fafc]">
-          <ReactFlow nodes={graphData.nodes} edges={graphData.edges} fitView>
-            <Background color="#cbd5e1" gap={16} />
-            <Controls showInteractive={false} />
-          </ReactFlow>
-        </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }

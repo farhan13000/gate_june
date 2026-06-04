@@ -24,7 +24,7 @@ import AdminPanel from "./pages/AdminPanel";
 import Announcements from "./pages/Announcements";
 
 // Dashboard Imports
-import DashboardLayout from "./components/dashboard/DashboardLayout";
+import DashboardLayout from "./dashboard/layout/DashboardLayout";
 import DashboardOverview from "./pages/dashboard/DashboardOverview";
 import PerformanceAnalytics from "./pages/dashboard/PerformanceAnalytics";
 import SubjectProgress from "./pages/dashboard/SubjectProgress";
@@ -49,7 +49,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
       <main className="site-main-shell">
-        {isAdmin ? (
+        {isAdmin || isDashboard ? (
           children
         ) : (
           <PageContainer

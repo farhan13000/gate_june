@@ -1,0 +1,101 @@
+.dashboard-theme {
+  --dash-page: #f3f4f6;
+  --dash-canvas: #ffffff;
+  --dash-surface: #ffffff;
+  --dash-surface-soft: #ffffff;
+  --dash-accent: #0d6efd;
+  --dash-accent-hover: #60a5fa;
+  --dash-accent-soft: #eaf4ff;
+  --dash-success: #10b981;
+  --dash-warning: #f59e0b;
+  --dash-danger: #ef4444;
+  --dash-text: #10213f;
+  --dash-muted: #4b5563;
+  --dash-border: #e5e7eb;
+  --dash-border-strong: #d1d5db;
+  --dash-grid: rgba(13, 110, 253, 0.035);
+  color: var(--dash-text);
+  background: var(--dash-page);
+  font-family: Inter, "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.dashboard-theme .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dashboard-canvas {
+  background: var(--dash-canvas);
+  border: 1px solid var(--dash-border-strong);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.dashboard-grid-bg {
+  background-image:
+    linear-gradient(var(--dash-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--dash-grid) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.dashboard-scrollbar {
+  scrollbar-color: rgba(13, 110, 253, 0.28) transparent;
+  scrollbar-width: thin;
+}
+
+.floating-math-object {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid rgba(13, 110, 253, 0.12);
+  opacity: 0.42;
+  transform-style: preserve-3d;
+  animation: math-float 10s ease-in-out infinite;
+}
+
+.floating-math-object::before,
+.floating-math-object::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border: 1px solid rgba(16, 33, 63, 0.08);
+}
+
+.floating-math-object.sphere {
+  border-radius: 999px;
+  box-shadow: inset 0 0 18px rgba(13, 110, 253, 0.08);
+}
+
+.floating-math-object.plane {
+  background-image:
+    linear-gradient(rgba(13, 110, 253, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 110, 253, 0.07) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.vector-field {
+  position: absolute;
+  width: 220px;
+  height: 120px;
+  opacity: 0.18;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 18px, rgba(13, 110, 253, 0.18) 18px 19px),
+    radial-gradient(circle at 20% 30%, rgba(13, 110, 253, 0.18), transparent 35%);
+  mask-image: radial-gradient(ellipse at center, black, transparent 74%);
+}
+
+.matrix-field {
+  position: absolute;
+  color: rgba(16, 33, 63, 0.08);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  white-space: pre;
+}
+
+@keyframes math-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotateX(8deg) rotateY(10deg);
+  }
+  50% {
+    transform: translate3d(8px, -10px, 0) rotateX(13deg) rotateY(15deg);
+  }
+}
