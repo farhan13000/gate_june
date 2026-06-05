@@ -6,6 +6,7 @@ import Contest from "../models/Contest";
 import ContestRegistration from "../models/ContestRegistration";
 import ContestStanding from "../models/ContestStanding";
 import UserActivityLog from "../models/UserActivityLog";
+import Question from "../models/Question";
 import { getContestState } from "../utils/contestLifecycle";
 
 const subjectsList = [
@@ -110,17 +111,77 @@ export const getOverview = async (req: Request, res: Response) => {
     let weakest = { subject: "N/A", accuracy: 100 };
     const avgTimes: number[] = [];
     
-    Object.keys(subjectStatsMap).forEach(sub => {
+    const subjectPerformance = Object.keys(subjectStatsMap).map(sub => {
       const s = subjectStatsMap[sub];
       if (s.attempted > 0) {
         const acc = Math.round((s.correct / s.attempted) * 100);
         if (acc > strongest.accuracy) strongest = { subject: sub, accuracy: acc };
         if (acc < weakest.accuracy) weakest = { subject: sub, accuracy: acc };
         avgTimes.push(s.timeSum / s.attempted);
+        return { subject: sub, attempted: s.attempted, correct: s.correct, accuracy: acc };
       }
+      return { subject: sub, attempted: 0, correct: 0, accuracy: 0 };
     });
-    
+
     const avgTimePerQuestion = avgTimes.length ? avgTimes.reduce((a, b) => a + b, 0) / avgTimes.length : 0;
+    const [difficultyTotals, difficultySolvedRows, difficultyAttemptRows] = await Promise.all([
+      Question.aggregate([
+        { $match: { status: "approved", difficulty: { $in: ["Easy", "Medium", "Hard"] } } },
+        { $group: { _id: "$difficulty", total: { $sum: 1 } } },
+      ]),
+      Submission.aggregate([
+        { $match: { userId, isCorrect: true } },
+        { $sort: { createdAt: -1 } },
+        { $group: { _id: "$questionId" } },
+        {
+          $lookup: {
+            from: "questions",
+            localField: "_id",
+            foreignField: "_id",
+            as: "question",
+          },
+        },
+        { $unwind: "$question" },
+        { $match: { "question.status": "approved", "question.difficulty": { $in: ["Easy", "Medium", "Hard"] } } },
+        { $group: { _id: "$question.difficulty", solved: { $sum: 1 } } },
+      ]),
+      Submission.aggregate([
+        { $match: { userId } },
+        { $group: { _id: "$questionId", solved: { $max: { $cond: ["$isCorrect", 1, 0] } } } },
+        { $match: { solved: 0 } },
+        {
+          $lookup: {
+            from: "questions",
+            localField: "_id",
+            foreignField: "_id",
+            as: "question",
+          },
+        },
+        { $unwind: "$question" },
+        { $match: { "question.status": "approved", "question.difficulty": { $in: ["Easy", "Medium", "Hard"] } } },
+        { $group: { _id: "$question.difficulty", attempting: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const totalsByDifficulty = new Map(difficultyTotals.map((row: any) => [row._id, row.total]));
+    const solvedByDifficulty = new Map(difficultySolvedRows.map((row: any) => [row._id, row.solved]));
+    const attemptingByDifficulty = new Map(difficultyAttemptRows.map((row: any) => [row._id, row.attempting]));
+    const problemSolvedByDifficulty = (["Easy", "Medium", "Hard"] as const).map((level) => ({
+      level,
+      total: totalsByDifficulty.get(level) || 0,
+      solved: solvedByDifficulty.get(level) || 0,
+      attempting: attemptingByDifficulty.get(level) || 0,
+    }));
+
+    const attemptedSubjects = subjectPerformance.filter((item) => item.attempted > 0);
+    const weakSubjects = attemptedSubjects
+      .filter((item) => item.accuracy < 65)
+      .sort((a, b) => a.accuracy - b.accuracy)
+      .slice(0, 3);
+    const strongSubjects = attemptedSubjects
+      .filter((item) => item.accuracy >= 75)
+      .sort((a, b) => b.accuracy - a.accuracy)
+      .slice(0, 2);
 
     res.json({
       stats: {
@@ -128,6 +189,9 @@ export const getOverview = async (req: Request, res: Response) => {
         rating: user?.rating || 0,
         strongestSubject: strongest.subject !== "N/A" ? strongest : null,
         weakestSubject: weakest.subject !== "N/A" ? weakest : null,
+        strongSubjects,
+        weakSubjects,
+        problemSolvedByDifficulty,
         avgTimePerQuestion: Math.round(avgTimePerQuestion), // in seconds
       }
     });
@@ -418,18 +482,87 @@ export const getLeaderboard = async (req: Request, res: Response) => {
 export const getActivity = async (req: Request, res: Response) => {
   try {
     const userId = req.currentUser!._id;
-    // For now, generate heatmap from submissions
-    const submissions = await Submission.find({ userId }).select("createdAt").lean();
-    const heatmapData: { date: string; count: number }[] = [];
+    const submissions = await Submission.find({ userId })
+      .select("createdAt isCorrect timeTaken questionId")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const byDate = new Map<string, { count: number; correct: number; timeSeconds: number }>();
+    submissions.forEach((submission) => {
+      const date = new Date(submission.createdAt).toISOString().split("T")[0];
+      const current = byDate.get(date) || { count: 0, correct: 0, timeSeconds: 0 };
+      current.count += 1;
+      if (submission.isCorrect) current.correct += 1;
+      current.timeSeconds += submission.timeTaken || 120;
+      byDate.set(date, current);
+    });
+
+    const heatmapData: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[] = [];
     const now = new Date();
-    for (let i = 180; i >= 0; i--) {
+    for (let i = 370; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const count = submissions.filter(s => new Date(s.createdAt).toISOString().split("T")[0] === dateStr).length;
-      heatmapData.push({ date: dateStr, count });
+      const row = byDate.get(dateStr) || { count: 0, correct: 0, timeSeconds: 0 };
+      heatmapData.push({
+        date: dateStr,
+        count: row.count,
+        studyTimeMinutes: Math.round(row.timeSeconds / 60),
+        accuracy: row.count ? Math.round((row.correct / row.count) * 100) : 0,
+      });
     }
-    res.json({ activity: heatmapData });
+
+    const solvedQuestionIds = Array.from(
+      new Set(submissions.filter((submission) => submission.isCorrect).map((submission) => String(submission.questionId)))
+    );
+    const oneYearAgo = new Date(now);
+    oneYearAgo.setFullYear(now.getFullYear() - 1);
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(now.getMonth() - 1);
+
+    const solvedLastYear = new Set(
+      submissions
+        .filter((submission) => submission.isCorrect && new Date(submission.createdAt) >= oneYearAgo)
+        .map((submission) => String(submission.questionId))
+    ).size;
+    const solvedLastMonth = new Set(
+      submissions
+        .filter((submission) => submission.isCorrect && new Date(submission.createdAt) >= oneMonthAgo)
+        .map((submission) => String(submission.questionId))
+    ).size;
+
+    function maxStreakSince(start?: Date) {
+      const activeDays = Array.from(byDate.keys())
+        .filter((date) => !start || new Date(`${date}T00:00:00.000Z`) >= start)
+        .sort();
+      let best = 0;
+      let current = 0;
+      let previous: Date | null = null;
+      for (const date of activeDays) {
+        const currentDate = new Date(`${date}T00:00:00.000Z`);
+        if (!previous) {
+          current = 1;
+        } else {
+          const diff = Math.round((currentDate.getTime() - previous.getTime()) / (24 * 60 * 60 * 1000));
+          current = diff === 1 ? current + 1 : 1;
+        }
+        best = Math.max(best, current);
+        previous = currentDate;
+      }
+      return best;
+    }
+
+    res.json({
+      activity: heatmapData,
+      stats: {
+        solvedAllTime: solvedQuestionIds.length,
+        solvedLastYear,
+        solvedLastMonth,
+        maxStreak: maxStreakSince(),
+        streakLastYear: maxStreakSince(oneYearAgo),
+        streakLastMonth: maxStreakSince(oneMonthAgo),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

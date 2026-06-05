@@ -16,7 +16,17 @@ export async function dashboardFetch<T>(path: string, init?: RequestInit): Promi
 
 export const dashboardApi = {
   overview: () => dashboardFetch<{ stats: Record<string, unknown> }>("/overview"),
-  activity: () => dashboardFetch<{ activity: { date: string; count: number }[] }>("/activity/heatmap"),
+  activity: () => dashboardFetch<{
+    activity: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[];
+    stats: {
+      solvedAllTime: number;
+      solvedLastYear: number;
+      solvedLastMonth: number;
+      maxStreak: number;
+      streakLastYear: number;
+      streakLastMonth: number;
+    };
+  }>("/activity/heatmap"),
   intelligenceIndex: () => dashboardFetch<{ index: number; details: Record<string, number> }>("/intelligence-index"),
   readinessScore: () => dashboardFetch<{
     readinessScore: number;
@@ -29,6 +39,11 @@ export const dashboardApi = {
   weeklyPerformance: () => dashboardFetch<{ weekly: Array<{ day: string; attempts: number; accuracy: number; hours: number }> }>("/weekly-performance"),
   studyAnalytics: () => dashboardFetch<{ subjects: Array<{ subject: string; completion: number; completedTopics: number; totalTopics: number }> }>("/study-analytics"),
   contestSummary: () => dashboardFetch<{ mockTests: number; currentRank: number | null; bestRank: number | null; averageScore: number; recent: Array<{ label: string; score: number; rank: number | string; solved: number }> }>("/contest-summary"),
+  contestPerformance: () => dashboardFetch<{
+    ratingData: Array<{ date: string; rating: number }>;
+    testTypePerformance: Array<{ type: string; attempted: number; avgScore: number; avgAccuracy: number; bestRank: number | string }>;
+    contestSummary: { ratedContests: number; highestRating: number; averageRank: number | string; avgPenalty: number };
+  }>("/contest-performance"),
   subjectIntelligence: () => dashboardFetch<{
     summary: { averageMastery: number; completedSubjects: number; revisionDue: number; highConfidence: number };
     subjects: Array<{

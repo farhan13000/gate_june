@@ -1,5 +1,4 @@
 import { type ReactNode, useState } from "react";
-import FloatingGeometryLayer from "../components/FloatingGeometryLayer";
 import "../styles/dashboard.css";
 import DashboardSidebar from "./DashboardSidebar";
 import DashboardTopNav from "./DashboardTopNav";
@@ -10,7 +9,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="dashboard-theme relative min-h-[calc(100vh-4rem)] overflow-hidden px-3 py-4 sm:px-5 lg:px-6">
-      <FloatingGeometryLayer />
       <div className="dashboard-canvas relative z-10 mx-auto flex max-w-[1600px] overflow-hidden">
         <DashboardSidebar
           collapsed={collapsed}
