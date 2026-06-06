@@ -1,19 +1,19 @@
 .dashboard-theme {
-  --dash-page: #f6f8fb;
-  --dash-canvas: #ffffff;
-  --dash-surface: #ffffff;
-  --dash-surface-soft: #fcfdfd;
-  --dash-accent: #0b6fe8;
-  --dash-accent-hover: #0959bb;
-  --dash-accent-soft: #eaf4ff;
+  --dash-page: hsl(var(--background));
+  --dash-canvas: hsl(var(--card));
+  --dash-surface: hsl(var(--card));
+  --dash-surface-soft: hsl(var(--secondary) / 0.24);
+  --dash-accent: hsl(var(--primary));
+  --dash-accent-hover: hsl(var(--red-hover));
+  --dash-accent-soft: hsl(var(--primary) / 0.1);
   --dash-success: #10b981;
   --dash-warning: #f59e0b;
   --dash-danger: #ef4444;
-  --dash-text: #10213f;
-  --dash-muted: #4b5563;
-  --dash-border: #e5e7eb;
-  --dash-border-strong: #d1d5db;
-  --dash-grid: rgba(11, 111, 232, 0.025);
+  --dash-text: hsl(var(--foreground));
+  --dash-muted: hsl(var(--muted-foreground));
+  --dash-border: hsl(var(--border));
+  --dash-border-strong: hsl(var(--border));
+  --dash-grid: hsl(var(--primary) / 0.025);
   color: var(--dash-text);
   background: var(--dash-page);
   font-family: var(--font-sans), "IBM Plex Sans", system-ui, sans-serif;
@@ -26,7 +26,7 @@
 .dashboard-canvas {
   background: var(--dash-canvas);
   border: 1px solid var(--dash-border);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.04);
 }
 
 .dashboard-grid-bg {
