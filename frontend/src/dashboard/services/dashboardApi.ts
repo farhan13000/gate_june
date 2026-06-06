@@ -40,7 +40,7 @@ export const dashboardApi = {
   studyAnalytics: () => dashboardFetch<{ subjects: Array<{ subject: string; completion: number; completedTopics: number; totalTopics: number }> }>("/study-analytics"),
   contestSummary: () => dashboardFetch<{ mockTests: number; currentRank: number | null; bestRank: number | null; averageScore: number; recent: Array<{ label: string; score: number; rank: number | string; solved: number }> }>("/contest-summary"),
   contestPerformance: () => dashboardFetch<{
-    ratingData: Array<{ date: string; rating: number }>;
+    ratingData: Array<{ date: string; label?: string; rating: number; contestTitle?: string }>;
     testTypePerformance: Array<{ type: string; attempted: number; avgScore: number; avgAccuracy: number; bestRank: number | string }>;
     contestSummary: { ratedContests: number; highestRating: number; averageRank: number | string; avgPenalty: number };
   }>("/contest-performance"),

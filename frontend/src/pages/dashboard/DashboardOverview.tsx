@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   CartesianGrid,
@@ -59,6 +59,13 @@ type HeatmapStats = {
 };
 
 type HeatmapCell = HeatmapDay | null;
+
+type RatingPoint = {
+  date: string;
+  label?: string;
+  rating: number;
+  contestTitle?: string;
+};
 
 const difficultyVisuals: Record<DifficultyLevel, { key: "easy" | "medium" | "hard"; light: string; dark: string }> = {
   Easy: { key: "easy", light: "#DDF6F7", dark: "#00B8A9" },
@@ -168,6 +175,9 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
   const totalProblems = slices.reduce((sum, item) => sum + item.total, 0);
   const totalSolved = slices.reduce((sum, item) => sum + item.solved, 0);
   const totalAttempting = slices.reduce((sum, item) => sum + item.attempting, 0);
+  const arcCenterX = 160;
+  const arcCenterY = 145;
+  const arcRadius = 104;
   const startAngle = 160;
   const totalAngle = 220;
   const gap = totalProblems > 0 ? 7 : 0;
@@ -186,7 +196,7 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
   const activeSegment = active ? slices.find((item) => item.level === active) : null;
 
   return (
-    <div className="border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5">
+    <div className="flex h-full flex-col border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold text-[#10213f]">Problems Solved</h2>
         <span className="flex h-6 w-6 items-center justify-center border border-[#e4e7ec] text-[#94a3b8]">
@@ -194,9 +204,9 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
         </span>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(14rem,1fr)_8rem] lg:items-center">
-        <div className="relative min-h-[13rem]">
-          <svg viewBox="0 0 300 230" className="mx-auto h-full max-h-[14rem] w-full max-w-[19rem]" role="img" aria-label="Problems solved by difficulty">
+      <div className="mt-4 flex flex-1 flex-col items-center justify-center gap-4">
+        <div className="relative flex min-h-[16.5rem] w-full items-center justify-center">
+          <svg viewBox="0 0 320 270" className="h-full max-h-[17.5rem] w-full max-w-[22rem]" role="img" aria-label="Problems solved by difficulty">
             {segments.map((segment) => {
               const isActive = active === segment.level;
               return (
@@ -205,20 +215,20 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
                   className="cursor-pointer transition-opacity duration-200"
                   onMouseEnter={() => setActive(segment.level)}
                   onMouseLeave={() => setActive(null)}
-                >
+                  >
                   <path
-                    d={describeArc(150, 130, 78, segment.segmentStart, segment.segmentEnd)}
+                    d={describeArc(arcCenterX, arcCenterY, arcRadius, segment.segmentStart, segment.segmentEnd)}
                     fill="none"
                     stroke={segment.light}
-                    strokeWidth={14}
+                    strokeWidth={18}
                     strokeLinecap="round"
                     opacity={active && !isActive ? 0.42 : 1}
                   />
                   <path
-                    d={describeArc(150, 130, 78, segment.segmentStart, segment.solvedEnd)}
+                    d={describeArc(arcCenterX, arcCenterY, arcRadius, segment.segmentStart, segment.solvedEnd)}
                     fill="none"
                     stroke={segment.dark}
-                    strokeWidth={14}
+                    strokeWidth={18}
                     strokeLinecap="round"
                     opacity={active && !isActive ? 0.5 : 1}
                     className="dashboard-arc-draw"
@@ -228,9 +238,9 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
             })}
           </svg>
 
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center pt-3">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="font-mono text-2xl font-bold text-[#111827]">
+              <div className="font-mono text-3xl font-bold text-[#111827]">
                 {totalSolved}
                 <span className="text-xs font-semibold text-[#475569]">/{totalProblems}</span>
               </div>
@@ -243,7 +253,7 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
           </div>
 
           {activeSegment && (
-            <div className="absolute left-1/2 top-0 w-44 -translate-x-1/2 border border-[#e4e7ec] bg-white px-3 py-2 text-xs shadow-lg">
+            <div className="absolute left-1/2 top-2 w-44 -translate-x-1/2 border border-[#e4e7ec] bg-white px-3 py-2 text-xs shadow-lg">
               <div className="font-semibold text-[#10213f]">{activeSegment.level}</div>
               <div className="mt-1 text-[#64748b]">{activeSegment.solved} solved of {activeSegment.total}</div>
               <div className="text-[#64748b]">{activeSegment.total ? Math.round((activeSegment.solved / activeSegment.total) * 100) : 0}% solved</div>
@@ -252,7 +262,7 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
+        <div className="grid w-full max-w-[24rem] grid-cols-3 gap-2">
           {slices.map((item) => {
             const visual = difficultyVisuals[item.level];
             return (
@@ -282,7 +292,6 @@ function ProfileCard({
   institution,
   targetGateYear,
   joinedAt,
-  authProvider,
   avatarUrl,
 }: {
   userName: string;
@@ -292,57 +301,43 @@ function ProfileCard({
   institution?: string;
   targetGateYear?: number;
   joinedAt?: string;
-  authProvider?: string;
   avatarUrl?: string;
 }) {
   const [avatarFailed, setAvatarFailed] = useState(false);
   const memberSince = joinedAt
     ? new Date(joinedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })
     : "Recently";
-  const infoGroups = [
-    {
-      title: "Identity",
-      rows: [
-        ["Name", fullName || "Student"],
-        ["Email", email || "Not linked"],
-        ["Role", "Student"],
-      ],
-    },
-    {
-      title: "Preparation",
-      rows: [
-        ["Target", targetGateYear ? `GATE DA ${targetGateYear}` : "GATE DA"],
-        ["Institution", institution || "Not specified"],
-        ["Track", "Data Science & AI"],
-      ],
-    },
-    {
-      title: "Account",
-      rows: [
-        ["Member Since", memberSince],
-        ["Auth", authProvider ? authProvider.replace(/\b\w/g, (char) => char.toUpperCase()) : "Local"],
-        ["Presence", "Online now"],
-      ],
-    },
+  const profileItems = [
+    ["Name", fullName || "Student"],
+    ["Target", targetGateYear ? `GATE DA ${targetGateYear}` : "GATE DA"],
+    ["Email", email || "Not linked"],
+    ["Institution", institution || "Not specified"],
+    ["Member Since", memberSince],
   ];
 
   return (
-    <div className="border border-[#e4e7ec] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-      <div className="border-b border-[#e4e7ec] bg-[#f8fbff] px-4 py-3 sm:px-5">
+    <div className="border border-[#e2e8f0] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+      <div className="border-b border-[#e2e8f0] bg-white px-4 py-3 sm:px-5">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1976d2]">Learner profile</p>
-            <h2 className="mt-1 text-base font-bold text-[#10213f]">Preparation identity and live progress</h2>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-[#bfdbfe] bg-[#eaf4ff] text-[#0b6fe8]">
+              <CircleUserRound size={18} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-[#10213f]">Learner Profile</h2>
+              <p className="mt-0.5 text-xs font-semibold text-[#64748b]">Preparation identity and live progress</p>
+            </div>
           </div>
-          <button className="shrink-0 p-2 text-[#94a3b8] transition hover:bg-white hover:text-[#1976d2]" aria-label="Edit profile">
+          <button className="inline-flex shrink-0 items-center gap-1.5 px-2 py-1.5 text-xs font-semibold text-[#0b6fe8] transition hover:bg-[#eaf4ff]" aria-label="Edit profile">
             <Pencil size={16} />
+            <span className="hidden sm:inline">Edit</span>
           </button>
         </div>
       </div>
 
-      <div className="grid gap-5 p-4 sm:p-5 2xl:grid-cols-[minmax(16rem,0.55fr)_minmax(0,1fr)] 2xl:items-stretch">
-        <div className="flex min-w-0 gap-4 border border-[#e4e7ec] bg-white p-4">
-          <div className="flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center border border-[#e4e7ec] bg-[#f1f5f9] text-[#94a3b8] sm:h-20 sm:w-20">
+      <div className="grid items-stretch gap-0 md:grid-cols-[minmax(12rem,0.42fr)_minmax(0,1fr)]">
+        <div className="flex flex-col items-center border-b border-[#e2e8f0] bg-white p-5 text-center md:border-b-0 md:border-r">
+          <div className="flex h-[6.4rem] w-[6.4rem] shrink-0 items-center justify-center overflow-hidden border border-[#e2e8f0] bg-[#f1f5f9] text-[#94a3b8] shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
             {avatarUrl && !avatarFailed ? (
               <img
                 src={avatarUrl}
@@ -352,41 +347,39 @@ function ProfileCard({
                 onError={() => setAvatarFailed(true)}
               />
             ) : (
-              <CircleUserRound size={58} strokeWidth={1.4} />
+              <div className="relative h-full w-full overflow-hidden bg-[#10213f]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_24%,rgba(11,111,232,0.55),transparent_28%),linear-gradient(180deg,#10213f_0%,#1e3a5f_46%,#1f6f5f_70%,#0f172a_100%)]" />
+                <div className="absolute bottom-0 left-0 right-0 h-8 bg-[#172554]" />
+                <div className="absolute bottom-6 left-1/2 h-7 w-10 -translate-x-1/2 bg-[#f97316] shadow-[0_0_18px_rgba(249,115,22,0.55)] [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
+              </div>
             )}
           </div>
-          <div className="min-w-0">
-            <h3 className="truncate text-lg font-bold text-[#10213f]">{userName}</h3>
-            <p className="mt-1 truncate text-xs text-[#64748b]">{fullName || email || "GATE DA learner"}</p>
-            <div className="mt-3 inline-flex border border-[#bfdbfe] bg-[#eaf4ff] px-2 py-1 text-[11px] font-bold text-[#1976d2]">
-              Student
-            </div>
-            <div className="mt-4 border-t border-[#e4e7ec] pt-3">
-              <p className="text-xs font-semibold text-[#1976d2]">Current Rating</p>
-              <p className="font-mono text-3xl font-bold leading-tight text-[#1976d2]">{rating}</p>
-            </div>
+          <h3 className="mt-4 max-w-full truncate text-xl font-bold text-[#10213f]">{userName}</h3>
+          <p className="mt-1 max-w-full truncate text-xs font-medium text-[#64748b]">{fullName || email || "GATE DA learner"}</p>
+          <div className="mt-2 inline-flex border border-[#bfdbfe] bg-[#eaf4ff] px-2 py-1 text-[11px] font-bold text-[#0b6fe8]">
+            Student
+          </div>
+          <div className="mt-5 w-full border-t border-[#e2e8f0] pt-4">
+            <p className="text-xs font-semibold text-[#64748b]">Current Rating</p>
+            <p className="font-mono text-4xl font-bold leading-tight text-[#0b6fe8]">{rating}</p>
+            <p className="mt-1 text-[11px] font-medium text-[#64748b]">Keep practicing to improve!</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 border border-[#e4e7ec] md:grid-cols-3">
-          {infoGroups.map((group, groupIndex) => (
-            <div key={group.title} className={groupIndex > 0 ? "border-t border-[#e4e7ec] md:border-l md:border-t-0" : ""}>
-              <div className="border-b border-[#e4e7ec] bg-[#f8fafc] px-3 py-2">
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#1976d2]">{group.title}</div>
+        <div className="flex min-w-0 p-4 sm:p-5">
+          <div className="grid min-h-[18rem] w-full content-stretch border border-[#e2e8f0] bg-[#fcfdfd]">
+            {profileItems.map(([label, value], index) => (
+              <div
+                key={label}
+                className={`grid min-h-[3.4rem] grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3 px-4 py-3 transition hover:bg-white sm:grid-cols-[9rem_minmax(0,1fr)] ${
+                  index === 0 ? "" : "border-t border-[#e2e8f0]"
+                }`}
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">{label}</span>
+                <span className="min-w-0 break-words text-sm font-bold text-[#10213f]">{value}</span>
               </div>
-              <div className="divide-y divide-[#e4e7ec]">
-                {group.rows.map(([label, value]) => (
-                  <div key={`${group.title}-${label}`} className="min-w-0 px-3 py-2.5">
-                    <div className="text-[11px] font-semibold text-[#64748b]">{label}</div>
-                    <div className="mt-1 min-w-0 break-words text-xs font-bold leading-5 text-[#10213f]" title={value}>
-                      {label === "Presence" && <span className="mr-1 inline-block h-2 w-2 bg-[#16a34a]" />}
-                      {value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -401,7 +394,7 @@ function ratingTitle(rating: number) {
   return "newbie";
 }
 
-function RatingProgress({ data, userName }: { data: Array<{ date: string; rating: number }>; userName: string }) {
+function RatingProgress({ data, userName }: { data: RatingPoint[]; userName: string }) {
   const ratings = data.map((item) => item.rating);
   const maxRating = Math.max(2000, ...ratings, 1200);
   const minRating = Math.min(900, ...ratings, 1200);
@@ -412,11 +405,13 @@ function RatingProgress({ data, userName }: { data: Array<{ date: string; rating
   return (
     <section className="border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-[#10213f]">Rating Progress</h2>
-        <select className="border border-[#e4e7ec] bg-white px-3 py-2 text-xs font-semibold text-[#475569] outline-none transition focus:border-[#1976d2]">
-          <option>Only rated</option>
-          <option>All contests</option>
-        </select>
+        <div>
+          <h2 className="text-base font-bold text-[#10213f]">Contest Rating Progress</h2>
+          <p className="mt-1 text-xs font-semibold text-[#64748b]">Rating changes only after rated contest results are applied.</p>
+        </div>
+        <span className="border border-[#e4e7ec] bg-[#f8fafc] px-3 py-2 text-xs font-semibold text-[#475569]">
+          Rated contests only
+        </span>
       </div>
       <div className="border border-[#e4e7ec] bg-[#f8fafc] p-3">
         <div className="h-[20rem] min-w-0">
@@ -429,7 +424,7 @@ function RatingProgress({ data, userName }: { data: Array<{ date: string; rating
               <ReferenceArea y1={1900} y2={yMax} fill="#f3e8ff" fillOpacity={0.92} strokeOpacity={0} />
               <CartesianGrid stroke="#94a3b8" strokeOpacity={0.3} />
               <XAxis
-                dataKey="date"
+                dataKey="label"
                 tick={{ fontSize: 11, fill: "#475569" }}
                 axisLine={{ stroke: "#94a3b8" }}
                 tickLine={{ stroke: "#cbd5e1" }}
@@ -455,6 +450,10 @@ function RatingProgress({ data, userName }: { data: Array<{ date: string; rating
                   const numeric = Number(value);
                   return [`${numeric} (${ratingTitle(numeric)})`, "Rating"];
                 }}
+                labelFormatter={(_, payload) => {
+                  const point = payload?.[0]?.payload as RatingPoint | undefined;
+                  return point?.contestTitle ? `${point.contestTitle} - ${point.date}` : point?.date || "Current rating";
+                }}
                 labelStyle={{ color: "#10213f", fontWeight: 700 }}
               />
               <Line
@@ -479,10 +478,16 @@ function RatingProgress({ data, userName }: { data: Array<{ date: string; rating
   );
 }
 
-function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapStats }) {
-  const weeks = useMemo(() => buildYearHeatmapWeeks(days), [days]);
+function ActivityHeatmap({ days, stats, updatedAt }: { days: HeatmapDay[]; stats: HeatmapStats; updatedAt?: Date | null }) {
+  const heatmapRef = useRef<HTMLDivElement | null>(null);
+  const [heatmapWidth, setHeatmapWidth] = useState(900);
+  const visibleDayCount = heatmapWidth < 520 ? 98 : heatmapWidth < 760 ? 182 : 371;
+  const visibleDays = useMemo(() => days.slice(-visibleDayCount), [days, visibleDayCount]);
+  const weeks = useMemo(() => buildYearHeatmapWeeks(visibleDays), [visibleDays]);
   const monthLabels = useMemo(() => buildMonthLabels(weeks), [weeks]);
   const currentYear = new Date().getFullYear();
+  const dayLabelWidth = heatmapWidth < 520 ? 30 : chartAxisWidthPx;
+  const dynamicGap = heatmapWidth < 520 ? 2 : heatmapCellGapPx;
 
   const colorFor = (count: number) => {
     if (count <= 0) return "bg-[#edf0f3]";
@@ -490,6 +495,15 @@ function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapSt
     if (count <= 3) return "bg-[#86e0a2]";
     return "bg-[#36bf68]";
   };
+
+  useEffect(() => {
+    if (!heatmapRef.current) return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      setHeatmapWidth(Math.round(entry.contentRect.width));
+    });
+    observer.observe(heatmapRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section className="border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5">
@@ -501,20 +515,19 @@ function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapSt
           </div>
           <p className="mt-1 text-sm text-[#64748b]">Daily solving consistency from your live submission history.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748b]">
-          <span>What activity will be shown to other users:</span>
-          <select className="border border-[#64748b] bg-white px-2 py-0.5 text-xs text-[#10213f]">
-            <option>All</option>
-          </select>
-          <select className="border border-[#64748b] bg-white px-2 py-0.5 text-xs text-[#10213f]">
-            <option>{currentYear}</option>
-          </select>
+        <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-[#64748b]">
+          <span className="border border-[#dbe3ee] bg-[#f8fafc] px-2 py-1 font-semibold text-[#475569]">
+            {visibleDayCount >= 371 ? currentYear : `${Math.round(visibleDayCount / 7)} weeks`}
+          </span>
+          <span className="border border-[#dbe3ee] bg-white px-2 py-1 font-medium">
+            Updated {updatedAt ? updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "live"}
+          </span>
         </div>
       </div>
 
-      <div className="mt-5 overflow-x-auto border border-[#e4e7ec] bg-[#f8fafc] p-3 pb-4">
-        <div className="min-w-[58rem]">
-          <div className="grid" style={{ gridTemplateColumns: `${chartAxisWidthPx}px minmax(0, 1fr)` }}>
+      <div ref={heatmapRef} className="mt-5 overflow-hidden border border-[#e4e7ec] bg-[#f8fafc] p-2 pb-3 sm:p-3 sm:pb-4">
+        <div className="min-w-0">
+          <div className="grid" style={{ gridTemplateColumns: `${dayLabelWidth}px minmax(0, 1fr)` }}>
             <div />
             <div className="relative h-6 text-[12px] font-semibold text-[#334155]">
               {monthLabels.map((item) => (
@@ -528,12 +541,12 @@ function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapSt
               ))}
             </div>
           </div>
-          <div className="mt-1 grid" style={{ gridTemplateColumns: `${chartAxisWidthPx}px minmax(0, 1fr)` }}>
+          <div className="mt-1 grid" style={{ gridTemplateColumns: `${dayLabelWidth}px minmax(0, 1fr)` }}>
             <div
-              className="grid pr-3 text-right text-[12px] font-medium text-[#64748b]"
+              className="grid pr-2 text-right text-[11px] font-medium text-[#64748b] sm:pr-3 sm:text-[12px]"
               style={{
                 gridTemplateRows: "repeat(7, minmax(12px, 1fr))",
-                rowGap: heatmapCellGapPx,
+                rowGap: dynamicGap,
               }}
             >
               <span />
@@ -545,12 +558,12 @@ function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapSt
               <span />
             </div>
             <div
-              className="grid justify-stretch"
+              className="grid min-w-0 justify-stretch"
               style={{
-                gridTemplateColumns: `repeat(${weeks.length}, minmax(10px, 1fr))`,
+                gridTemplateColumns: `repeat(${Math.max(weeks.length, 1)}, minmax(0, 1fr))`,
                 gridTemplateRows: "repeat(7, auto)",
-                columnGap: heatmapCellGapPx,
-                rowGap: heatmapCellGapPx,
+                columnGap: dynamicGap,
+                rowGap: dynamicGap,
               }}
             >
               {weeks.map((week, weekIndex) => (
@@ -565,7 +578,7 @@ function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapSt
                         gridColumn: weekIndex + 1,
                         gridRow: dayIndex + 1,
                         justifySelf: "center",
-                        maxWidth: heatmapCellMaxPx,
+                        maxWidth: heatmapWidth < 520 ? 18 : heatmapCellMaxPx,
                         width: "100%",
                       }}
                     />
@@ -579,7 +592,7 @@ function ActivityHeatmap({ days, stats }: { days: HeatmapDay[]; stats: HeatmapSt
                         gridColumn: weekIndex + 1,
                         gridRow: dayIndex + 1,
                         justifySelf: "center",
-                        maxWidth: heatmapCellMaxPx,
+                        maxWidth: heatmapWidth < 520 ? 18 : heatmapCellMaxPx,
                         width: "100%",
                       }}
                     />
@@ -615,6 +628,7 @@ export default function DashboardOverview() {
     activity: HeatmapDay[];
     stats: HeatmapStats;
   } | null>(null);
+  const [activityUpdatedAt, setActivityUpdatedAt] = useState<Date | null>(null);
 
   const { data, loading, error } = useDashboardQuery(async () => {
     const [overview, streak, activity, contestPerformance] = await Promise.all([
@@ -630,12 +644,28 @@ export default function DashboardOverview() {
   useEffect(() => {
     if (!data) return undefined;
     setLiveActivity(data.activity);
-    const timer = window.setInterval(() => {
-      dashboardApi.activity().then(setLiveActivity).catch(() => {
+    setActivityUpdatedAt(new Date());
+    const refreshActivity = () => {
+      dashboardApi.activity().then((activity) => {
+        setLiveActivity(activity);
+        setActivityUpdatedAt(new Date());
+      }).catch(() => {
         // Keep the latest successful heatmap snapshot.
       });
-    }, 30000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(() => {
+      refreshActivity();
+    }, 10000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshActivity();
+    };
+    window.addEventListener("focus", refreshActivity);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshActivity);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [data]);
 
   const stats = (data?.overview.stats ?? {}) as {
@@ -647,7 +677,8 @@ export default function DashboardOverview() {
     problemSolvedByDifficulty?: DifficultySlice[];
   };
 
-  const rating = Number(user?.rating || stats.rating || 0);
+  const contestRatingData = data?.contestPerformance.ratingData ?? [];
+  const rating = Number(contestRatingData[contestRatingData.length - 1]?.rating ?? stats.rating ?? user?.rating ?? 0);
   const difficultySlices = (stats.problemSolvedByDifficulty?.length ? stats.problemSolvedByDifficulty : [
     { level: "Easy", solved: 0, total: 0, attempting: 0 },
     { level: "Medium", solved: 0, total: 0, attempting: 0 },
@@ -677,7 +708,7 @@ export default function DashboardOverview() {
   const userName = user?.email?.split("@")[0] || user?.fullName?.toLowerCase().replace(/\s+/g, "_") || "student";
   const ratingData = data.contestPerformance.ratingData?.length
     ? data.contestPerformance.ratingData
-    : [{ date: "Now", rating }];
+    : [{ date: "No rated contest", label: "Start", rating, contestTitle: "Rating starts after your first rated contest" }];
   const activityPayload = liveActivity ?? data.activity;
 
   return (
@@ -695,14 +726,13 @@ export default function DashboardOverview() {
           institution={user?.institution}
           targetGateYear={user?.targetGateYear}
           joinedAt={user?.createdAt}
-          authProvider={user?.authProvider}
           avatarUrl={user?.avatarUrl}
         />
         <ProblemSolvedArc slices={difficultySlices} />
       </section>
 
       <RatingProgress data={ratingData} userName={userName} />
-      <ActivityHeatmap days={activityPayload.activity ?? []} stats={activityPayload.stats ?? emptyActivityStats} />
+      <ActivityHeatmap days={activityPayload.activity ?? []} stats={activityPayload.stats ?? emptyActivityStats} updatedAt={activityUpdatedAt} />
     </div>
   );
 }

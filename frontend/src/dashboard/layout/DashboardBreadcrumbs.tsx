@@ -32,7 +32,7 @@ export default function DashboardBreadcrumbs() {
             {isLast ? (
               <span className="text-[var(--dash-text)]">{labelMap[part] ?? part}</span>
             ) : (
-              <Link to={href} className="hover:text-[#0D6EFD]">{labelMap[part] ?? part}</Link>
+              <Link to={href} className="hover:text-[#0b6fe8]">{labelMap[part] ?? part}</Link>
             )}
           </span>
         );

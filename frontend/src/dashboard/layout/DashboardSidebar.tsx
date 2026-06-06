@@ -28,7 +28,7 @@ export default function DashboardSidebar({ collapsed, mobileOpen, onToggleCollap
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between border-b border-[var(--dash-border)] px-4">
             <Link to="/dashboard/overview" className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-[#bfdbfe] bg-[#EAF4FF] text-[#0D6EFD]">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-[#bfdbfe] bg-[#EAF4FF] text-[#0b6fe8]">
                 <Sigma size={18} />
               </div>
               {!collapsed && <span className="font-semibold tracking-wide text-[var(--dash-text)]">Analytics Lab</span>}
@@ -56,9 +56,9 @@ export default function DashboardSidebar({ collapsed, mobileOpen, onToggleCollap
                         : "border-transparent text-[var(--dash-muted)] hover:border-[var(--dash-border)] hover:bg-[#F8FAFC] hover:text-[#10213F]"
                     }`}
                   >
-                    <Icon size={17} className={active ? "text-[#0D6EFD]" : "text-[#64748B] group-hover:text-[#0D6EFD]"} />
+                    <Icon size={17} className={active ? "text-[#0b6fe8]" : "text-[#64748B] group-hover:text-[#0b6fe8]"} />
                     {!collapsed && <span className="truncate">{label}</span>}
-                    {active && !collapsed && <span className="ml-auto h-6 w-0.5 bg-[#0D6EFD]" />}
+                    {active && !collapsed && <span className="ml-auto h-6 w-0.5 bg-[#0b6fe8]" />}
                   </Link>
                 );
               })}

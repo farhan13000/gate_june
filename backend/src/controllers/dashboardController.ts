@@ -411,16 +411,20 @@ export const getContestPerformance = async (req: Request, res: Response) => {
     const userId = req.currentUser!._id;
     
     // 1. Rating History
-    const ratingHistories = await RatingHistory.find({ userId }).populate("contestId").sort({ createdAt: 1 }).lean();
-    const ratingData = ratingHistories.map(h => ({
-      date: new Date(h.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      rating: h.newRating
-    }));
-
-    if (ratingData.length === 0) {
-      // Provide dummy fallback if no rating history
-      ratingData.push({ date: "Now", rating: 1500 });
-    }
+    const ratingHistories = await RatingHistory.find({ userId })
+      .populate("contestId", "title startTime endTime")
+      .sort({ appliedAt: 1, createdAt: 1 })
+      .lean();
+    const ratingData = ratingHistories.map((h: any, index) => {
+      const contest = h.contestId;
+      const contestDate = contest?.endTime || contest?.startTime || h.appliedAt || h.createdAt;
+      return {
+        label: `Contest ${index + 1}`,
+        date: new Date(contestDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        rating: h.newRating,
+        contestTitle: contest?.title || `Rated Contest ${index + 1}`,
+      };
+    });
 
     // 2. Test Type Performance
     const standings = await ContestStanding.find({ userId, disqualified: false }).populate("contestId").lean();

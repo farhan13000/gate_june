@@ -10,6 +10,8 @@ import {
   LineChart,
   Network,
   Orbit,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pi,
   Radar,
   Sigma,
@@ -20,6 +22,7 @@ import { dashboardApi } from "@/dashboard/services";
 import { useDashboardQuery } from "@/dashboard/hooks";
 
 type TopicStatus = "strong" | "moderate" | "weak";
+type SubjectsView = "overview" | "subject";
 
 interface ApiTopic {
   topic: string;
@@ -78,7 +81,7 @@ interface SubjectMetric {
 }
 
 const statusColor: Record<TopicStatus, string> = {
-  strong: "#0B6FE8",
+  strong: "#0b6fe8",
   moderate: "#54BFC5",
   weak: "#F04458",
 };
@@ -94,6 +97,27 @@ const statusLabel: Record<TopicStatus, string> = {
   moderate: "Moderate",
   weak: "Weak",
 };
+
+const subjectRingPalette = [
+  "#0b6fe8",
+  "#10b981",
+  "#54bfc5",
+  "#f59e0b",
+  "#f04458",
+  "#2563eb",
+  "#0891b2",
+  "#22c55e",
+  "#64748b",
+  "#0959bb",
+  "#38bdf8",
+];
+
+const coverageBands = [
+  { label: "0 - 25%", meta: "Low", color: "#f04458" },
+  { label: "25 - 50%", meta: "Below Avg", color: "#f59e0b" },
+  { label: "50 - 75%", meta: "Good", color: "#0b6fe8" },
+  { label: "75 - 100%", meta: "Excellent", color: "#10b981" },
+];
 
 const requiredSubjects = [
   "Engineering Mathematics",
@@ -266,6 +290,13 @@ function arcPath(cx: number, cy: number, radius: number, startAngle: number, end
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
 }
 
+function ringArcPath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
+  const start = polarPoint(cx, cy, radius, endAngle);
+  const end = polarPoint(cx, cy, radius, startAngle);
+  const largeArcFlag = Math.abs(endAngle - startAngle) <= 180 ? "0" : "1";
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+}
+
 function pointsToPath(points: Array<{ x: number; y: number }>) {
   if (!points.length) return "";
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ") + " Z";
@@ -312,6 +343,21 @@ function shortTopicName(topic: string) {
   return replacements[topic] ?? topic;
 }
 
+function shortSubjectName(subject: string) {
+  const replacements: Record<string, string> = {
+    "Engineering Mathematics": "Engineering Math",
+    "Probability & Statistics": "Probability",
+    "Calculus & Optimization": "Calculus & Opt.",
+    "Data Structures": "Data Structures",
+    "Machine Learning": "Machine Learning",
+    "Artificial Intelligence": "AI",
+    "Operating Systems": "Operating Systems",
+    "Computer Networks": "Networks",
+  };
+
+  return replacements[subject] ?? subject;
+}
+
 function labelPlacement(angle: number) {
   const normalized = ((angle % 360) + 360) % 360;
   const side = normalized > 24 && normalized < 156 ? "right" : normalized > 204 && normalized < 336 ? "left" : "center";
@@ -320,46 +366,21 @@ function labelPlacement(angle: number) {
   return { side, vertical };
 }
 
-function MiniDistribution({ subject }: { subject: SubjectMetric }) {
-  const counts = {
-    strong: subject.topics.filter((topic) => topic.status === "strong").length,
-    moderate: subject.topics.filter((topic) => topic.status === "moderate").length,
-    weak: subject.topics.filter((topic) => topic.status === "weak").length,
-  };
-  const total = Math.max(1, subject.topics.length);
-  let cursor = -90;
-
-  return (
-    <div className="subjects-mini-distribution">
-      <svg viewBox="0 0 120 120" className="h-full w-full rotate-[-90deg]">
-        <circle cx="60" cy="60" r="43" fill="none" stroke="#EEF2F7" strokeWidth="14" />
-        {(["strong", "moderate", "weak"] as TopicStatus[]).map((status) => {
-          const degrees = (counts[status] / total) * 360;
-          const path = arcPath(60, 60, 43, cursor, cursor + Math.max(0.01, degrees - 4));
-          cursor += degrees;
-          return <path key={status} d={path} fill="none" stroke={statusColor[status]} strokeWidth="14" strokeLinecap="round" />;
-        })}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono text-lg font-semibold text-[#10213F]">{(subject.overallScore / 100).toFixed(2)}</span>
-        <span className="text-[10px] font-semibold text-[#4B5563]">Overall</span>
-      </div>
-    </div>
-  );
-}
-
 function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
   const [tooltip, setTooltip] = useState<TopicMetric | null>(null);
   const size = 760;
   const center = size / 2;
-  const outerRadius = 226;
+  const outerRadius = 238;
+  const coverageInnerRadius = 72;
+  const coverageOuterRadius = 208;
+  const coverageScale = [25, 50, 75, 100];
   const topicCount = Math.max(subject.topics.length, 1);
   const slice = 360 / topicCount;
+  const coverageRadius = (value: number) => coverageInnerRadius + (coverageOuterRadius - coverageInnerRadius) * (clamp(value) / 100);
 
   const waveformPoints = subject.topics.map((topic, index) => {
     const angle = index * slice;
-    const value = (topic.accuracy * 0.42 + topic.confidence * 0.24 + topic.retention * 0.2 + topic.speed * 0.14) / 100;
-    return polarPoint(center, center, 58 + value * 146, angle);
+    return polarPoint(center, center, coverageRadius(topic.completion), angle);
   });
 
   const smoothWavePath = smoothClosedPath(waveformPoints);
@@ -368,39 +389,73 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
     <div className="subjects-radar-shell">
       <svg viewBox={`0 0 ${size} ${size}`} className="subjects-radar-svg" role="img" aria-label={`${subject.subject} radar analytics`}>
         <defs>
-          <filter id="radarGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
           <linearGradient id="radarWaveFill" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#0B6FE8" stopOpacity="0.18" />
+            <stop offset="0%" stopColor="#0b6fe8" stopOpacity="0.18" />
             <stop offset="52%" stopColor="#54BFC5" stopOpacity="0.13" />
             <stop offset="100%" stopColor="#F04458" stopOpacity="0.12" />
           </linearGradient>
+          {(["strong", "moderate", "weak"] as TopicStatus[]).map((status) => (
+            <linearGradient key={status} id={`subjects-arrow-metal-${subject.id}-${status}`} x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#F8FAFC" stopOpacity="0.96" />
+              <stop offset="38%" stopColor={statusColor[status]} stopOpacity="0.95" />
+              <stop offset="72%" stopColor="#94A3B8" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#E2E8F0" stopOpacity="0.96" />
+            </linearGradient>
+          ))}
+          {subject.topics.map((topic, index) => (
+            <marker
+              key={`${topic.topic}-arrow-marker`}
+              id={`subjects-arrow-${subject.id}-${index}`}
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="4"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M 0.8 0.8 L 7.2 4 L 0.8 7.2 L 2.7 4 Z" fill={`url(#subjects-arrow-metal-${subject.id}-${topic.status})`} />
+            </marker>
+          ))}
         </defs>
 
-        {[52, 94, 136, 178, 220].map((radius, index) => (
-          <circle key={radius} cx={center} cy={center} r={radius} fill="none" stroke="#D9E5F6" strokeWidth="1" strokeDasharray={index === 4 ? "0" : "3 5"} opacity={0.9} />
+        <circle cx={center} cy={center} r={outerRadius + 36} fill="none" stroke="#D7DEE8" strokeWidth="1" strokeDasharray="1 4" opacity="0.8" />
+        <circle cx={center} cy={center} r={outerRadius + 18} fill="none" stroke="#E2E8F0" strokeWidth="1.5" opacity="0.85" />
+        <circle cx={center} cy={center} r="78" fill="#E9EEF5" opacity="0.68" />
+
+        <circle cx={center} cy={center} r={coverageInnerRadius} fill="none" stroke="#D8E4F3" strokeWidth="1" strokeDasharray="4 7" opacity="0.7" />
+        {coverageScale.map((value) => (
+          <circle key={value} cx={center} cy={center} r={coverageRadius(value)} fill="none" stroke="#D8E4F3" strokeWidth="1" strokeDasharray="4 7" opacity="0.82" />
         ))}
+
+        {coverageScale.map((value) => {
+          const radius = coverageRadius(value);
+          return (
+            <text key={`${value}-coverage-scale`} x={center + 10} y={center - radius + 4} textAnchor="start" className="subjects-radar-scale">
+              {value}% coverage
+            </text>
+          );
+        })}
 
         {subject.topics.map((topic, index) => {
           const angle = index * slice;
-          const endPoint = polarPoint(center, center, 218, angle);
+          const endPoint = polarPoint(center, center, outerRadius + 22, angle);
           return (
             <g key={`${topic.topic}-axis`}>
-              <line x1={center} y1={center} x2={endPoint.x} y2={endPoint.y} stroke="#C9D9EE" strokeWidth="1" strokeDasharray="3 5" />
-              <circle cx={endPoint.x} cy={endPoint.y} r="2.2" fill={statusColor[topic.status]} opacity="0.7" />
+              <line x1={center} y1={center} x2={endPoint.x} y2={endPoint.y} stroke="#C9D5E4" strokeWidth="1" strokeDasharray="3 5" />
             </g>
           );
         })}
 
         {subject.topics.map((topic, index) => {
-          const start = index * slice + 2.8;
-          const end = (index + 1) * slice - 2.8;
+          const start = index * slice + 2.4;
+          const end = (index + 1) * slice - 2.4;
           const completionEnd = start + (end - start) * (topic.completion / 100);
+          const angle = index * slice;
+          const vectorStart = polarPoint(center, center, outerRadius + 132, angle);
+          const vectorEnd = polarPoint(center, center, outerRadius + 66, angle);
+          const numberPoint = polarPoint(center, center, outerRadius + 48, angle);
+          const dotPoint = polarPoint(center, center, outerRadius + 36, angle);
+          const connectorEnd = polarPoint(center, center, outerRadius + 30, angle);
 
           return (
             <g
@@ -409,113 +464,281 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
               onMouseEnter={() => setTooltip(topic)}
               onMouseLeave={() => setTooltip(null)}
             >
-              <path d={arcPath(center, center, outerRadius, start, end)} fill="none" stroke="#E9EEF6" strokeWidth="17" strokeLinecap="round" />
+              <line
+                x1={center}
+                y1={center}
+                x2={connectorEnd.x}
+                y2={connectorEnd.y}
+                className="subjects-radar-connector"
+                stroke={statusColor[topic.status]}
+              />
+              {topic.status !== "strong" && (
+                <path d={arcPath(center, center, outerRadius + 24, start, end)} fill="none" stroke={statusColor[topic.status]} strokeWidth="18" strokeLinecap="butt" opacity="0.18" />
+              )}
+              <path d={arcPath(center, center, outerRadius, start, end)} fill="none" stroke="#E7EBF1" strokeWidth="20" strokeLinecap="round" />
               <path
                 d={arcPath(center, center, outerRadius, start, completionEnd)}
                 fill="none"
                 stroke={statusColor[topic.status]}
-                strokeWidth="17"
+                strokeWidth="20"
                 strokeLinecap="round"
                 className="subjects-radar-arc"
                 style={{ animationDelay: `${index * 60}ms` }}
               />
-              <title>{`${topic.topic}: ${topic.completion}% completion, ${topic.accuracy}% accuracy`}</title>
+              <path
+                d={`M ${vectorStart.x} ${vectorStart.y} L ${vectorEnd.x} ${vectorEnd.y}`}
+                className="subjects-radar-vector"
+                stroke={`url(#subjects-arrow-metal-${subject.id}-${topic.status})`}
+                markerEnd={`url(#subjects-arrow-${subject.id}-${index})`}
+              />
+              <circle cx={dotPoint.x} cy={dotPoint.y} r="4.2" fill={statusColor[topic.status]} className="subjects-radar-dot" />
+              <text x={numberPoint.x} y={numberPoint.y + 4} textAnchor="middle" className="subjects-radar-number">
+                {index + 1}
+              </text>
+              <title>{`${topic.topic}: ${topic.completion}% coverage, ${topic.mastery}% mastery`}</title>
             </g>
           );
         })}
 
-        <path d={smoothWavePath} fill="url(#radarWaveFill)" stroke="#0B6FE8" strokeWidth="2.8" strokeLinejoin="round" className="subjects-waveform-fill" />
-        <path d={smoothWavePath} fill="none" stroke="#F04458" strokeWidth="1.6" strokeOpacity="0.72" strokeDasharray="0 540 55 540" className="subjects-waveform-accent" />
+        <path d={smoothWavePath} fill="none" stroke="#6B95A8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="subjects-waveform-fill" />
+        <path d={smoothWavePath} fill="none" stroke="#F04458" strokeWidth="1.8" strokeOpacity="0.58" strokeDasharray="0 540 55 540" className="subjects-waveform-accent" />
 
         <circle cx={center} cy={center} r="8" fill="#10213F" />
-        <text x={center} y={center - 68} textAnchor="middle" className="subjects-radar-scale">
-          100
-        </text>
-        <text x={center} y={center - 110} textAnchor="middle" className="subjects-radar-scale">
-          75
-        </text>
-        <text x={center} y={center - 152} textAnchor="middle" className="subjects-radar-scale">
-          50
-        </text>
-        <text x={center} y={center - 194} textAnchor="middle" className="subjects-radar-scale">
-          25
-        </text>
       </svg>
-
-      <svg className="subjects-radar-leader-layer" viewBox="0 0 100 100" aria-hidden="true">
-        <defs>
-          {subject.topics.map((topic, index) => (
-            <marker
-              key={`${topic.topic}-arrow-marker`}
-              id={`subjects-arrow-${subject.id}-${index}`}
-              markerWidth="5"
-              markerHeight="5"
-              refX="4.3"
-              refY="2.5"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M 0 0 L 5 2.5 L 0 5 z" fill={statusColor[topic.status]} />
-            </marker>
-          ))}
-        </defs>
-        {subject.topics.map((topic, index) => {
-          const angle = index * slice;
-          const start = polarPoint(50, 50, 42.1, angle);
-          const end = polarPoint(50, 50, 27.1, angle);
-          const bend = polarPoint(50, 50, 35.4, angle + (index % 2 === 0 ? 1.2 : -1.2));
-
-          return (
-            <path
-              key={`${topic.topic}-leader`}
-              d={`M ${start.x} ${start.y} Q ${bend.x} ${bend.y} ${end.x} ${end.y}`}
-              className="subjects-radar-leader"
-              stroke={statusColor[topic.status]}
-              markerEnd={`url(#subjects-arrow-${subject.id}-${index})`}
-            />
-          );
-        })}
-      </svg>
-
-      <div className="subjects-radar-label-layer">
-        {subject.topics.map((topic, index) => {
-          const angle = index * slice;
-          const point = polarPoint(50, 50, 45.5, angle);
-          const placement = labelPlacement(angle);
-
-          return (
-            <button
-              key={`${topic.topic}-label-card`}
-              type="button"
-              aria-label={`${topic.topic}: ${topic.completion}% completion and ${topic.accuracy}% accuracy`}
-              className={`subjects-radar-marker is-${placement.side} is-${placement.vertical}`}
-              style={{
-                left: `${point.x}%`,
-                top: `${point.y}%`,
-                borderColor: `${statusColor[topic.status]}40`,
-                color: statusColor[topic.status],
-              }}
-              onMouseEnter={() => setTooltip(topic)}
-              onFocus={() => setTooltip(topic)}
-              onMouseLeave={() => setTooltip(null)}
-              onBlur={() => setTooltip(null)}
-            >
-              <span>{index + 1}</span>
-              <b>{topic.completion}%</b>
-            </button>
-          );
-        })}
-      </div>
 
       {tooltip && (
         <div className="subjects-radar-tooltip">
           <strong>{tooltip.topic}</strong>
-          <span>Completion {tooltip.completion}%</span>
-          <span>Accuracy {tooltip.accuracy}%</span>
+          <span>Coverage {tooltip.completion}%</span>
+          <span>Mastery {tooltip.mastery}%</span>
+          <span>Retention {tooltip.retention}%</span>
           <span>{statusLabel[tooltip.status]} topic</span>
         </div>
       )}
     </div>
+  );
+}
+
+function OverallSubjectsCoverage({
+  subjects,
+  onOpenSubject,
+}: {
+  subjects: SubjectMetric[];
+  onOpenSubject: (id: string) => void;
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const chartSubjects = subjects;
+  const activeSubject = chartSubjects.find((subject) => subject.id === activeId) ?? null;
+  const overallCoverage = clamp(
+    chartSubjects.reduce((sum, subject) => sum + subject.syllabusCompletion, 0) / Math.max(chartSubjects.length, 1)
+  );
+  const size = 720;
+  const center = size / 2;
+  const startAngle = 0;
+  const totalAngle = 270;
+  const firstRadius = 264;
+  const ringGap = 18;
+  const ringWidth = 12;
+
+  return (
+    <section className="subjects-panel subjects-overall-panel" aria-label="Overall subjects coverage">
+      <div className="subjects-overall-header">
+        <div>
+          <div className="subjects-overall-title-row">
+            <h2>Overall Subjects Coverage</h2>
+            <InfoBadge />
+          </div>
+          <p>Your progress across all GATE DA subjects</p>
+        </div>
+        <div className="subjects-overall-score-card">
+          <span>Average</span>
+          <strong>{overallCoverage}%</strong>
+        </div>
+      </div>
+
+      <div className="subjects-overall-layout">
+        <div className="subjects-overall-chart-wrap">
+          <svg viewBox={`0 0 ${size} ${size}`} className="subjects-overall-chart" role="img" aria-label={`Overall subject coverage ${overallCoverage}%`}>
+            <defs>
+              <filter id="subjectsOverviewGlow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            {[0, 25, 50, 75, 100].map((value) => {
+              const angle = startAngle + (value / 100) * totalAngle;
+              const point = polarPoint(center, center, firstRadius + 32, angle);
+              return (
+                <text key={value} x={point.x} y={point.y + 4} textAnchor="middle" className="subjects-overall-scale">
+                  {value}%
+                </text>
+              );
+            })}
+
+            {chartSubjects.map((subject, index) => {
+              const color = subjectRingPalette[index % subjectRingPalette.length];
+              const radius = firstRadius - index * ringGap;
+              const endAngle = startAngle + (subject.syllabusCompletion / 100) * totalAngle;
+              const labelPoint = polarPoint(center, center, radius, startAngle);
+              const labelAnchorX = center - 206;
+              const labelAnchorY = labelPoint.y + 4;
+              const endPoint = polarPoint(center, center, radius, endAngle);
+              const isActive = activeId === subject.id;
+
+              return (
+                <g
+                  key={subject.id}
+                  className="subjects-overall-ring-group"
+                  onMouseEnter={() => setActiveId(subject.id)}
+                  onMouseLeave={() => setActiveId(null)}
+                  onClick={() => onOpenSubject(subject.id)}
+                >
+                  <path
+                    d={ringArcPath(center, center, radius, startAngle, startAngle + totalAngle)}
+                    fill="none"
+                    stroke="#edf2f7"
+                    strokeWidth={ringWidth}
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d={ringArcPath(center, center, radius, startAngle, endAngle)}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={ringWidth}
+                    strokeLinecap="round"
+                    className="subjects-overall-progress"
+                    style={{
+                      animationDelay: `${index * 65}ms`,
+                      filter: isActive ? "url(#subjectsOverviewGlow)" : undefined,
+                      opacity: activeId && !isActive ? 0.38 : 1,
+                    }}
+                  />
+                  <line
+                    x1={labelAnchorX + 118}
+                    y1={labelAnchorY - 3}
+                    x2={labelPoint.x - 9}
+                    y2={labelPoint.y}
+                    stroke={color}
+                    strokeWidth="1"
+                    strokeDasharray="3 4"
+                    className="subjects-overall-label-leader"
+                    opacity={activeId && !isActive ? 0.18 : 0.45}
+                  />
+                  <circle
+                    cx={labelAnchorX - 9}
+                    cy={labelAnchorY - 3}
+                    r="4"
+                    fill={color}
+                    opacity={activeId && !isActive ? 0.38 : 1}
+                  />
+                  <text
+                    x={labelAnchorX}
+                    y={labelAnchorY}
+                    className="subjects-overall-arc-label"
+                    style={{ opacity: activeId && !isActive ? 0.38 : 1 }}
+                  >
+                    {shortSubjectName(subject.subject)}
+                  </text>
+                  <circle
+                    cx={endPoint.x}
+                    cy={endPoint.y}
+                    r="3"
+                    fill={color}
+                    className="subjects-overall-end-dot"
+                    opacity={activeId && !isActive ? 0.28 : 0.8}
+                  />
+                  <title>{`${subject.subject}: ${subject.syllabusCompletion}% coverage`}</title>
+                </g>
+              );
+            })}
+
+            <circle cx={center} cy={center} r="86" fill="#ffffff" stroke="#e6edf7" strokeWidth="1" />
+            <circle cx={center} cy={center} r="70" fill="#f8fbff" stroke="#eaf4ff" strokeWidth="1" />
+            <text x={center} y={center - 9} textAnchor="middle" className="subjects-overall-main-score">
+              {activeSubject ? `${activeSubject.syllabusCompletion}%` : `${overallCoverage}%`}
+            </text>
+            <text x={center} y={center + 18} textAnchor="middle" className="subjects-overall-main-label">
+              {activeSubject ? "Subject Coverage" : "Overall Coverage"}
+            </text>
+            <text x={center} y={center + 43} textAnchor="middle" className="subjects-overall-main-status">
+              {activeSubject ? activeSubject.subject : statusLabel[statusFor(overallCoverage)]}
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      <section className="subjects-overall-table-card" aria-label="All syllabus coverage table">
+        <div className="subjects-card-header">
+          <h3>All Syllabus Coverage</h3>
+          <span>{chartSubjects.length} Subjects</span>
+        </div>
+        <div className="subjects-overall-table dashboard-scrollbar">
+          <table>
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Coverage</th>
+                <th>Mastery</th>
+                <th>Accuracy</th>
+                <th>Topics</th>
+                <th>Attempts</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartSubjects.map((subject, index) => {
+                const color = subjectRingPalette[index % subjectRingPalette.length];
+                const tone = statusFor(subject.syllabusCompletion);
+
+                return (
+                  <tr
+                    key={subject.id}
+                    onMouseEnter={() => setActiveId(subject.id)}
+                    onMouseLeave={() => setActiveId(null)}
+                    onClick={() => onOpenSubject(subject.id)}
+                  >
+                    <td><i style={{ backgroundColor: color }} />{subject.subject}</td>
+                    <td>
+                      <span className="subjects-overall-coverage-bar">
+                        <b style={{ width: `${subject.syllabusCompletion}%`, backgroundColor: color }} />
+                      </span>
+                      <strong style={{ color }}>{subject.syllabusCompletion}%</strong>
+                    </td>
+                    <td>{subject.mastery}%</td>
+                    <td>{subject.averageAccuracy}%</td>
+                    <td>{subject.topics.length}</td>
+                    <td>{subject.attempted.toLocaleString()}</td>
+                    <td><span style={{ color: statusColor[tone], backgroundColor: statusSoft[tone] }}>{statusLabel[tone]}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="subjects-overall-legend">
+        {coverageBands.map((band) => (
+          <span key={band.label}>
+            <i style={{ backgroundColor: band.color }} />
+            <strong>{band.label}</strong>
+            <b>{band.meta}</b>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function InfoBadge() {
+  return (
+    <span className="subjects-info-badge" aria-label="Coverage is calculated from subject syllabus completion">
+      i
+    </span>
   );
 }
 
@@ -534,46 +757,21 @@ function MetricTile({ icon: Icon, label, value, meta }: { icon: typeof Target; l
   );
 }
 
-function InsightCard({ label, topic, value, status }: { label: string; topic: string; value: string; status: TopicStatus }) {
-  return (
-    <div className="subjects-insight-card">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#64748B]">{label}</p>
-        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor[status] }} />
-      </div>
-      <p className="mt-2 truncate text-sm font-semibold text-[#10213F]">{topic}</p>
-      <p className="mt-1 font-mono text-[12px]" style={{ color: statusColor[status] }}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
 export default function SubjectProgress() {
   const { data, loading, error } = useDashboardQuery(() => dashboardApi.subjectIntelligence(), []);
   const subjects = useMemo(() => mergeRequiredSubjects(data?.subjects), [data]);
   const [activeId, setActiveId] = useState(requiredSubjects[0].toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  const [view, setView] = useState<SubjectsView>("overview");
+  const [subjectPanelCollapsed, setSubjectPanelCollapsed] = useState(false);
   const activeSubject = subjects.find((subject) => subject.id === activeId) ?? subjects[0];
 
-  const overview = useMemo(() => {
-    const topics = activeSubject?.topics ?? [];
-    const strong = topics.filter((topic) => topic.status === "strong");
-    const moderate = topics.filter((topic) => topic.status === "moderate");
-    const weak = topics.filter((topic) => topic.status === "weak");
-    const sorted = [...topics].sort((a, b) => b.accuracy - a.accuracy);
-    const improved = [...topics].sort((a, b) => b.retention + b.mastery - (a.retention + a.mastery))[0] ?? sorted[0];
-    const needsFocus = [...topics].sort((a, b) => a.accuracy + a.retention - (b.accuracy + b.retention))[0] ?? sorted[sorted.length - 1];
-
-    return {
-      strong,
-      moderate,
-      weak,
-      best: sorted[0],
-      lowest: sorted[sorted.length - 1],
-      improved,
-      needsFocus,
-    };
-  }, [activeSubject]);
+  const openSubjectWise = (id?: string) => {
+    if (id) {
+      setActiveId(id);
+      setSubjectPanelCollapsed(true);
+    }
+    setView("subject");
+  };
 
   if (loading) return <SkeletonLoader rows={7} />;
   if (error || !data) return <EmptyState title="Subject intelligence unavailable" description="The subject analytics service could not be loaded." />;
@@ -585,15 +783,39 @@ export default function SubjectProgress() {
           <h1>Subjects</h1>
           <p>Track and analyze your performance across all subjects</p>
         </div>
-        <div className="subjects-header-pill">
-          <Radar size={15} />
-          <span>All Time</span>
+        <div className="subjects-header-actions">
+          <div className="subjects-view-toggle" role="tablist" aria-label="Subjects view">
+            <button type="button" className={view === "overview" ? "is-active" : ""} onClick={() => setView("overview")} role="tab" aria-selected={view === "overview"}>
+              All Subjects
+            </button>
+            <button type="button" className={view === "subject" ? "is-active" : ""} onClick={() => openSubjectWise()} role="tab" aria-selected={view === "subject"}>
+              Subject Wise
+            </button>
+          </div>
+          <div className="subjects-header-pill">
+            <Radar size={15} />
+            <span>All Time</span>
+          </div>
         </div>
       </header>
 
-      <section className="subjects-dashboard-grid">
+      {view === "overview" ? (
+        <OverallSubjectsCoverage subjects={subjects} onOpenSubject={openSubjectWise} />
+      ) : (
+      <section className={`subjects-dashboard-grid ${subjectPanelCollapsed ? "is-subject-panel-collapsed" : ""}`}>
         <aside className="subjects-panel subjects-subject-panel">
-          <div className="subjects-panel-title">Select a Subject</div>
+          <div className="subjects-panel-title subjects-panel-title-row">
+            <span>Select a Subject</span>
+            <button
+              type="button"
+              className="subjects-panel-collapse-button"
+              onClick={() => setSubjectPanelCollapsed((collapsed) => !collapsed)}
+              aria-label={subjectPanelCollapsed ? "Expand subject list" : "Collapse subject list"}
+              title={subjectPanelCollapsed ? "Expand subject list" : "Collapse subject list"}
+            >
+              {subjectPanelCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            </button>
+          </div>
           <div className="subjects-list dashboard-scrollbar">
             {subjects.map((subject) => {
               const Icon = subjectIcon[subject.subject as keyof typeof subjectIcon] ?? BookOpenCheck;
@@ -604,7 +826,7 @@ export default function SubjectProgress() {
                 <button
                   key={subject.id}
                   type="button"
-                  onClick={() => setActiveId(subject.id)}
+                  onClick={() => openSubjectWise(subject.id)}
                   className={`subjects-subject-card ${isActive ? "is-active" : ""}`}
                 >
                   <span className="subjects-subject-icon" style={{ backgroundColor: statusSoft[tone], color: statusColor[tone] }}>
@@ -613,7 +835,7 @@ export default function SubjectProgress() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-2">
                       <span className="truncate text-left text-[12px] font-semibold text-[#10213F]">{subject.subject}</span>
-                      <span className="font-mono text-[10px] text-[#0B6FE8]">{subject.syllabusCompletion}%</span>
+                      <span className="font-mono text-[10px] text-[#0b6fe8]">{subject.syllabusCompletion}%</span>
                     </span>
                     <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[#EEF2F7]">
                       <span className="block h-full rounded-full transition-all duration-500" style={{ width: `${subject.syllabusCompletion}%`, backgroundColor: statusColor[tone] }} />
@@ -651,33 +873,45 @@ export default function SubjectProgress() {
 
             <SubjectRadarCircle subject={activeSubject} />
 
-            <div className="subjects-topic-detail-panel" aria-label="Topic performance list">
-              <div className="subjects-topic-detail-header">
-                <h3>Topic Coverage Map</h3>
-                <span>Mapped to the circular radar segments</span>
+            <section className="subjects-topic-wise-card subjects-topic-wise-full" aria-label="Complete topic-wise insights">
+              <div className="subjects-card-header">
+                <h3>Topic-Wise Insights</h3>
+                <span>{activeSubject.topics.length} Topics</span>
               </div>
-              <div className="subjects-topic-ring-grid">
-                {activeSubject.topics.map((topic, index) => (
-                  <div
-                    key={`${topic.topic}-topic-grid`}
-                    className="subjects-topic-ring-item"
-                    style={{ borderLeftColor: statusColor[topic.status] }}
-                  >
-                    <span className="subjects-topic-ring-number" style={{ color: statusColor[topic.status] }}>
-                      {index + 1}
-                    </span>
-                    <span className="subjects-topic-ring-name">{topic.topic}</span>
-                    <span className="subjects-topic-ring-bar">
-                      <i style={{ width: `${topic.completion}%`, backgroundColor: statusColor[topic.status] }} />
-                    </span>
-                    <span className="subjects-topic-ring-percent" style={{ color: statusColor[topic.status] }}>
-                      {topic.completion}%
-                    </span>
-                    <span className="subjects-topic-ring-accuracy">{topic.accuracy}% acc</span>
-                  </div>
-                ))}
+              <div className="subjects-topic-table dashboard-scrollbar">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>No.</th>
+                      <th>Topic</th>
+                      <th>Coverage</th>
+                      <th>Mastery</th>
+                      <th>Retention</th>
+                      <th>Attempts</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeSubject.topics.map((topic, index) => (
+                      <tr key={topic.topic}>
+                        <td>{index + 1}</td>
+                        <td><i style={{ backgroundColor: statusColor[topic.status] }} />{topic.topic}</td>
+                        <td>
+                          <span className="subjects-topic-progress">
+                            <b style={{ width: `${topic.completion}%`, backgroundColor: statusColor[topic.status] }} />
+                          </span>
+                          <strong style={{ color: statusColor[topic.status] }}>{topic.completion}%</strong>
+                        </td>
+                        <td>{topic.mastery}%</td>
+                        <td>{topic.retention}%</td>
+                        <td>{topic.attempts}</td>
+                        <td><span style={{ color: statusColor[topic.status], backgroundColor: statusSoft[topic.status] }}>{statusLabel[topic.status]}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            </section>
 
             <div className="subjects-legend">
               <span><i style={{ backgroundColor: statusColor.strong }} />Strong (75% - 100%)</span>
@@ -693,73 +927,9 @@ export default function SubjectProgress() {
               <MetricTile icon={Flame} label="Streak" value={`${activeSubject.streak}`} meta="Days" />
             </div>
           </section>
-
-        <section className="subjects-right-column" aria-label="Subject insights">
-          <section className="subjects-panel subjects-right-card">
-            <div className="subjects-card-header">
-              <h3>Subject Overview</h3>
-              <span>All Time</span>
-            </div>
-            <div className="subjects-overview-content">
-              <div className="space-y-3">
-                {[
-                  ["Strong Topics", overview.strong.length, "strong" as TopicStatus],
-                  ["Moderate Topics", overview.moderate.length, "moderate" as TopicStatus],
-                  ["Weak Topics", overview.weak.length, "weak" as TopicStatus],
-                ].map(([label, count, status]) => (
-                  <div key={label} className="subjects-count-row">
-                    <span><i style={{ backgroundColor: statusColor[status] }} />{label}</span>
-                    <strong>{count} ({Math.round((Number(count) / activeSubject.topics.length) * 100)}%)</strong>
-                  </div>
-                ))}
-              </div>
-              <MiniDistribution subject={activeSubject} />
-            </div>
-          </section>
-
-          <section className="subjects-panel subjects-right-card">
-            <div className="subjects-card-header">
-              <h3>Topic Performance Summary</h3>
-            </div>
-            <div className="subjects-insight-grid">
-              <InsightCard label="Best Topic" topic={overview.best.topic} value={`${overview.best.accuracy}% accuracy`} status={overview.best.status} />
-              <InsightCard label="Lowest Topic" topic={overview.lowest.topic} value={`${overview.lowest.accuracy}% accuracy`} status={overview.lowest.status} />
-              <InsightCard label="Most Improved" topic={overview.improved.topic} value={`${overview.improved.retention}% retention`} status={overview.improved.status} />
-              <InsightCard label="Needs Focus" topic={overview.needsFocus.topic} value={`${overview.needsFocus.conceptDecay}% decay`} status={overview.needsFocus.status} />
-            </div>
-          </section>
-
-          <section className="subjects-panel subjects-right-card subjects-topic-wise-card">
-            <div className="subjects-card-header">
-              <h3>Topic-Wise Insights</h3>
-            </div>
-            <div className="subjects-topic-table dashboard-scrollbar">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Topic</th>
-                    <th>Accuracy</th>
-                    <th>Attempts</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeSubject.topics.map((topic) => (
-                    <tr key={topic.topic}>
-                      <td><i style={{ backgroundColor: statusColor[topic.status] }} />{topic.topic}</td>
-                      <td>{topic.accuracy}%</td>
-                      <td>{topic.attempts}</td>
-                      <td><span style={{ color: statusColor[topic.status], backgroundColor: statusSoft[topic.status] }}>{statusLabel[topic.status]}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-        </section>
         </main>
       </section>
+      )}
     </div>
   );
 }
