@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  Activity,
-  BarChart3,
   BookOpenCheck,
   BrainCircuit,
   Clock3,
@@ -15,9 +13,7 @@ import {
   Pi,
   Radar,
   Sigma,
-  Sparkles,
   Target,
-  TrendingUp,
 } from "lucide-react";
 import { EmptyState, SkeletonLoader } from "@/dashboard/components";
 import { dashboardApi } from "@/dashboard/services";
@@ -82,7 +78,7 @@ interface SubjectMetric {
 }
 
 const statusColor: Record<TopicStatus, string> = {
-  strong: "#1F6FE5",
+  strong: "#0B6FE8",
   moderate: "#54BFC5",
   weak: "#F04458",
 };
@@ -157,7 +153,7 @@ const subjectIcon = {
   "Data Structures": Database,
   Algorithms: GitBranch,
   "Machine Learning": BrainCircuit,
-  "Artificial Intelligence": Sparkles,
+  "Artificial Intelligence": BrainCircuit,
   DBMS: Database,
   "Operating Systems": Radar,
   "Computer Networks": Network,
@@ -353,7 +349,7 @@ function MiniDistribution({ subject }: { subject: SubjectMetric }) {
 }
 
 function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
-  const [tooltip, setTooltip] = useState<null | { left: number; top: number; topic: TopicMetric }>(null);
+  const [tooltip, setTooltip] = useState<TopicMetric | null>(null);
   const size = 760;
   const center = size / 2;
   const outerRadius = 226;
@@ -380,7 +376,7 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
             </feMerge>
           </filter>
           <linearGradient id="radarWaveFill" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#1F6FE5" stopOpacity="0.18" />
+            <stop offset="0%" stopColor="#0B6FE8" stopOpacity="0.18" />
             <stop offset="52%" stopColor="#54BFC5" stopOpacity="0.13" />
             <stop offset="100%" stopColor="#F04458" stopOpacity="0.12" />
           </linearGradient>
@@ -405,13 +401,12 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
           const start = index * slice + 2.8;
           const end = (index + 1) * slice - 2.8;
           const completionEnd = start + (end - start) * (topic.completion / 100);
-          const tooltipPoint = polarPoint(50, 50, 45.5, index * slice);
 
           return (
             <g
               key={`${topic.topic}-arc`}
               className="subjects-radar-segment"
-              onMouseEnter={() => setTooltip({ left: tooltipPoint.x, top: tooltipPoint.y, topic })}
+              onMouseEnter={() => setTooltip(topic)}
               onMouseLeave={() => setTooltip(null)}
             >
               <path d={arcPath(center, center, outerRadius, start, end)} fill="none" stroke="#E9EEF6" strokeWidth="17" strokeLinecap="round" />
@@ -422,7 +417,6 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
                 strokeWidth="17"
                 strokeLinecap="round"
                 className="subjects-radar-arc"
-                filter={topic.status === "strong" ? "url(#radarGlow)" : undefined}
                 style={{ animationDelay: `${index * 60}ms` }}
               />
               <title>{`${topic.topic}: ${topic.completion}% completion, ${topic.accuracy}% accuracy`}</title>
@@ -430,7 +424,7 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
           );
         })}
 
-        <path d={smoothWavePath} fill="url(#radarWaveFill)" stroke="#1F6FE5" strokeWidth="2.8" strokeLinejoin="round" className="subjects-waveform-fill" />
+        <path d={smoothWavePath} fill="url(#radarWaveFill)" stroke="#0B6FE8" strokeWidth="2.8" strokeLinejoin="round" className="subjects-waveform-fill" />
         <path d={smoothWavePath} fill="none" stroke="#F04458" strokeWidth="1.6" strokeOpacity="0.72" strokeDasharray="0 540 55 540" className="subjects-waveform-accent" />
 
         <circle cx={center} cy={center} r="8" fill="#10213F" />
@@ -501,8 +495,8 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
                 borderColor: `${statusColor[topic.status]}40`,
                 color: statusColor[topic.status],
               }}
-              onMouseEnter={() => setTooltip({ left: point.x, top: point.y, topic })}
-              onFocus={() => setTooltip({ left: point.x, top: point.y, topic })}
+              onMouseEnter={() => setTooltip(topic)}
+              onFocus={() => setTooltip(topic)}
               onMouseLeave={() => setTooltip(null)}
               onBlur={() => setTooltip(null)}
             >
@@ -514,11 +508,11 @@ function SubjectRadarCircle({ subject }: { subject: SubjectMetric }) {
       </div>
 
       {tooltip && (
-        <div className="subjects-radar-tooltip" style={{ left: `${tooltip.left}%`, top: `${tooltip.top}%` }}>
-          <strong>{tooltip.topic.topic}</strong>
-          <span>Completion {tooltip.topic.completion}%</span>
-          <span>Accuracy {tooltip.topic.accuracy}%</span>
-          <span>{statusLabel[tooltip.topic.status]} topic</span>
+        <div className="subjects-radar-tooltip">
+          <strong>{tooltip.topic}</strong>
+          <span>Completion {tooltip.completion}%</span>
+          <span>Accuracy {tooltip.accuracy}%</span>
+          <span>{statusLabel[tooltip.status]} topic</span>
         </div>
       )}
     </div>
@@ -619,7 +613,7 @@ export default function SubjectProgress() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-2">
                       <span className="truncate text-left text-[12px] font-semibold text-[#10213F]">{subject.subject}</span>
-                      <span className="font-mono text-[10px] text-[#1F6FE5]">{subject.syllabusCompletion}%</span>
+                      <span className="font-mono text-[10px] text-[#0B6FE8]">{subject.syllabusCompletion}%</span>
                     </span>
                     <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[#EEF2F7]">
                       <span className="block h-full rounded-full transition-all duration-500" style={{ width: `${subject.syllabusCompletion}%`, backgroundColor: statusColor[tone] }} />
@@ -657,23 +651,32 @@ export default function SubjectProgress() {
 
             <SubjectRadarCircle subject={activeSubject} />
 
-            <div className="subjects-topic-ring-grid" aria-label="Topic performance list">
-              {activeSubject.topics.map((topic, index) => (
-                <button
-                  key={`${topic.topic}-topic-grid`}
-                  type="button"
-                  className="subjects-topic-ring-item"
-                  style={{ borderColor: `${statusColor[topic.status]}30` }}
-                >
-                  <span className="subjects-topic-ring-number" style={{ backgroundColor: statusColor[topic.status] }}>
-                    {index + 1}
-                  </span>
-                  <span className="subjects-topic-ring-name">{topic.topic}</span>
-                  <span className="subjects-topic-ring-percent" style={{ color: statusColor[topic.status] }}>
-                    {topic.completion}%
-                  </span>
-                </button>
-              ))}
+            <div className="subjects-topic-detail-panel" aria-label="Topic performance list">
+              <div className="subjects-topic-detail-header">
+                <h3>Topic Coverage Map</h3>
+                <span>Mapped to the circular radar segments</span>
+              </div>
+              <div className="subjects-topic-ring-grid">
+                {activeSubject.topics.map((topic, index) => (
+                  <div
+                    key={`${topic.topic}-topic-grid`}
+                    className="subjects-topic-ring-item"
+                    style={{ borderLeftColor: statusColor[topic.status] }}
+                  >
+                    <span className="subjects-topic-ring-number" style={{ color: statusColor[topic.status] }}>
+                      {index + 1}
+                    </span>
+                    <span className="subjects-topic-ring-name">{topic.topic}</span>
+                    <span className="subjects-topic-ring-bar">
+                      <i style={{ width: `${topic.completion}%`, backgroundColor: statusColor[topic.status] }} />
+                    </span>
+                    <span className="subjects-topic-ring-percent" style={{ color: statusColor[topic.status] }}>
+                      {topic.completion}%
+                    </span>
+                    <span className="subjects-topic-ring-accuracy">{topic.accuracy}% acc</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="subjects-legend">
@@ -687,7 +690,7 @@ export default function SubjectProgress() {
               <MetricTile icon={Target} label="Accuracy" value={`${activeSubject.averageAccuracy}%`} meta="Good" />
               <MetricTile icon={BookOpenCheck} label="Solved Problems" value={activeSubject.attempted.toLocaleString()} meta="Total" />
               <MetricTile icon={Clock3} label="Time Spent" value={`${activeSubject.studyHours}h`} meta="Total" />
-              <MetricTile icon={Flame} label="Practice Streak" value={`${activeSubject.streak}`} meta="Days" />
+              <MetricTile icon={Flame} label="Streak" value={`${activeSubject.streak}`} meta="Days" />
             </div>
           </section>
 
@@ -726,7 +729,7 @@ export default function SubjectProgress() {
             </div>
           </section>
 
-          <section className="subjects-panel subjects-right-card">
+          <section className="subjects-panel subjects-right-card subjects-topic-wise-card">
             <div className="subjects-card-header">
               <h3>Topic-Wise Insights</h3>
             </div>
@@ -741,7 +744,7 @@ export default function SubjectProgress() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeSubject.topics.slice(0, 7).map((topic) => (
+                  {activeSubject.topics.map((topic) => (
                     <tr key={topic.topic}>
                       <td><i style={{ backgroundColor: statusColor[topic.status] }} />{topic.topic}</td>
                       <td>{topic.accuracy}%</td>
@@ -754,54 +757,6 @@ export default function SubjectProgress() {
             </div>
           </section>
 
-          <section className="subjects-panel subjects-right-card">
-            <div className="subjects-strength-grid">
-              <div>
-                <h3 className="subjects-mini-title">You Excel In</h3>
-                <div className="mt-3 space-y-2">
-                  {overview.strong.slice(0, 3).map((topic) => (
-                    <div key={topic.topic} className="subjects-chip-row strong">{topic.topic}<span>{topic.accuracy}%</span></div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h3 className="subjects-mini-title">Focus More On</h3>
-                <div className="mt-3 space-y-2">
-                  {(overview.weak.length ? overview.weak : [overview.needsFocus]).slice(0, 3).map((topic) => (
-                    <div key={topic.topic} className="subjects-chip-row weak">{topic.topic}<span>{topic.accuracy}%</span></div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="subjects-panel subjects-right-card">
-            <div className="subjects-card-header">
-              <h3>Learning Recommendations</h3>
-            </div>
-            <div className="space-y-2">
-              {[overview.needsFocus, overview.lowest, ...overview.weak].filter(Boolean).slice(0, 4).map((topic, index) => (
-                <div key={`${topic.topic}-${index}`} className="subjects-recommendation">
-                  <span>{index === 0 ? "Recommended mock test" : index === 1 ? "Revise topic" : "Practice set"}</span>
-                  <strong>{topic.topic}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="subjects-panel subjects-right-card">
-            <div className="subjects-card-header">
-              <h3>Practice Analytics</h3>
-            </div>
-            <div className="subjects-practice-grid">
-              <MetricTile icon={BarChart3} label="Solved" value={`${activeSubject.attempted}`} meta="problems" />
-              <MetricTile icon={Flame} label="Streak" value={`${activeSubject.streak}`} meta="days" />
-              <MetricTile icon={Target} label="Avg Accuracy" value={`${activeSubject.averageAccuracy}%`} meta="subject" />
-              <MetricTile icon={TrendingUp} label="Improvement" value={`+${activeSubject.improvement}%`} meta="recent" />
-              <MetricTile icon={Clock3} label="Study Hours" value={`${activeSubject.studyHours}h`} meta="tracked" />
-              <MetricTile icon={Activity} label="Signals" value={`${activeSubject.recentActivity}`} meta="recent" />
-            </div>
-          </section>
         </section>
         </main>
       </section>
