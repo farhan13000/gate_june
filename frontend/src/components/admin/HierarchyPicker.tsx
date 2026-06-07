@@ -26,7 +26,7 @@ export default function HierarchyPicker({ value, onChange, onLabelsChange }: Hie
 
   const loadTree = () => {
     setLoading(true);
-    fetch("/api/taxonomy/tree")
+    fetch("/api/taxonomy/tree", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setTree(Array.isArray(d) ? d : []))
       .catch(() => setTree([]))

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   CartesianGrid,
@@ -58,6 +58,15 @@ type HeatmapStats = {
   streakLastMonth: number;
 };
 
+type ActivityPayload = {
+  activity: HeatmapDay[];
+  year?: number;
+  availableYears?: number[];
+  startDate?: string;
+  endDate?: string;
+  stats: HeatmapStats;
+};
+
 type HeatmapCell = HeatmapDay | null;
 
 type RatingPoint = {
@@ -74,9 +83,6 @@ const difficultyVisuals: Record<DifficultyLevel, { key: "easy" | "medium" | "har
 };
 
 const chartAxisWidthPx = 48;
-const heatmapCellGapPx = 3;
-const heatmapCellMaxPx = 16;
-
 const emptyActivityStats: HeatmapStats = {
   solvedAllTime: 0,
   solvedLastYear: 0,
@@ -104,53 +110,6 @@ function describeArc(cx: number, cy: number, radius: number, startAngle: number,
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function buildYearHeatmapWeeks(days: HeatmapDay[]) {
-  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
-  if (!sorted.length) return [];
-
-  const byDate = new Map(sorted.map((day) => [day.date, day]));
-  const firstDate = new Date(`${sorted[0].date}T00:00:00`);
-  const lastDate = new Date(`${sorted[sorted.length - 1].date}T00:00:00`);
-  const startDate = new Date(firstDate);
-  startDate.setDate(firstDate.getDate() - firstDate.getDay());
-  const totalDays = Math.floor((lastDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-  const weekCount = Math.ceil(totalDays / 7);
-
-  return Array.from({ length: weekCount }, (_, weekIndex) => (
-    Array.from({ length: 7 }, (_, dayIndex) => {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + weekIndex * 7 + dayIndex);
-      if (date < firstDate || date > lastDate) return null;
-      const dateKey = date.toISOString().split("T")[0];
-      return byDate.get(dateKey) ?? {
-        date: dateKey,
-        count: 0,
-        studyTimeMinutes: 0,
-        accuracy: 0,
-      };
-    })
-  ));
-}
-
-function buildMonthLabels(weeks: HeatmapCell[][]) {
-  const labels: Array<{ label: string; week: number }> = [];
-  weeks.forEach((week, weekIndex) => {
-    week.forEach((day) => {
-      if (!day) return;
-      const date = new Date(`${day.date}T00:00:00`);
-      const label = date.toLocaleDateString("en-US", { month: "short" });
-      if ((date.getDate() === 1 || labels.length === 0) && labels[labels.length - 1]?.label !== label) {
-        labels.push({ label, week: weekIndex });
-      }
-    });
-  });
-  return labels.filter((item, index) => {
-    const next = labels[index + 1];
-    if (!next) return true;
-    return next.week - item.week >= 3;
-  });
 }
 
 function MetricCard({ label, value, meta, icon: Icon, tone }: MetricCardData) {
@@ -478,32 +437,85 @@ function RatingProgress({ data, userName }: { data: RatingPoint[]; userName: str
   );
 }
 
-function ActivityHeatmap({ days, stats, updatedAt }: { days: HeatmapDay[]; stats: HeatmapStats; updatedAt?: Date | null }) {
-  const heatmapRef = useRef<HTMLDivElement | null>(null);
-  const [heatmapWidth, setHeatmapWidth] = useState(900);
-  const visibleDayCount = heatmapWidth < 520 ? 98 : heatmapWidth < 760 ? 182 : 371;
-  const visibleDays = useMemo(() => days.slice(-visibleDayCount), [days, visibleDayCount]);
-  const weeks = useMemo(() => buildYearHeatmapWeeks(visibleDays), [visibleDays]);
-  const monthLabels = useMemo(() => buildMonthLabels(weeks), [weeks]);
-  const currentYear = new Date().getFullYear();
-  const dayLabelWidth = heatmapWidth < 520 ? 30 : chartAxisWidthPx;
-  const dynamicGap = heatmapWidth < 520 ? 2 : heatmapCellGapPx;
+function ActivityHeatmap({
+  days,
+  stats,
+  year,
+  availableYears,
+  onYearChange,
+  updatedAt,
+  startDate,
+  endDate,
+}: {
+  days: HeatmapDay[];
+  stats: HeatmapStats;
+  year: number;
+  availableYears: number[];
+  onYearChange: (year: number) => void;
+  updatedAt?: Date | null;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const weeks = useMemo<HeatmapCell[][]>(() => {
+    if (!days.length) return [];
+    const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    const byDate = new Map(sorted.map((day) => [day.date, day]));
+    const firstDate = new Date(`${sorted[0].date}T00:00:00`);
+    const lastDate = new Date(`${sorted[sorted.length - 1].date}T00:00:00`);
+    const startDateAligned = new Date(firstDate);
+    const mondayOffset = (firstDate.getDay() + 6) % 7;
+    startDateAligned.setDate(firstDate.getDate() - mondayOffset);
+    const totalDays = Math.floor((lastDate.getTime() - startDateAligned.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    const weekCount = Math.ceil(totalDays / 7);
+
+    return Array.from({ length: weekCount }, (_, weekIndex) => (
+      Array.from({ length: 7 }, (_, dayIndex) => {
+        const date = new Date(startDateAligned);
+        date.setDate(startDateAligned.getDate() + weekIndex * 7 + dayIndex);
+        if (date < firstDate || date > lastDate) return null;
+        const dateKey = date.toISOString().split("T")[0];
+        return byDate.get(dateKey) ?? {
+          date: dateKey,
+          count: 0,
+          studyTimeMinutes: 0,
+          accuracy: 0,
+        };
+      })
+    ));
+  }, [days]);
+  const monthLabels = useMemo(() => {
+    const labels: Array<{ label: string; week: number }> = [];
+    weeks.forEach((week, weekIndex) => {
+      week.forEach((day) => {
+        if (!day) return;
+        const date = new Date(`${day.date}T00:00:00`);
+        const label = date.toLocaleDateString("en-US", { month: "short" });
+        if ((date.getDate() === 1 || labels.length === 0) && labels[labels.length - 1]?.label !== label) {
+          labels.push({ label, week: weekIndex });
+        }
+      });
+    });
+    return labels.filter((item, index) => {
+      const next = labels[index + 1];
+      if (!next) return true;
+      return next.week - item.week >= 3;
+    });
+  }, [weeks]);
+  const monthSeparatorWeeks = useMemo(
+    () => monthLabels.slice(1).map((item) => item.week),
+    [monthLabels]
+  );
+  const dayLabels = ["Mon", "", "Wed", "", "Fri", "", ""];
+  const safeAvailableYears = availableYears.length ? availableYears : [year];
+  const dateRangeLabel = startDate && endDate ? `${formatDate(startDate)} - ${formatDate(endDate)}` : `${year}`;
 
   const colorFor = (count: number) => {
-    if (count <= 0) return "bg-[#edf0f3]";
-    if (count <= 1) return "bg-[#dff7e8]";
-    if (count <= 3) return "bg-[#86e0a2]";
-    return "bg-[#36bf68]";
+    if (count <= 0) return "hsl(var(--secondary))";
+    if (count === 1) return "hsl(var(--primary) / 0.25)";
+    if (count === 2) return "hsl(var(--primary) / 0.45)";
+    if (count === 3) return "hsl(var(--primary) / 0.65)";
+    return "hsl(var(--primary))";
   };
-
-  useEffect(() => {
-    if (!heatmapRef.current) return undefined;
-    const observer = new ResizeObserver(([entry]) => {
-      setHeatmapWidth(Math.round(entry.contentRect.width));
-    });
-    observer.observe(heatmapRef.current);
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <section className="border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5">
@@ -513,11 +525,23 @@ function ActivityHeatmap({ days, stats, updatedAt }: { days: HeatmapDay[]; stats
             <h2 className="text-base font-bold text-[#10213f]">Activity Heatmap</h2>
             <Info size={14} className="text-[#94a3b8]" />
           </div>
-          <p className="mt-1 text-sm text-[#64748b]">Daily solving consistency from your live submission history.</p>
+          <p className="mt-1 text-sm text-[#64748b]">Complete yearly activity from your synced submission history.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-[#64748b]">
+          <label className="inline-flex items-center gap-2 border border-[#bfdbfe] bg-[#eaf4ff] px-2 py-1 font-bold text-[#0b6fe8]">
+            Year
+            <select
+              value={year}
+              onChange={(event) => onYearChange(Number(event.target.value))}
+              className="border border-[#bfdbfe] bg-white px-2 py-1 text-xs font-bold text-[#10213f] outline-none focus:border-[#0b6fe8]"
+            >
+              {safeAvailableYears.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </label>
           <span className="border border-[#dbe3ee] bg-[#f8fafc] px-2 py-1 font-semibold text-[#475569]">
-            {visibleDayCount >= 371 ? currentYear : `${Math.round(visibleDayCount / 7)} weeks`}
+            {dateRangeLabel}
           </span>
           <span className="border border-[#dbe3ee] bg-white px-2 py-1 font-medium">
             Updated {updatedAt ? updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "live"}
@@ -525,11 +549,11 @@ function ActivityHeatmap({ days, stats, updatedAt }: { days: HeatmapDay[]; stats
         </div>
       </div>
 
-      <div ref={heatmapRef} className="mt-5 overflow-hidden border border-[#e4e7ec] bg-[#f8fafc] p-2 pb-3 sm:p-3 sm:pb-4">
-        <div className="min-w-0">
-          <div className="grid" style={{ gridTemplateColumns: `${dayLabelWidth}px minmax(0, 1fr)` }}>
+      <div className="mt-5 overflow-x-auto border border-[#e4e7ec] bg-[#f8fafc] p-3 shadow-sm sm:p-4">
+        <div className="min-w-[46rem]">
+          <div className="grid" style={{ gridTemplateColumns: "28px minmax(0, 1fr)" }}>
             <div />
-            <div className="relative h-6 text-[12px] font-semibold text-[#334155]">
+            <div className="relative h-5 text-[10px] font-mono font-semibold text-[#64748b]">
               {monthLabels.map((item) => (
                 <span
                   key={`${item.label}-${item.week}`}
@@ -541,62 +565,42 @@ function ActivityHeatmap({ days, stats, updatedAt }: { days: HeatmapDay[]; stats
               ))}
             </div>
           </div>
-          <div className="mt-1 grid" style={{ gridTemplateColumns: `${dayLabelWidth}px minmax(0, 1fr)` }}>
-            <div
-              className="grid pr-2 text-right text-[11px] font-medium text-[#64748b] sm:pr-3 sm:text-[12px]"
-              style={{
-                gridTemplateRows: "repeat(7, minmax(12px, 1fr))",
-                rowGap: dynamicGap,
-              }}
-            >
-              <span />
-              <span className="leading-none">Mon</span>
-              <span />
-              <span className="leading-none">Wed</span>
-              <span />
-              <span className="leading-none">Fri</span>
-              <span />
+          <div className="mt-1 grid" style={{ gridTemplateColumns: "28px minmax(0, 1fr)" }}>
+            <div className="grid pr-2 text-[10px] font-mono leading-none text-[#64748b]" style={{ gridTemplateRows: "repeat(7, minmax(0, 1fr))", rowGap: 4 }}>
+              {dayLabels.map((label, index) => (
+                <div key={`${label}-${index}`} className="flex h-full items-center">{label}</div>
+              ))}
             </div>
             <div
-              className="grid min-w-0 justify-stretch"
+              className="relative grid"
               style={{
                 gridTemplateColumns: `repeat(${Math.max(weeks.length, 1)}, minmax(0, 1fr))`,
-                gridTemplateRows: "repeat(7, auto)",
-                columnGap: dynamicGap,
-                rowGap: dynamicGap,
+                gridTemplateRows: "repeat(7, minmax(0, 1fr))",
+                columnGap: 4,
+                rowGap: 4,
               }}
             >
+              {monthSeparatorWeeks.map((week) => (
+                <span
+                  key={`month-separator-${week}`}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 z-0 border-l border-[#bfdbfe]"
+                  style={{ left: `${weeks.length ? (week / weeks.length) * 100 : 0}%` }}
+                />
+              ))}
               {weeks.map((week, weekIndex) => (
-                week.map((day, dayIndex) => day ? (
-                    <div
-                      key={`${day.date}-${dayIndex}`}
-                      title={`${formatDate(day.date)}: ${day.count} solved, ${day.studyTimeMinutes} min, ${day.accuracy}% accuracy`}
-                      className={`border border-white transition hover:scale-125 hover:ring-2 hover:ring-[#1976d2]/20 ${colorFor(day.count)}`}
-                      style={{
-                        alignSelf: "center",
-                        aspectRatio: "1 / 1",
-                        gridColumn: weekIndex + 1,
-                        gridRow: dayIndex + 1,
-                        justifySelf: "center",
-                        maxWidth: heatmapWidth < 520 ? 18 : heatmapCellMaxPx,
-                        width: "100%",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      key={`empty-${weekIndex}-${dayIndex}`}
-                      className="bg-transparent"
-                      style={{
-                        alignSelf: "center",
-                        aspectRatio: "1 / 1",
-                        gridColumn: weekIndex + 1,
-                        gridRow: dayIndex + 1,
-                        justifySelf: "center",
-                        maxWidth: heatmapWidth < 520 ? 18 : heatmapCellMaxPx,
-                        width: "100%",
-                      }}
-                    />
-                  ))
+                week.map((day, dayIndex) => (
+                  <div
+                    key={day?.date || `${weekIndex}-${dayIndex}`}
+                    title={day ? `${day.date}: ${day.count} submissions, ${day.studyTimeMinutes} min, ${day.accuracy}% accuracy` : ""}
+                    className="relative z-10 aspect-square w-full rounded-sm transition-colors hover:ring-2 hover:ring-[#1976d2]/20"
+                    style={{
+                      background: day ? colorFor(day.count) : "transparent",
+                      gridColumn: weekIndex + 1,
+                      gridRow: dayIndex + 1,
+                    }}
+                  />
+                ))
               ))}
             </div>
           </div>
@@ -624,29 +628,27 @@ function ActivityHeatmap({ days, stats, updatedAt }: { days: HeatmapDay[]; stats
 
 export default function DashboardOverview() {
   const { user } = useAuth();
-  const [liveActivity, setLiveActivity] = useState<{
-    activity: HeatmapDay[];
-    stats: HeatmapStats;
-  } | null>(null);
+  const [selectedActivityYear, setSelectedActivityYear] = useState(new Date().getFullYear());
+  const [liveActivity, setLiveActivity] = useState<ActivityPayload | null>(null);
   const [activityUpdatedAt, setActivityUpdatedAt] = useState<Date | null>(null);
 
   const { data, loading, error } = useDashboardQuery(async () => {
     const [overview, streak, activity, contestPerformance] = await Promise.all([
       dashboardApi.overview(),
       dashboardApi.streakTracking(),
-      dashboardApi.activity(),
+      dashboardApi.activity(selectedActivityYear),
       dashboardApi.contestPerformance(),
     ]);
 
     return { overview, streak, activity, contestPerformance };
-  }, []);
+  }, [selectedActivityYear]);
 
   useEffect(() => {
     if (!data) return undefined;
     setLiveActivity(data.activity);
     setActivityUpdatedAt(new Date());
     const refreshActivity = () => {
-      dashboardApi.activity().then((activity) => {
+      dashboardApi.activity(selectedActivityYear).then((activity) => {
         setLiveActivity(activity);
         setActivityUpdatedAt(new Date());
       }).catch(() => {
@@ -666,7 +668,7 @@ export default function DashboardOverview() {
       window.removeEventListener("focus", refreshActivity);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [data]);
+  }, [selectedActivityYear, data]);
 
   const stats = (data?.overview.stats ?? {}) as {
     totalAttempted?: number;
@@ -732,7 +734,16 @@ export default function DashboardOverview() {
       </section>
 
       <RatingProgress data={ratingData} userName={userName} />
-      <ActivityHeatmap days={activityPayload.activity ?? []} stats={activityPayload.stats ?? emptyActivityStats} updatedAt={activityUpdatedAt} />
+      <ActivityHeatmap
+        days={activityPayload.activity ?? []}
+        stats={activityPayload.stats ?? emptyActivityStats}
+        year={activityPayload.year ?? selectedActivityYear}
+        availableYears={activityPayload.availableYears ?? [selectedActivityYear]}
+        onYearChange={setSelectedActivityYear}
+        updatedAt={activityUpdatedAt}
+        startDate={activityPayload.startDate}
+        endDate={activityPayload.endDate}
+      />
     </div>
   );
 }

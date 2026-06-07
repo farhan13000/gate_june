@@ -342,13 +342,35 @@ export default function Contests() {
     }
     if (registered && postContestStates.includes(contest.contestState)) {
       return (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(`/contests/${contest._id}`)}
+            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+          >
+            <Eye size={13} />
+            {resultActionLabel(contest.contestState)}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(`/contests/${contest._id}/practice`)}
+            className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+          >
+            <BookOpenCheck size={13} />
+            Practice
+          </button>
+        </div>
+      );
+    }
+    if (postContestStates.includes(contest.contestState)) {
+      return (
         <button
           type="button"
-          onClick={() => navigate(`/contests/${contest._id}`)}
+          onClick={() => navigate(`/contests/${contest._id}/practice`)}
           className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
         >
-          <Eye size={13} />
-          {resultActionLabel(contest.contestState)}
+          <BookOpenCheck size={13} />
+          Practice
         </button>
       );
     }

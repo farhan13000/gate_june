@@ -14,7 +14,6 @@ const labelMap: Record<string, string> = {
   recommendations: "Recommendations",
   "contest-performance": "Contest Performance",
   leaderboard: "Leaderboard",
-  activity: "Activity",
 };
 
 export default function DashboardBreadcrumbs() {

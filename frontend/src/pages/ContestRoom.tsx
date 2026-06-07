@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Clock3, Eye, Flag, Gavel, Send } from "lucide-react";
 import { toast } from "sonner";
 import LatexRenderer from "@/components/LatexRenderer";
@@ -21,6 +21,7 @@ type ContestQuestion = {
 };
 
 type RoomData = {
+  mode?: "contest" | "practice";
   contest: {
     _id: string;
     title: string;
@@ -112,7 +113,9 @@ function claimStatusClass(status?: string) {
 export default function ContestRoom() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { refreshUser } = useAuth();
+  const isPracticeRoute = location.pathname.endsWith("/practice");
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -126,11 +129,13 @@ export default function ContestRoom() {
   const [standingMeta, setStandingMeta] = useState({ frozen: false, final: false });
   const [claimForm, setClaimForm] = useState({ type: "answer_key", title: "", description: "" });
   const [claimQuestionId, setClaimQuestionId] = useState("");
+  const isPracticeMode = isPracticeRoute || room?.mode === "practice";
 
   const loadRoom = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/contests/${id}/room`, { credentials: "include" });
+      const endpoint = isPracticeRoute ? `/api/contests/${id}/practice-room` : `/api/contests/${id}/room`;
+      const res = await fetch(endpoint, { credentials: "include" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to load contest room");
       setRoom(data);
@@ -139,9 +144,10 @@ export default function ContestRoom() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, isPracticeRoute]);
 
   const loadStandings = useCallback(async () => {
+    if (isPracticeRoute) return;
     try {
       const res = await fetch(`/api/contests/${id}/standings`, { credentials: "include" });
       if (!res.ok) return;
@@ -151,7 +157,7 @@ export default function ContestRoom() {
     } catch {
       // Standings are auxiliary; keep the room usable if polling fails.
     }
-  }, [id]);
+  }, [id, isPracticeRoute]);
 
   useEffect(() => {
     loadRoom();
@@ -165,12 +171,13 @@ export default function ContestRoom() {
   }, [room?.canReveal, room?.canSubmit]);
 
   useEffect(() => {
+    if (isPracticeRoute) return undefined;
     const timer = window.setInterval(loadStandings, 5000);
     return () => window.clearInterval(timer);
-  }, [loadStandings]);
+  }, [isPracticeRoute, loadStandings]);
 
   useEffect(() => {
-    if (!id) return undefined;
+    if (!id || isPracticeRoute) return undefined;
     const esUrl = `${import.meta.env.VITE_API_BASE || ""}/api/contests/${id}/standings/stream`;
     const es = new EventSource(esUrl, { withCredentials: true });
     es.addEventListener("standings-update", (event: MessageEvent) => {
@@ -189,7 +196,7 @@ export default function ContestRoom() {
       es.close();
     };
     return () => es.close();
-  }, [id, loadRoom, room?.contest.contestState]);
+  }, [id, isPracticeRoute, loadRoom, room?.contest.contestState]);
 
   const questions = room?.contest.questions || [];
   const activeQuestion = questions[activeIndex];
@@ -226,18 +233,20 @@ export default function ContestRoom() {
   }, [activeQuestion?._id, submittedByQuestion]);
 
   const activeSubmission = activeQuestion?._id ? submittedByQuestion.get(String(activeQuestion._id)) : null;
-  const activeLocked = Boolean(room?.registration?.finishedAt);
+  const activeLocked = !isPracticeMode && Boolean(room?.registration?.finishedAt);
   const attemptedCount = room?.standing?.attemptedCount ?? submittedByQuestion.size;
   const totalQuestions = questions.length;
   const resultsVisible = Boolean(room?.canReveal);
+  const answerReviewVisible = resultsVisible || (isPracticeMode && Boolean(activeSubmission));
   const timeCard = useMemo(() => {
     if (!room) return { label: "Time", value: "--" };
+    if (isPracticeMode) return { label: "Mode", value: "Practice" };
     if (room.canReveal || ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(room.contest.contestState)) {
       return { label: "Ended", value: formatDateTime(room.contest.endTime) };
     }
     if (!room.canSubmit) return { label: "Status", value: "Closed" };
     return { label: "Time Left", value: formatRemaining(room.contest.endTime) };
-  }, [room, tick]);
+  }, [isPracticeMode, room, tick]);
   const claimStats = useMemo(() => {
     const claims = room?.claims || [];
     return {
@@ -254,8 +263,8 @@ export default function ContestRoom() {
   }, [activeQuestion?._id, claimQuestionId]);
 
   useEffect(() => {
-    if (room?.ratingChange) refreshUser();
-  }, [refreshUser, room?.ratingChange]);
+    if (!isPracticeMode && room?.ratingChange) refreshUser();
+  }, [isPracticeMode, refreshUser, room?.ratingChange]);
 
   const canSubmitAnswer = () => {
     if (!room?.canSubmit || !activeQuestion || activeLocked) return false;
@@ -266,11 +275,18 @@ export default function ContestRoom() {
 
   const submitAnswer = async () => {
     if (!activeQuestion || !canSubmitAnswer()) return;
-    const ok = window.confirm("Save this response? You can update it again until final submit or contest closure.");
+    const ok = window.confirm(
+      isPracticeMode
+        ? "Submit this practice response?"
+        : "Save this response? You can update it again until final submit or contest closure."
+    );
     if (!ok) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/contests/${id}/questions/${activeQuestion._id}/submit`, {
+      const endpoint = isPracticeMode
+        ? `/api/contests/${id}/practice-questions/${activeQuestion._id}/submit`
+        : `/api/contests/${id}/questions/${activeQuestion._id}/submit`;
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -278,7 +294,13 @@ export default function ContestRoom() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to submit answer");
-      toast.success("Response saved. The latest saved response is used for scoring.");
+      toast.success(
+        isPracticeMode
+          ? data.result?.isCorrect
+            ? "Correct. Practice response saved."
+            : "Practice response saved. Review the answer key."
+          : "Response saved. The latest saved response is used for scoring."
+      );
       await loadRoom();
     } catch (error: any) {
       toast.error(error.message || "Failed to submit answer");
@@ -376,15 +398,17 @@ export default function ContestRoom() {
           </div>
         </div>
         <div className="flex flex-col gap-3 lg:min-w-[28rem] lg:items-end">
-          <button
-            type="button"
-            disabled={!room.canSubmit || finishing || Boolean(room.registration?.finishedAt)}
-            onClick={finishExam}
-            className="inline-flex items-center justify-center gap-2 rounded-sm border border-red-700/50 bg-red-600/10 px-5 py-2.5 text-xs font-bold text-red-600 transition-all hover:bg-red-600/20 disabled:cursor-not-allowed disabled:border-border disabled:bg-secondary/50 disabled:text-muted-foreground w-full lg:w-auto"
-          >
-            <Flag size={14} />
-            {room.registration?.finishedAt ? "Attempt Locked" : "Final Submit Contest"}
-          </button>
+          {!isPracticeMode && (
+            <button
+              type="button"
+              disabled={!room.canSubmit || finishing || Boolean(room.registration?.finishedAt)}
+              onClick={finishExam}
+              className="inline-flex items-center justify-center gap-2 rounded-sm border border-red-700/50 bg-red-600/10 px-5 py-2.5 text-xs font-bold text-red-600 transition-all hover:bg-red-600/20 disabled:cursor-not-allowed disabled:border-border disabled:bg-secondary/50 disabled:text-muted-foreground w-full lg:w-auto"
+            >
+              <Flag size={14} />
+              {room.registration?.finishedAt ? "Attempt Locked" : "Final Submit Contest"}
+            </button>
+          )}
           <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-sm border border-border bg-card px-3 py-2">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{timeCard.label}</div>
@@ -397,9 +421,9 @@ export default function ContestRoom() {
               </div>
             </div>
             <div className="rounded-sm border border-border bg-card px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{resultsVisible ? "Solved" : "Status"}</div>
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{resultsVisible || isPracticeMode ? "Solved" : "Status"}</div>
               <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
-                {resultsVisible ? room.standing?.solvedCount ?? 0 : room.registration?.finishedAt ? "Submitted" : "Running"}
+                {resultsVisible || isPracticeMode ? room.standing?.solvedCount ?? 0 : room.registration?.finishedAt ? "Submitted" : "Running"}
               </div>
             </div>
             <div className="rounded-sm border border-border bg-card px-3 py-2">
@@ -454,7 +478,9 @@ export default function ContestRoom() {
               <Eye size={13} />
             </button>
             <div className="pointer-events-none absolute right-0 top-8 z-20 hidden w-64 rounded-sm border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-lg group-hover:block">
-              Saved responses can be updated until final submit or contest closure. Correctness, score, and solutions are shown only after answer key/result release.
+              {isPracticeMode
+                ? "Practice responses do not affect contest standings, final submission, or rating."
+                : "Saved responses can be updated until final submit or contest closure. Correctness, score, and solutions are shown only after answer key/result release."}
             </div>
           </div>
         </div>
@@ -474,8 +500,8 @@ export default function ContestRoom() {
               >
                 <span className="font-mono font-bold text-[10px] opacity-70">{String(index + 1).padStart(2, "0")}</span>
                 <span className="min-w-0 flex-1 truncate font-semibold">{question.contentId || question._id.slice(-6)}</span>
-                {resultsVisible && stat?.isCorrect && <CheckCircle2 size={12} className="text-green-600 shrink-0" />}
-                {!resultsVisible && submitted && <span className="h-2 w-2 rounded-full bg-primary shrink-0 shadow-[0_0_6px_hsla(var(--primary)/0.6)]" />}
+                {(resultsVisible || isPracticeMode) && stat?.isCorrect && <CheckCircle2 size={12} className="text-green-600 shrink-0" />}
+                {!resultsVisible && !(isPracticeMode && stat?.isCorrect) && submitted && <span className="h-2 w-2 rounded-full bg-primary shrink-0 shadow-[0_0_6px_hsla(var(--primary)/0.6)]" />}
               </button>
             );
           })}
@@ -513,11 +539,11 @@ export default function ContestRoom() {
             <LatexRenderer latex={activeQuestion.statement} />
           </div>
 
-          {resultsVisible && (
+          {answerReviewVisible && (
             <div className="mt-8 border-t border-border pt-6">
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="font-serif text-lg font-bold">Answer Key</h3>
-                {room.claimsOpen && (
+                {!isPracticeMode && room.claimsOpen && (
                   <button
                     type="button"
                     onClick={() => openClaimForQuestion(activeQuestion)}
@@ -542,7 +568,7 @@ export default function ContestRoom() {
                   <LatexRenderer latex={String(getCorrectAnswer(activeQuestion) || "See editorial")} />
                 )}
               </div>
-              {(claimsByQuestion.get(String(activeQuestion._id)) || []).length > 0 && (
+              {!isPracticeMode && (claimsByQuestion.get(String(activeQuestion._id)) || []).length > 0 && (
                 <div className="mt-5 rounded-sm border border-border bg-background p-4">
                   <div className="mb-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Your claims for this question</div>
                   <div className="space-y-3">
@@ -582,7 +608,11 @@ export default function ContestRoom() {
                 <div className="text-sm font-bold text-foreground">Your Answer</div>
                 <div className="mt-1 text-xs text-muted-foreground font-medium">
                   {activeSubmission
-                    ? "Latest response saved"
+                    ? isPracticeMode
+                      ? activeSubmission.isCorrect
+                        ? "Correct practice response"
+                        : "Practice response saved"
+                      : "Latest response saved"
                     : room.registration?.finishedAt
                         ? "Contest attempt locked"
                       : !room.canSubmit
@@ -659,7 +689,7 @@ export default function ContestRoom() {
           <div className="space-y-3 border-t border-border p-5 bg-card">
             {!activeLocked && room.canSubmit && (
               <div className="rounded-sm border border-amber-500/25 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-200 font-medium">
-                Saving again updates your latest response for this question.
+                {isPracticeMode ? "Practice submissions are separate from contest standings and ratings." : "Saving again updates your latest response for this question."}
               </div>
             )}
             <button
@@ -669,12 +699,14 @@ export default function ContestRoom() {
               className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wide disabled:opacity-50"
             >
               <Send size={14} />
-              {activeSubmission ? "Update Saved Answer" : "Save Answer"}
+              {isPracticeMode ? "Submit Practice Answer" : activeSubmission ? "Update Saved Answer" : "Save Answer"}
             </button>
           </div>
         </aside>
       </div>
 
+      {!isPracticeMode && (
+        <>
       <div id="contest-claims-center" className="mt-5 academic-card overflow-hidden scroll-mt-6">
         <div className="flex flex-col gap-2 border-b border-border bg-secondary/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -845,6 +877,8 @@ export default function ContestRoom() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

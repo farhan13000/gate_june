@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   BarChart2,
   BookOpen,
-  History,
   Clock,
   Target,
   Lightbulb,
@@ -16,14 +15,13 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard/overview", icon: LayoutDashboard },
+  { label: "Subjects Progress", href: "/dashboard/subjects", icon: BookOpen },
+  { label: "Tests & Contests", href: "/dashboard/contest-performance", icon: Trophy },
   { label: "Skills & Mastery", href: "/dashboard/skills", icon: Target },
   { label: "Problem Analytics", href: "/dashboard/problems", icon: Activity },
-  { label: "Tests & Contests", href: "/dashboard/contest-performance", icon: Trophy },
   { label: "Learning Intelligence", href: "/dashboard/learning-intelligence", icon: Lightbulb },
   { label: "Recommendations", href: "/dashboard/recommendations", icon: Award },
-  { label: "Activity Heatmap", href: "/dashboard/activity", icon: History },
   { label: "Weakness Analysis", href: "/dashboard/weak-areas", icon: BarChart2 },
-  { label: "Subjects Progress", href: "/dashboard/subjects", icon: BookOpen },
 ];
 
 export default function DashboardSidebar() {

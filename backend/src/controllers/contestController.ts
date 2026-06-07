@@ -6,6 +6,7 @@ import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
 import RatingHistory from "../models/RatingHistory";
+import Submission from "../models/Submission";
 import { normalizeContestRating } from "../utils/ratingDefaults";
 import { getContestState, isContestOpenForArena, isContestOpenForRegistration, isPostContestState } from "../utils/contestLifecycle";
 import { recomputeContestRanks, recomputeUserStanding } from "../utils/contestScoring";
@@ -421,6 +422,114 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
   }
 };
 
+export const getContestPracticeRoom = async (req: Request, res: Response): Promise<void> => {
+  try {
+    await syncContestLifecycleById(req.params.id);
+    const contest = await Contest.findOne({
+      _id: req.params.id,
+      status: { $in: ["approved", "completed"] },
+      visibility: "public",
+      lifecycle: { $ne: "draft" },
+    })
+      .populate("questions")
+      .lean();
+    if (!contest) {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+
+    const state = getContestState(contest);
+    if (!isPostContestState(state)) {
+      res.status(403).json({ message: "Practice opens after the contest ends" });
+      return;
+    }
+
+    const questionIds = (contest.questions || []).map((question: any) => question._id);
+    const submissions = await Submission.find({
+      userId: req.currentUser!._id,
+      questionId: { $in: questionIds },
+    }).sort({ createdAt: -1 }).lean();
+
+    const attemptedQuestionIds = new Set(submissions.map((submission) => String(submission.questionId)));
+    const solvedQuestionIds = new Set(submissions.filter((submission) => submission.isCorrect).map((submission) => String(submission.questionId)));
+    const latestSubmissionsByQuestion = new Map<string, any>();
+    submissions.forEach((submission: any) => {
+      const key = String(submission.questionId);
+      if (!latestSubmissionsByQuestion.has(key)) latestSubmissionsByQuestion.set(key, submission);
+    });
+
+    const questions = (contest.questions || []).map((question: any) => {
+      const hasPracticeSubmission = latestSubmissionsByQuestion.has(String(question._id));
+      return {
+        _id: question._id,
+        title: question.title,
+        contentId: question.contentId,
+        problemId: question.problemId,
+        topic: question.topic,
+        difficulty: question.difficulty,
+        statement: question.statement,
+        questionType: question.questionType,
+        imageUrl: question.imageUrl,
+        markingScheme: question.markingScheme,
+        options: (question.options || []).map((option: any) => ({
+          _id: option._id,
+          text: option.text,
+          ...(hasPracticeSubmission ? { isCorrect: option.isCorrect } : {}),
+        })),
+        ...(hasPracticeSubmission ? { solution: question.solution } : {}),
+      };
+    });
+
+    res.json({
+      mode: "practice",
+      contest: {
+        ...contest,
+        questions,
+        contestState: state,
+      },
+      registration: null,
+      submissions: Array.from(latestSubmissionsByQuestion.values()).map((submission: any) => ({
+        _id: submission._id,
+        questionId: submission.questionId,
+        answer: {
+          mcqSelected: submission.submittedOptionIds?.[0] || null,
+          msqSelected: submission.submittedOptionIds || [],
+          natAnswer: submission.natAnswer || "",
+        },
+        attemptNumber: submission.attemptNumber || 1,
+        submittedAt: submission.createdAt,
+        isCorrect: submission.isCorrect,
+        marksAwarded: submission.marksAwarded,
+        judgeStatus: submission.isCorrect ? "accepted" : "wrong",
+      })),
+      standing: {
+        attemptedCount: attemptedQuestionIds.size,
+        solvedCount: solvedQuestionIds.size,
+        score: submissions.reduce((sum, submission) => sum + Number(submission.marksAwarded || 0), 0),
+        penaltyMinutes: 0,
+        problemStats: questionIds.map((questionId: any) => {
+          const id = String(questionId);
+          const rows = submissions.filter((submission) => String(submission.questionId) === id);
+          return {
+            questionId: id,
+            attempts: rows.length,
+            isCorrect: rows.some((submission) => submission.isCorrect),
+            marksAwarded: rows[0]?.marksAwarded || 0,
+          };
+        }),
+      },
+      claims: [],
+      canSubmit: true,
+      canReveal: false,
+      claimsOpen: false,
+      ratingChange: null,
+      serverTime: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load contest practice room" });
+  }
+};
+
 export const createContestClaim = async (req: Request, res: Response): Promise<void> => {
   try {
     const contest = await syncContestLifecycleById(req.params.id);
@@ -590,6 +699,94 @@ export const submitContestAnswer = async (req: Request, res: Response): Promise<
     });
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to submit contest answer" });
+  }
+};
+
+export const submitContestPracticeAnswer = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contest = await syncContestLifecycleById(req.params.id);
+    if (!contest) {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    if (contest.status !== "approved" && contest.status !== "completed") {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    if (contest.visibility !== "public" || contest.lifecycle === "draft") {
+      res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    if (!isPostContestState(getContestState(contest))) {
+      res.status(403).json({ message: "Practice opens after the contest ends" });
+      return;
+    }
+
+    const questionId = req.params.questionId;
+    if (!contest.questions.map((id) => String(id)).includes(String(questionId))) {
+      res.status(400).json({ message: "Question is not part of this contest" });
+      return;
+    }
+
+    const question = await Question.findById(questionId);
+    if (!question) {
+      res.status(404).json({ message: "Question not found" });
+      return;
+    }
+
+    const judged = judgeAnswer(question, req.body);
+    const previousAttempts = await Submission.countDocuments({
+      userId: req.currentUser!._id,
+      questionId,
+    });
+    const submittedOptionIds =
+      question.questionType === "MCQ"
+        ? req.body.mcqSelected
+          ? [req.body.mcqSelected]
+          : []
+        : question.questionType === "MSQ" && Array.isArray(req.body.msqSelected)
+          ? req.body.msqSelected
+          : [];
+
+    const submission = await Submission.create({
+      userId: req.currentUser!._id,
+      questionId,
+      submittedOptionIds,
+      natAnswer: question.questionType === "NAT" ? req.body.natAnswer || "" : undefined,
+      isCorrect: judged.isCorrect,
+      marksAwarded: judged.marksAwarded,
+      timeTaken: req.body.timeTaken || question.estimatedTime || 120,
+      subjectId: question.subjectId,
+      chapterId: question.chapterId,
+      topicId: question.topicId,
+      subtopicId: question.subtopicId,
+      difficulty: question.difficulty,
+      attemptNumber: previousAttempts + 1,
+    });
+
+    res.status(201).json({
+      submission: {
+        _id: submission._id,
+        questionId: submission.questionId,
+        answer: {
+          mcqSelected: question.questionType === "MCQ" ? submittedOptionIds[0] || null : null,
+          msqSelected: question.questionType === "MSQ" ? submittedOptionIds : [],
+          natAnswer: submission.natAnswer || "",
+        },
+        attemptNumber: submission.attemptNumber,
+        submittedAt: submission.createdAt,
+        isCorrect: submission.isCorrect,
+        marksAwarded: submission.marksAwarded,
+        judgeStatus: submission.isCorrect ? "accepted" : "wrong",
+      },
+      result: {
+        received: true,
+        isCorrect: submission.isCorrect,
+        marksAwarded: submission.marksAwarded,
+      },
+    });
+  } catch (error: any) {
+    res.status(400).json({ message: error.message || "Failed to submit practice answer" });
   }
 };
 

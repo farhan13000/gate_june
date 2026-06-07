@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BookOpenCheck,
   BrainCircuit,
@@ -25,10 +25,14 @@ type TopicStatus = "strong" | "moderate" | "weak";
 type SubjectsView = "overview" | "subject";
 
 interface ApiTopic {
+  id?: string;
   topic: string;
+  chapter?: string;
   mastery: number;
   completion: number;
   accuracy: number;
+  attempts?: number;
+  timeSpentMinutes?: number;
   conceptDecay: number;
   weakness: boolean;
 }
@@ -45,6 +49,8 @@ interface ApiSubject {
   learningConsistency: number;
   recentActivity: number;
   attempted: number;
+  timeSpentMinutes?: number;
+  activeStreakDays?: number;
   topics: ApiTopic[];
 }
 
@@ -119,56 +125,6 @@ const coverageBands = [
   { label: "75 - 100%", meta: "Excellent", color: "#10b981" },
 ];
 
-const requiredSubjects = [
-  "Engineering Mathematics",
-  "Probability & Statistics",
-  "Linear Algebra",
-  "Calculus & Optimization",
-  "Data Structures",
-  "Algorithms",
-  "Machine Learning",
-  "Artificial Intelligence",
-  "DBMS",
-  "Operating Systems",
-  "Computer Networks",
-];
-
-const topicBanks: Record<string, string[]> = {
-  "Engineering Mathematics": [
-    "Vector Calculus",
-    "Linear Algebra",
-    "Calculus",
-    "Differential Equations",
-    "Integral Calculus",
-    "Series",
-    "Multivariable Calculus",
-    "Transforms",
-    "Numerical Methods",
-    "Probability",
-    "Statistics",
-    "Complex Analysis",
-  ],
-  "Probability & Statistics": [
-    "Random Variables",
-    "Distributions",
-    "Bayes Theorem",
-    "Estimation",
-    "Hypothesis Tests",
-    "Regression",
-    "Sampling",
-    "Moments",
-  ],
-  "Linear Algebra": ["Matrices", "Rank", "Eigenvalues", "Vector Spaces", "Orthogonality", "SVD", "Quadratic Forms", "Linear Systems"],
-  "Calculus & Optimization": ["Limits", "Continuity", "Gradients", "Hessian", "Convexity", "Lagrange", "KKT", "Numerical Search"],
-  "Data Structures": ["Arrays", "Stacks", "Queues", "Trees", "Graphs", "Hashing", "Heaps", "Search"],
-  Algorithms: ["Sorting", "Greedy", "Dynamic Programming", "Graphs", "Divide Conquer", "Complexity", "Shortest Paths", "MST"],
-  "Machine Learning": ["Regression", "Classification", "Clustering", "Trees", "SVM", "Neural Nets", "Validation", "Regularization"],
-  "Artificial Intelligence": ["Search", "Planning", "Logic", "Inference", "Knowledge Graphs", "Agents", "Games", "Reasoning"],
-  DBMS: ["ER Model", "SQL", "Normalization", "Transactions", "Indexing", "Query Plans", "Concurrency", "Recovery"],
-  "Operating Systems": ["Processes", "Threads", "Scheduling", "Memory", "Paging", "Deadlocks", "File Systems", "Synchronization"],
-  "Computer Networks": ["OSI", "TCP", "Routing", "IP", "Congestion", "DNS", "HTTP", "Security"],
-};
-
 const subjectIcon = {
   "Engineering Mathematics": Sigma,
   "Probability & Statistics": Pi,
@@ -193,43 +149,8 @@ function statusFor(value: number): TopicStatus {
   return "weak";
 }
 
-function seededValue(seed: string, index: number, base: number, span = 28) {
-  const code = seed.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return clamp(base + ((code + index * 17) % span) - span / 2);
-}
-
-function buildFallbackSubject(subject: string, index: number): ApiSubject {
-  const mastery = clamp(72 - index * 3 + (index % 3) * 5);
-  const accuracy = clamp(70 - index * 2 + (index % 4) * 3);
-  const completion = clamp(74 - index * 2 + (index % 2) * 4);
-
-  return {
-    id: subject.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-    subject,
-    mastery,
-    syllabusCompletion: completion,
-    revisionStatus: index % 4 === 0 ? "Revision due" : "Healthy",
-    revisionFreshness: clamp(82 - index * 4),
-    confidenceScore: clamp(accuracy + 4),
-    averageAccuracy: accuracy,
-    learningConsistency: clamp(68 - index + (index % 3) * 4),
-    recentActivity: 8 + index * 2,
-    attempted: 140 - index * 6,
-    topics: [],
-  };
-}
-
-function normalizeSubject(subject: ApiSubject, fallbackIndex: number): SubjectMetric {
-  const sourceTopics = subject.topics?.length
-    ? subject.topics
-    : (topicBanks[subject.subject] ?? topicBanks["Engineering Mathematics"]).map((topic, index) => ({
-        topic,
-        mastery: seededValue(subject.subject, index, subject.mastery),
-        completion: seededValue(topic, index, subject.syllabusCompletion),
-        accuracy: seededValue(topic, index, subject.averageAccuracy),
-        conceptDecay: clamp(24 + ((index * 9 + fallbackIndex * 5) % 35)),
-        weakness: false,
-      }));
+function normalizeSubject(subject: ApiSubject): SubjectMetric {
+  const sourceTopics = subject.topics ?? [];
 
   const topics = sourceTopics.slice(0, 12).map((topic, index) => {
     const accuracy = clamp(topic.accuracy || subject.averageAccuracy);
@@ -246,7 +167,7 @@ function normalizeSubject(subject: ApiSubject, fallbackIndex: number): SubjectMe
       confidence: clamp(subject.confidenceScore - index + (accuracy - 60) / 4),
       retention: clamp(100 - conceptDecay),
       speed: clamp(58 + subject.learningConsistency / 3 + ((index % 3) - 1) * 7),
-      attempts: Math.max(8, Math.round(subject.attempted / Math.max(sourceTopics.length, 1)) + index * 2),
+      attempts: Math.max(0, topic.attempts ?? 0),
       status,
       conceptDecay,
     };
@@ -259,20 +180,13 @@ function normalizeSubject(subject: ApiSubject, fallbackIndex: number): SubjectMe
     confidenceScore: clamp(subject.confidenceScore),
     averageAccuracy: clamp(subject.averageAccuracy),
     learningConsistency: clamp(subject.learningConsistency),
-    revisionFreshness: clamp(subject.revisionFreshness ?? 70),
+    revisionFreshness: clamp(subject.revisionFreshness ?? 0),
     overallScore: clamp((subject.mastery + subject.averageAccuracy + subject.confidenceScore + subject.learningConsistency) / 4),
-    studyHours: Math.max(6, Math.round((subject.attempted * 2.4) / 60 + fallbackIndex * 1.5)),
-    streak: Math.max(2, 13 - fallbackIndex),
-    improvement: clamp(4 + fallbackIndex + (subject.recentActivity % 9), 0, 24),
+    studyHours: Math.max(0, Math.round((subject.timeSpentMinutes ?? 0) / 60)),
+    streak: Math.max(0, subject.activeStreakDays ?? 0),
+    improvement: clamp(subject.recentActivity, 0, 24),
     topics,
   };
-}
-
-function mergeRequiredSubjects(apiSubjects: ApiSubject[] = []) {
-  return requiredSubjects.map((subject, index) => {
-    const found = apiSubjects.find((item) => item.subject.toLowerCase() === subject.toLowerCase());
-    return normalizeSubject(found ?? buildFallbackSubject(subject, index), index);
-  });
 }
 
 function polarPoint(cx: number, cy: number, radius: number, angle: number) {
@@ -759,11 +673,17 @@ function MetricTile({ icon: Icon, label, value, meta }: { icon: typeof Target; l
 
 export default function SubjectProgress() {
   const { data, loading, error } = useDashboardQuery(() => dashboardApi.subjectIntelligence(), []);
-  const subjects = useMemo(() => mergeRequiredSubjects(data?.subjects), [data]);
-  const [activeId, setActiveId] = useState(requiredSubjects[0].toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  const subjects = useMemo(() => (data?.subjects ?? []).map(normalizeSubject), [data]);
+  const [activeId, setActiveId] = useState("");
   const [view, setView] = useState<SubjectsView>("overview");
   const [subjectPanelCollapsed, setSubjectPanelCollapsed] = useState(false);
   const activeSubject = subjects.find((subject) => subject.id === activeId) ?? subjects[0];
+
+  useEffect(() => {
+    if (subjects[0] && (!activeId || !subjects.some((subject) => subject.id === activeId))) {
+      setActiveId(subjects[0].id);
+    }
+  }, [activeId, subjects]);
 
   const openSubjectWise = (id?: string) => {
     if (id) {
@@ -775,6 +695,7 @@ export default function SubjectProgress() {
 
   if (loading) return <SkeletonLoader rows={7} />;
   if (error || !data) return <EmptyState title="Subject intelligence unavailable" description="The subject analytics service could not be loaded." />;
+  if (!subjects.length) return <EmptyState title="No subject data yet" description="Subjects will appear here after the backend taxonomy and your progress data are available." />;
 
   return (
     <div className="subjects-analytics-page">

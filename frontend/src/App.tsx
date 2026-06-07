@@ -34,7 +34,6 @@ import WeakAreaAnalysis from "./pages/dashboard/WeakAreaAnalysis";
 import LearningRecommendations from "./pages/dashboard/LearningRecommendations";
 import ContestPerformance from "./pages/dashboard/ContestPerformance";
 import DashboardLeaderboard from "./pages/dashboard/Leaderboard";
-import ActivityTimeline from "./pages/dashboard/ActivityTimeline";
 import SkillsDashboard from "./pages/dashboard/SkillsDashboard";
 import ProblemAnalytics from "./pages/dashboard/ProblemAnalytics";
 import LearningIntelligence from "./pages/dashboard/LearningIntelligence";
@@ -123,6 +122,14 @@ const App = () => (
               }
             />
             <Route
+              path="/contests/:id/practice"
+              element={
+                <ProtectedRoute>
+                  <ContestRoom />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/contests/:id"
               element={
                 <ProtectedRoute>
@@ -157,7 +164,6 @@ const App = () => (
                       <Route path="recommendations" element={<LearningRecommendations />} />
                       <Route path="contest-performance" element={<ContestPerformance />} />
                       <Route path="leaderboard" element={<DashboardLeaderboard />} />
-                      <Route path="activity" element={<ActivityTimeline />} />
                     </Routes>
                   </DashboardLayout>
                 </ProtectedRoute>

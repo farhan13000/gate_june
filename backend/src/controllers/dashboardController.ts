@@ -501,11 +501,24 @@ export const getActivity = async (req: Request, res: Response) => {
       byDate.set(date, current);
     });
 
-    const heatmapData: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[] = [];
     const now = new Date();
-    for (let i = 370; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
+    const currentYear = now.getUTCFullYear();
+    const yearsWithActivity = Array.from(
+      new Set(submissions.map((submission) => new Date(submission.createdAt).getUTCFullYear()))
+    ).sort((a, b) => b - a);
+    const availableYears = yearsWithActivity.includes(currentYear) ? yearsWithActivity : [currentYear, ...yearsWithActivity];
+    const requestedYear = Number(req.query.year);
+    const selectedYear = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= currentYear
+      ? requestedYear
+      : currentYear;
+    const start = new Date(Date.UTC(selectedYear, 0, 1));
+    const end = new Date(Date.UTC(selectedYear, 11, 31));
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
+    const heatmapData: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[] = [];
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(start);
+      d.setUTCDate(start.getUTCDate() + i);
       const dateStr = d.toISOString().split("T")[0];
       const row = byDate.get(dateStr) || { count: 0, correct: 0, timeSeconds: 0 };
       heatmapData.push({
@@ -558,6 +571,10 @@ export const getActivity = async (req: Request, res: Response) => {
 
     res.json({
       activity: heatmapData,
+      year: selectedYear,
+      availableYears,
+      startDate: heatmapData[0]?.date,
+      endDate: heatmapData[heatmapData.length - 1]?.date,
       stats: {
         solvedAllTime: solvedQuestionIds.length,
         solvedLastYear,

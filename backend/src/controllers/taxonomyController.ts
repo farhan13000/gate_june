@@ -7,29 +7,39 @@ import Question from "../models/Question";
 import Theory from "../models/Theory";
 import Submission from "../models/Submission";
 
+function sortByOrderThenName<T extends { order?: number; name?: string }>(items: T[]) {
+  return [...items].sort((a, b) => {
+    const orderDiff = (a.order ?? 0) - (b.order ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+}
+
 /** GET /api/taxonomy/tree — full hierarchy for navigation */
 export const getTaxonomyTree = async (_req: Request, res: Response): Promise<void> => {
   try {
     const [subjects, chapters, topics, subtopics] = await Promise.all([
-      Subject.find({ enabled: true }).sort({ order: 1 }).lean(),
-      Chapter.find({ enabled: true }).sort({ order: 1 }).lean(),
-      Topic.find({ enabled: true }).sort({ order: 1 }).lean(),
-      Subtopic.find({ enabled: true }).sort({ order: 1 }).lean(),
+      Subject.find({ enabled: true }).sort({ order: 1, name: 1 }).lean(),
+      Chapter.find({ enabled: true }).sort({ subjectId: 1, order: 1, name: 1 }).lean(),
+      Topic.find({ enabled: true }).sort({ chapterId: 1, order: 1, name: 1 }).lean(),
+      Subtopic.find({ enabled: true }).sort({ topicId: 1, order: 1, name: 1 }).lean(),
     ]);
 
-    const tree = subjects.map((s) => ({
+    res.setHeader("Cache-Control", "no-store");
+
+    const tree = sortByOrderThenName(subjects).map((s) => ({
       ...s,
-      chapters: chapters
+      chapters: sortByOrderThenName(chapters
         .filter((c) => c.subjectId === s.subjectId)
         .map((c) => ({
           ...c,
-          topics: topics
+          topics: sortByOrderThenName(topics
             .filter((t) => t.chapterId === c.chapterId)
             .map((t) => ({
               ...t,
-              subtopics: subtopics.filter((st) => st.topicId === t.topicId),
-            })),
-        })),
+              subtopics: sortByOrderThenName(subtopics.filter((st) => st.topicId === t.topicId)),
+            }))),
+        }))),
     }));
 
     res.json(tree);

@@ -6,6 +6,7 @@ import ContestStanding from "../../../backend/src/models/ContestStanding";
 import ContestSubmission from "../../../backend/src/models/ContestSubmission";
 import Question from "../../../backend/src/models/Question";
 import RatingHistory from "../../../backend/src/models/RatingHistory";
+import Submission from "../../../backend/src/models/Submission";
 import User from "../../../backend/src/models/User";
 
 export async function connectTestDb() {
@@ -30,6 +31,7 @@ export async function resetContestCollections() {
     ContestSubmission.deleteMany({}),
     Question.deleteMany({}),
     RatingHistory.deleteMany({}),
+    Submission.deleteMany({}),
     User.deleteMany({}),
   ]);
 }

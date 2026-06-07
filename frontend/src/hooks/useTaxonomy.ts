@@ -10,7 +10,7 @@ export function useTaxonomy() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/taxonomy/tree");
+      const res = await fetch("/api/taxonomy/tree", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load taxonomy");
       const data = await res.json();
       setTree(Array.isArray(data) ? data : []);

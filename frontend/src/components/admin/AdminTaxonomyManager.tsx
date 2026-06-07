@@ -123,6 +123,20 @@ export default function AdminTaxonomyManager() {
     return drafts[id]?.[key] ?? item[key] ?? "";
   };
 
+  const parseOrder = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const splitOrderPatch = (patch: Record<string, unknown>) => {
+    const { order, ...rest } = patch;
+    return {
+      hasOrder: Object.prototype.hasOwnProperty.call(patch, "order"),
+      order,
+      rest,
+    };
+  };
+
   const toggleSelected = (id: string) => {
     setSelectedIds((current) =>
       current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]
@@ -161,7 +175,68 @@ export default function AdminTaxonomyManager() {
     }
   };
 
+  const persistReorder = async (orderDrafts: DraftMap) => {
+    const rankedItems = items
+      .map((item, index) => {
+        const id = String(item[idField]);
+        return {
+          id,
+          currentIndex: index,
+          desiredOrder: parseOrder(orderDrafts[id]?.order ?? item.order, index + 1),
+        };
+      })
+      .sort((a, b) => a.desiredOrder - b.desiredOrder || a.currentIndex - b.currentIndex)
+      .map((item, index) => ({
+        id: item.id,
+        order: index + 1,
+      }));
+
+    const res = await fetch("/api/admin/taxonomy/reorder", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level, items: rankedItems }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || "Failed to reorder");
+    }
+  };
+
+  const saveItemPatch = async (id: string, patch: Record<string, unknown>) => {
+    const { hasOrder, order, rest } = splitOrderPatch(patch);
+    const hasRegularFields = Object.keys(rest).length > 0;
+
+    if (hasRegularFields) {
+      const res = await fetch(`/api/admin/taxonomy/${level}/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rest),
+      });
+      if (!res.ok) return false;
+    }
+
+    if (hasOrder) {
+      await persistReorder({ [id]: { order: order as string | number | boolean } });
+    }
+
+    return true;
+  };
+
   const handleUpdate = async (id: string, patch: Record<string, unknown>) => {
+    if (Object.keys(patch).length === 0) return;
+    const ok = await saveItemPatch(id, patch);
+    if (ok) {
+      toast.success("Updated");
+      loadItems();
+    } else {
+      toast.error("Update failed");
+    }
+  };
+
+  const handleDirectUpdate = async (id: string, patch: Record<string, unknown>) => {
     const res = await fetch(`/api/admin/taxonomy/${level}/${id}`, {
       method: "PUT",
       credentials: "include",
@@ -171,6 +246,8 @@ export default function AdminTaxonomyManager() {
     if (res.ok) {
       toast.success("Updated");
       loadItems();
+    } else {
+      toast.error("Update failed");
     }
   };
 
@@ -206,16 +283,34 @@ export default function AdminTaxonomyManager() {
       return;
     }
 
+    const orderDrafts: DraftMap = {};
+    const regularUpdates = editedIds
+      .map((id) => {
+        const { hasOrder, rest } = splitOrderPatch(drafts[id] || {});
+        if (hasOrder) orderDrafts[id] = { order: drafts[id].order };
+        return Object.keys(rest).length > 0 ? { id, patch: rest } : null;
+      })
+      .filter((item): item is { id: string; patch: Record<string, unknown> } => Boolean(item));
+
     const results = await Promise.all(
-      editedIds.map((id) =>
+      regularUpdates.map(({ id, patch }) =>
         fetch(`/api/admin/taxonomy/${level}/${id}`, {
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(drafts[id]),
+          body: JSON.stringify(patch),
         })
       )
     );
+
+    try {
+      if (Object.keys(orderDrafts).length > 0) {
+        await persistReorder(orderDrafts);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to reorder");
+      return;
+    }
 
     if (results.every((res) => res.ok)) {
       toast.success(`Saved ${editedIds.length} ${level}`);
@@ -580,7 +675,7 @@ export default function AdminTaxonomyManager() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleUpdate(id, { enabled: !item.enabled })}
+                    onClick={() => handleDirectUpdate(id, { enabled: !item.enabled })}
                     className="rounded-sm border border-border px-2 py-1 text-xs hover:bg-secondary"
                   >
                     {item.enabled ? "Disable" : "Enable"}
@@ -692,7 +787,7 @@ export default function AdminTaxonomyManager() {
                   <button
                     type="button"
                     onClick={() =>
-                      handleUpdate(item[idField], { enabled: !item.enabled })
+                      handleDirectUpdate(item[idField], { enabled: !item.enabled })
                     }
                     className="px-2 py-1 border border-border rounded-sm hover:bg-secondary"
                   >

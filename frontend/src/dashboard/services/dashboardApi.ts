@@ -16,8 +16,12 @@ export async function dashboardFetch<T>(path: string, init?: RequestInit): Promi
 
 export const dashboardApi = {
   overview: () => dashboardFetch<{ stats: Record<string, unknown> }>("/overview"),
-  activity: () => dashboardFetch<{
+  activity: (year?: number) => dashboardFetch<{
     activity: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[];
+    year: number;
+    availableYears: number[];
+    startDate?: string;
+    endDate?: string;
     stats: {
       solvedAllTime: number;
       solvedLastYear: number;
@@ -26,7 +30,7 @@ export const dashboardApi = {
       streakLastYear: number;
       streakLastMonth: number;
     };
-  }>("/activity/heatmap"),
+  }>(`/activity/heatmap${year ? `?year=${encodeURIComponent(String(year))}` : ""}`),
   intelligenceIndex: () => dashboardFetch<{ index: number; details: Record<string, number> }>("/intelligence-index"),
   readinessScore: () => dashboardFetch<{
     readinessScore: number;
