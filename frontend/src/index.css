@@ -77,8 +77,8 @@
     --sidebar-ring: 210 85% 45%;
 
     /* Layout system — AtCoder-style centered container */
-    --layout-max-width: 90rem;
-    /* 1440px */
+    --layout-max-width: 85rem;
+    /* 1360px */
     --layout-padding-x: 1rem;
     --layout-section-gap: 1.5rem;
     --layout-page-py: 1.5rem;
