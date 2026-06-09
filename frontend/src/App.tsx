@@ -31,9 +31,6 @@ import DashboardOverview from "./pages/dashboard/DashboardOverview";
 import PerformanceAnalytics from "./pages/dashboard/PerformanceAnalytics";
 import SubjectProgress from "./pages/dashboard/SubjectProgress";
 import SubjectDetail from "./pages/dashboard/SubjectDetail";
-import TimeAnalysis from "./pages/dashboard/TimeAnalysis";
-import WeakAreaAnalysis from "./pages/dashboard/WeakAreaAnalysis";
-import LearningRecommendations from "./pages/dashboard/LearningRecommendations";
 import ContestPerformance from "./pages/dashboard/ContestPerformance";
 import DashboardLeaderboard from "./pages/dashboard/Leaderboard";
 import SkillsDashboard from "./pages/dashboard/SkillsDashboard";
@@ -163,11 +160,9 @@ const App = () => (
                       <Route path="learning-intelligence" element={<LearningIntelligence />} />
                       <Route path="subjects" element={<SubjectProgress />} />
                       <Route path="subjects/:subjectId" element={<SubjectDetail />} />
-                      <Route path="time-analysis" element={<TimeAnalysis />} />
-                      <Route path="weak-areas" element={<WeakAreaAnalysis />} />
-                      <Route path="recommendations" element={<LearningRecommendations />} />
                       <Route path="contest-performance" element={<ContestPerformance />} />
                       <Route path="leaderboard" element={<DashboardLeaderboard />} />
+                      <Route path="*" element={<Navigate to="overview" replace />} />
                     </Routes>
                   </DashboardLayout>
                 </ProtectedRoute>

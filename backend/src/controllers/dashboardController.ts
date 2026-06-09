@@ -5,6 +5,7 @@ import RatingHistory from "../models/RatingHistory";
 import Contest from "../models/Contest";
 import ContestRegistration from "../models/ContestRegistration";
 import ContestStanding from "../models/ContestStanding";
+import ContestSubmission from "../models/ContestSubmission";
 import UserActivityLog from "../models/UserActivityLog";
 import Question from "../models/Question";
 import { getContestState } from "../utils/contestLifecycle";
@@ -21,6 +22,7 @@ const subjectsList = [
 ];
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+const dayMs = 24 * 60 * 60 * 1000;
 
 // --- Helpers (retained and simplified) ---
 
@@ -486,25 +488,65 @@ export const getLeaderboard = async (req: Request, res: Response) => {
 export const getActivity = async (req: Request, res: Response) => {
   try {
     const userId = req.currentUser!._id;
-    const submissions = await Submission.find({ userId })
-      .select("createdAt isCorrect timeTaken questionId")
-      .sort({ createdAt: 1 })
-      .lean();
+    const timezoneOffsetMinutes = Number.isFinite(Number(req.query.timezoneOffsetMinutes))
+      ? Number(req.query.timezoneOffsetMinutes)
+      : 0;
+
+    const dateKeyForUser = (date: Date) => {
+      const localDate = new Date(date.getTime() - timezoneOffsetMinutes * 60 * 1000);
+      return localDate.toISOString().slice(0, 10);
+    };
+
+    const dateKeyFromParts = (year: number, month: number, day: number) => {
+      const value = new Date(Date.UTC(year, month, day));
+      return value.toISOString().slice(0, 10);
+    };
+
+    const serialDay = (dateKey: string) => {
+      const [year, month, day] = dateKey.split("-").map(Number);
+      return Math.floor(Date.UTC(year, month - 1, day) / dayMs);
+    };
+
+    const [practiceSubmissions, contestSubmissions] = await Promise.all([
+      Submission.find({ userId })
+        .select("createdAt isCorrect timeTaken questionId")
+        .sort({ createdAt: 1 })
+        .lean(),
+      ContestSubmission.find({ userId })
+        .select("submittedAt isCorrect questionId")
+        .sort({ submittedAt: 1 })
+        .lean(),
+    ]);
+
+    const submissions = [
+      ...practiceSubmissions.map((submission) => ({
+        date: submission.createdAt,
+        isCorrect: submission.isCorrect,
+        questionId: submission.questionId,
+        timeTaken: submission.timeTaken || 0,
+      })),
+      ...contestSubmissions.map((submission) => ({
+        date: submission.submittedAt,
+        isCorrect: submission.isCorrect,
+        questionId: submission.questionId,
+        timeTaken: 0,
+      })),
+    ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const byDate = new Map<string, { count: number; correct: number; timeSeconds: number }>();
     submissions.forEach((submission) => {
-      const date = new Date(submission.createdAt).toISOString().split("T")[0];
+      const date = dateKeyForUser(new Date(submission.date));
       const current = byDate.get(date) || { count: 0, correct: 0, timeSeconds: 0 };
       current.count += 1;
       if (submission.isCorrect) current.correct += 1;
-      current.timeSeconds += submission.timeTaken || 120;
+      current.timeSeconds += Math.max(0, submission.timeTaken || 0);
       byDate.set(date, current);
     });
 
     const now = new Date();
-    const currentYear = now.getUTCFullYear();
+    const currentYear = Number(dateKeyForUser(now).slice(0, 4));
     const yearsWithActivity = Array.from(
-      new Set(submissions.map((submission) => new Date(submission.createdAt).getUTCFullYear()))
+      new Set(submissions.map((submission) => Number(dateKeyForUser(new Date(submission.date)).slice(0, 4))))
     ).sort((a, b) => b - a);
     const availableYears = yearsWithActivity.includes(currentYear) ? yearsWithActivity : [currentYear, ...yearsWithActivity];
     const requestedYear = Number(req.query.year);
@@ -513,13 +555,11 @@ export const getActivity = async (req: Request, res: Response) => {
       : currentYear;
     const start = new Date(Date.UTC(selectedYear, 0, 1));
     const end = new Date(Date.UTC(selectedYear, 11, 31));
-    const totalDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
 
     const heatmapData: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[] = [];
     for (let i = 0; i < totalDays; i++) {
-      const d = new Date(start);
-      d.setUTCDate(start.getUTCDate() + i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = dateKeyFromParts(selectedYear, 0, 1 + i);
       const row = byDate.get(dateStr) || { count: 0, correct: 0, timeSeconds: 0 };
       heatmapData.push({
         date: dateStr,
@@ -539,35 +579,47 @@ export const getActivity = async (req: Request, res: Response) => {
 
     const solvedLastYear = new Set(
       submissions
-        .filter((submission) => submission.isCorrect && new Date(submission.createdAt) >= oneYearAgo)
+        .filter((submission) => submission.isCorrect && new Date(submission.date) >= oneYearAgo)
         .map((submission) => String(submission.questionId))
     ).size;
     const solvedLastMonth = new Set(
       submissions
-        .filter((submission) => submission.isCorrect && new Date(submission.createdAt) >= oneMonthAgo)
+        .filter((submission) => submission.isCorrect && new Date(submission.date) >= oneMonthAgo)
         .map((submission) => String(submission.questionId))
     ).size;
 
     function maxStreakSince(start?: Date) {
+      const startKey = start ? dateKeyForUser(start) : null;
       const activeDays = Array.from(byDate.keys())
-        .filter((date) => !start || new Date(`${date}T00:00:00.000Z`) >= start)
+        .filter((date) => !startKey || date >= startKey)
         .sort();
       let best = 0;
       let current = 0;
-      let previous: Date | null = null;
+      let previous: number | null = null;
       for (const date of activeDays) {
-        const currentDate = new Date(`${date}T00:00:00.000Z`);
+        const currentDay = serialDay(date);
         if (!previous) {
           current = 1;
         } else {
-          const diff = Math.round((currentDate.getTime() - previous.getTime()) / (24 * 60 * 60 * 1000));
+          const diff = currentDay - previous;
           current = diff === 1 ? current + 1 : 1;
         }
         best = Math.max(best, current);
-        previous = currentDate;
+        previous = currentDay;
       }
       return best;
     }
+
+    const activeRows = heatmapData.filter((day) => day.count > 0);
+    const totalSubmissions = heatmapData.reduce((sum, day) => sum + day.count, 0);
+    const totalCorrect = heatmapData.reduce((sum, day) => {
+      const row = byDate.get(day.date);
+      return sum + (row?.correct || 0);
+    }, 0);
+    const bestDay = activeRows.reduce(
+      (best, day) => (day.count > best.count ? day : best),
+      { date: "", count: 0, studyTimeMinutes: 0, accuracy: 0 }
+    );
 
     res.json({
       activity: heatmapData,
@@ -582,6 +634,10 @@ export const getActivity = async (req: Request, res: Response) => {
         maxStreak: maxStreakSince(),
         streakLastYear: maxStreakSince(oneYearAgo),
         streakLastMonth: maxStreakSince(oneMonthAgo),
+        activeDays: activeRows.length,
+        totalSubmissions,
+        averageAccuracy: totalSubmissions ? Math.round((totalCorrect / totalSubmissions) * 100) : 0,
+        bestDay,
       },
     });
   } catch (error) {

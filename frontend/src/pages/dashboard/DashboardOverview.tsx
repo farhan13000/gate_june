@@ -56,6 +56,10 @@ type HeatmapStats = {
   maxStreak: number;
   streakLastYear: number;
   streakLastMonth: number;
+  activeDays?: number;
+  totalSubmissions?: number;
+  averageAccuracy?: number;
+  bestDay?: HeatmapDay;
 };
 
 type ActivityPayload = {
@@ -83,6 +87,7 @@ const difficultyVisuals: Record<DifficultyLevel, { key: "easy" | "medium" | "har
 };
 
 const chartAxisWidthPx = 48;
+const dayMs = 24 * 60 * 60 * 1000;
 const emptyActivityStats: HeatmapStats = {
   solvedAllTime: 0,
   solvedLastYear: 0,
@@ -91,6 +96,21 @@ const emptyActivityStats: HeatmapStats = {
   streakLastYear: 0,
   streakLastMonth: 0,
 };
+
+function dateFromKeyUTC(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function dateKeyFromUTC(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDaysUTC(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
 
 function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
   const angleInRadians = (angleInDegrees * Math.PI) / 180;
@@ -109,7 +129,11 @@ function describeArc(cx: number, cy: number, radius: number, startAngle: number,
 }
 
 function formatDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return dateFromKeyUTC(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function MetricCard({ label, value, meta, icon: Icon, tone }: MetricCardData) {
@@ -456,24 +480,31 @@ function ActivityHeatmap({
   startDate?: string;
   endDate?: string;
 }) {
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const normalizedDays = useMemo(
+    () => [...days].sort((a, b) => a.date.localeCompare(b.date)),
+    [days]
+  );
+  const maxCount = useMemo(
+    () => Math.max(0, ...normalizedDays.map((day) => day.count)),
+    [normalizedDays]
+  );
   const weeks = useMemo<HeatmapCell[][]>(() => {
-    if (!days.length) return [];
-    const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
-    const byDate = new Map(sorted.map((day) => [day.date, day]));
-    const firstDate = new Date(`${sorted[0].date}T00:00:00`);
-    const lastDate = new Date(`${sorted[sorted.length - 1].date}T00:00:00`);
+    if (!normalizedDays.length) return [];
+    const byDate = new Map(normalizedDays.map((day) => [day.date, day]));
+    const firstDate = dateFromKeyUTC(normalizedDays[0].date);
+    const lastDate = dateFromKeyUTC(normalizedDays[normalizedDays.length - 1].date);
     const startDateAligned = new Date(firstDate);
-    const mondayOffset = (firstDate.getDay() + 6) % 7;
-    startDateAligned.setDate(firstDate.getDate() - mondayOffset);
-    const totalDays = Math.floor((lastDate.getTime() - startDateAligned.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    const mondayOffset = (firstDate.getUTCDay() + 6) % 7;
+    startDateAligned.setUTCDate(firstDate.getUTCDate() - mondayOffset);
+    const totalDays = Math.floor((lastDate.getTime() - startDateAligned.getTime()) / dayMs) + 1;
     const weekCount = Math.ceil(totalDays / 7);
 
     return Array.from({ length: weekCount }, (_, weekIndex) => (
       Array.from({ length: 7 }, (_, dayIndex) => {
-        const date = new Date(startDateAligned);
-        date.setDate(startDateAligned.getDate() + weekIndex * 7 + dayIndex);
+        const date = addDaysUTC(startDateAligned, weekIndex * 7 + dayIndex);
         if (date < firstDate || date > lastDate) return null;
-        const dateKey = date.toISOString().split("T")[0];
+        const dateKey = dateKeyFromUTC(date);
         return byDate.get(dateKey) ?? {
           date: dateKey,
           count: 0,
@@ -482,15 +513,27 @@ function ActivityHeatmap({
         };
       })
     ));
-  }, [days]);
+  }, [normalizedDays]);
+
+  useEffect(() => {
+    if (!normalizedDays.length) {
+      setSelectedDate(null);
+      return;
+    }
+    const currentSelectionExists = selectedDate && normalizedDays.some((day) => day.date === selectedDate);
+    if (currentSelectionExists) return;
+    const lastActiveDay = [...normalizedDays].reverse().find((day) => day.count > 0);
+    setSelectedDate(lastActiveDay?.date ?? null);
+  }, [normalizedDays, selectedDate]);
+
   const monthLabels = useMemo(() => {
     const labels: Array<{ label: string; week: number }> = [];
     weeks.forEach((week, weekIndex) => {
       week.forEach((day) => {
         if (!day) return;
-        const date = new Date(`${day.date}T00:00:00`);
-        const label = date.toLocaleDateString("en-US", { month: "short" });
-        if ((date.getDate() === 1 || labels.length === 0) && labels[labels.length - 1]?.label !== label) {
+        const date = dateFromKeyUTC(day.date);
+        const label = date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+        if ((date.getUTCDate() === 1 || labels.length === 0) && labels[labels.length - 1]?.label !== label) {
           labels.push({ label, week: weekIndex });
         }
       });
@@ -501,20 +544,39 @@ function ActivityHeatmap({
       return next.week - item.week >= 3;
     });
   }, [weeks]);
-  const monthSeparatorWeeks = useMemo(
-    () => monthLabels.slice(1).map((item) => item.week),
-    [monthLabels]
-  );
   const dayLabels = ["Mon", "", "Wed", "", "Fri", "", ""];
   const safeAvailableYears = availableYears.length ? availableYears : [year];
   const dateRangeLabel = startDate && endDate ? `${formatDate(startDate)} - ${formatDate(endDate)}` : `${year}`;
+  const selectedDay = normalizedDays.find((day) => day.date === selectedDate && day.count > 0) ?? null;
+  const activeDayRows = useMemo(
+    () => normalizedDays.filter((day) => day.count > 0).reverse(),
+    [normalizedDays]
+  );
+  const activeDays = stats.activeDays ?? normalizedDays.filter((day) => day.count > 0).length;
+  const totalSubmissions = stats.totalSubmissions ?? normalizedDays.reduce((sum, day) => sum + day.count, 0);
+  const averageAccuracy = stats.averageAccuracy ?? (
+    totalSubmissions
+      ? Math.round(
+          normalizedDays.reduce((sum, day) => sum + (day.count * day.accuracy) / 100, 0) /
+            totalSubmissions *
+            100
+        )
+      : 0
+  );
+  const bestDay = stats.bestDay?.date
+    ? stats.bestDay
+    : normalizedDays.reduce(
+        (best, day) => (day.count > best.count ? day : best),
+        { date: "", count: 0, studyTimeMinutes: 0, accuracy: 0 }
+      );
 
   const colorFor = (count: number) => {
-    if (count <= 0) return "hsl(var(--secondary))";
-    if (count === 1) return "hsl(var(--primary) / 0.25)";
-    if (count === 2) return "hsl(var(--primary) / 0.45)";
-    if (count === 3) return "hsl(var(--primary) / 0.65)";
-    return "hsl(var(--primary))";
+    if (count <= 0) return "#eef2f7";
+    const ratio = maxCount ? count / maxCount : 0;
+    if (ratio <= 0.25) return "#dbeafe";
+    if (ratio <= 0.5) return "#93c5fd";
+    if (ratio <= 0.75) return "#3b82f6";
+    return "#0b6fe8";
   };
 
   return (
@@ -525,7 +587,9 @@ function ActivityHeatmap({
             <h2 className="text-base font-bold text-[#10213f]">Activity Heatmap</h2>
             <Info size={14} className="text-[#94a3b8]" />
           </div>
-          <p className="mt-1 text-sm text-[#64748b]">Complete yearly activity from your synced submission history.</p>
+          <p className="mt-1 text-sm text-[#64748b]">
+            Local-calendar activity from practice and contest submission history.
+          </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-[#64748b]">
           <label className="inline-flex items-center gap-2 border border-[#bfdbfe] bg-[#eaf4ff] px-2 py-1 font-bold text-[#0b6fe8]">
@@ -550,75 +614,168 @@ function ActivityHeatmap({
       </div>
 
       <div className="mt-5 overflow-x-auto border border-[#e4e7ec] bg-[#f8fafc] p-3 shadow-sm sm:p-4">
-        <div className="min-w-[46rem]">
-          <div className="grid" style={{ gridTemplateColumns: "28px minmax(0, 1fr)" }}>
-            <div />
-            <div className="relative h-5 text-[10px] font-mono font-semibold text-[#64748b]">
-              {monthLabels.map((item) => (
-                <span
-                  key={`${item.label}-${item.week}`}
-                  className="absolute top-0 whitespace-nowrap"
-                  style={{ left: `${weeks.length ? (item.week / weeks.length) * 100 : 0}%` }}
-                >
-                  {item.label}
-                </span>
-              ))}
+        {normalizedDays.length === 0 ? (
+          <div className="py-12 text-center text-sm text-[#64748b]">
+            No activity data is available for this year yet.
+          </div>
+        ) : (
+          <div className="w-max min-w-full">
+            <div className="grid" style={{ gridTemplateColumns: "30px max-content" }}>
+              <div />
+              <div className="relative h-5 text-[10px] font-medium text-[#64748b]">
+                {monthLabels.map((item) => (
+                  <span
+                    key={`${item.label}-${item.week}`}
+                    className="absolute top-0 whitespace-nowrap"
+                    style={{ left: `${item.week * 16}px` }}
+                  >
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-1 grid" style={{ gridTemplateColumns: "30px max-content" }}>
+              <div className="grid pr-2 text-[10px] font-medium leading-none text-[#64748b]" style={{ gridTemplateRows: "repeat(7, 13px)", rowGap: 3 }}>
+                {dayLabels.map((label, index) => (
+                  <div key={`${label}-${index}`} className="flex h-full items-center">{label}</div>
+                ))}
+              </div>
+              <div
+                className="relative grid"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.max(weeks.length, 1)}, 13px)`,
+                  gridTemplateRows: "repeat(7, 13px)",
+                  columnGap: 3,
+                  rowGap: 3,
+                }}
+              >
+                {weeks.map((week, weekIndex) => (
+                  week.map((day, dayIndex) => {
+                    const selected = Boolean(day && day.date === selectedDate);
+                    return (
+                      <button
+                        key={day?.date || `${weekIndex}-${dayIndex}`}
+                        type="button"
+                        disabled={!day || day.count === 0}
+                        title={day && day.count > 0 ? `${formatDate(day.date)}: ${day.count} submissions, ${day.studyTimeMinutes} min tracked, ${day.accuracy}% accuracy` : ""}
+                        aria-label={day ? `${formatDate(day.date)}: ${day.count} submissions` : "Outside selected year"}
+                        onClick={() => day?.count && setSelectedDate(day.date)}
+                        className={`relative z-10 h-[13px] w-[13px] rounded-[2px] border transition disabled:cursor-default ${
+                          selected
+                            ? "border-[#10213f] ring-2 ring-[#0b6fe8]/25"
+                            : day?.count
+                              ? "border-white/80 hover:border-[#0b6fe8] hover:ring-2 hover:ring-[#1976d2]/20"
+                              : "border-white/80"
+                        }`}
+                        style={{
+                          background: day ? colorFor(day.count) : "transparent",
+                          gridColumn: weekIndex + 1,
+                          gridRow: dayIndex + 1,
+                        }}
+                      />
+                    );
+                  })
+                ))}
+              </div>
             </div>
           </div>
-          <div className="mt-1 grid" style={{ gridTemplateColumns: "28px minmax(0, 1fr)" }}>
-            <div className="grid pr-2 text-[10px] font-mono leading-none text-[#64748b]" style={{ gridTemplateRows: "repeat(7, minmax(0, 1fr))", rowGap: 4 }}>
-              {dayLabels.map((label, index) => (
-                <div key={`${label}-${index}`} className="flex h-full items-center">{label}</div>
-              ))}
-            </div>
-            <div
-              className="relative grid"
-              style={{
-                gridTemplateColumns: `repeat(${Math.max(weeks.length, 1)}, minmax(0, 1fr))`,
-                gridTemplateRows: "repeat(7, minmax(0, 1fr))",
-                columnGap: 4,
-                rowGap: 4,
-              }}
-            >
-              {monthSeparatorWeeks.map((week) => (
-                <span
-                  key={`month-separator-${week}`}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-0 border-l border-[#bfdbfe]"
-                  style={{ left: `${weeks.length ? (week / weeks.length) * 100 : 0}%` }}
-                />
-              ))}
-              {weeks.map((week, weekIndex) => (
-                week.map((day, dayIndex) => (
-                  <div
-                    key={day?.date || `${weekIndex}-${dayIndex}`}
-                    title={day ? `${day.date}: ${day.count} submissions, ${day.studyTimeMinutes} min, ${day.accuracy}% accuracy` : ""}
-                    className="relative z-10 aspect-square w-full rounded-sm transition-colors hover:ring-2 hover:ring-[#1976d2]/20"
-                    style={{
-                      background: day ? colorFor(day.count) : "transparent",
-                      gridColumn: weekIndex + 1,
-                      gridRow: dayIndex + 1,
-                    }}
-                  />
-                ))
-              ))}
-            </div>
+        )}
+        <div className="mt-4 flex flex-col gap-3 text-xs text-[#64748b] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span>Less</span>
+            {[0, 1, 2, 3, 4].map((level) => (
+              <span
+                key={level}
+                className="h-3 w-3 rounded-[3px] border border-white"
+                style={{ background: level === 0 ? colorFor(0) : colorFor(Math.max(1, Math.ceil((maxCount || 4) * (level / 4)))) }}
+              />
+            ))}
+            <span>More</span>
           </div>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-[#94a3b8]">
+            One cell = one local calendar day
+          </span>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <div className="border border-[#e4e7ec] bg-[#fcfdff] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">
+                Active day detail
+              </p>
+              <h3 className="mt-1 text-sm font-bold text-[#10213f]">
+                {selectedDay ? formatDate(selectedDay.date) : "No active day selected"}
+              </h3>
+            </div>
+            <span className="w-fit border border-[#dbe4ee] bg-white px-2 py-1 font-mono text-[10px] font-semibold text-[#475569]">
+              {selectedDay?.count ?? 0} submissions
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            {[
+              [selectedDay?.count ?? 0, "Attempts"],
+              [`${selectedDay?.accuracy ?? 0}%`, "Accuracy"],
+              [selectedDay?.studyTimeMinutes ?? 0, "Minutes"],
+            ].map(([value, label]) => (
+              <div key={label} className="border border-[#e4e7ec] bg-white px-2 py-2.5">
+                <div className="font-mono text-sm font-semibold text-[#10213f]">{value}</div>
+                <div className="mt-1 text-[10px] uppercase tracking-wide text-[#64748b]">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border border-[#e4e7ec] bg-[#fcfdff] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">
+                Active days only
+              </p>
+              <h3 className="mt-1 text-sm font-bold text-[#10213f]">Recent activity days</h3>
+            </div>
+            <span className="text-xs font-medium text-[#64748b]">{activeDays} active days</span>
+          </div>
+
+          {activeDayRows.length === 0 ? (
+            <div className="mt-4 border border-dashed border-[#dbe4ee] bg-white px-3 py-4 text-sm text-[#64748b]">
+              No active days in this view yet.
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {activeDayRows.slice(0, 6).map((day) => (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => setSelectedDate(day.date)}
+                  className={`flex items-center justify-between gap-3 border px-3 py-2 text-left text-xs transition ${
+                    selectedDate === day.date
+                      ? "border-[#bfdbfe] bg-[#eff6ff]"
+                      : "border-[#e4e7ec] bg-white hover:border-[#bfdbfe] hover:bg-[#f8fbff]"
+                  }`}
+                >
+                  <span className="font-medium text-[#10213f]">{formatDate(day.date)}</span>
+                  <span className="font-mono text-[#64748b]">{day.count} submits</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {[
-          [`${stats.solvedAllTime} problems`, "solved for all time"],
-          [`${stats.solvedLastYear} problems`, "solved for the last year"],
-          [`${stats.solvedLastMonth} ${stats.solvedLastMonth === 1 ? "problem" : "problems"}`, "solved for the last month"],
-          [`${stats.maxStreak} days`, "in a row max."],
-          [`${stats.streakLastYear} ${stats.streakLastYear === 1 ? "day" : "days"}`, "in a row for the last year"],
-          [`${stats.streakLastMonth} ${stats.streakLastMonth === 1 ? "day" : "days"}`, "in a row for the last month"],
+          [`${activeDays}`, "active days"],
+          [`${totalSubmissions}`, "submissions"],
+          [`${averageAccuracy}%`, "accuracy"],
+          [`${stats.solvedLastMonth}`, "solved/month"],
+          [`${stats.maxStreak}`, "max streak"],
+          [bestDay.date ? `${bestDay.count}` : "0", "best day submits"],
         ].map(([value, meta]) => (
-          <div key={`${value}-${meta}`} className="border border-[#e4e7ec] bg-[#f8fafc] px-3 py-3">
-            <div className="font-mono text-xl font-bold leading-none text-[#10213f]">{value}</div>
-            <div className="mt-1.5 text-xs font-medium leading-5 text-[#64748b]">{meta}</div>
+          <div key={`${value}-${meta}`} className="border border-[#e4e7ec] bg-[#f8fafc] px-3 py-2.5">
+            <div className="font-mono text-sm font-semibold leading-none text-[#10213f]">{value}</div>
+            <div className="mt-1.5 text-[11px] font-medium leading-4 text-[#64748b]">{meta}</div>
           </div>
         ))}
       </div>

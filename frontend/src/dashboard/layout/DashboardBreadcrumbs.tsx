@@ -9,9 +9,6 @@ const labelMap: Record<string, string> = {
   problems: "Problem Analytics",
   "learning-intelligence": "Learning Intelligence",
   subjects: "Subjects",
-  "time-analysis": "Time Analysis",
-  "weak-areas": "Weak Areas",
-  recommendations: "Recommendations",
   "contest-performance": "Contest Performance",
   leaderboard: "Leaderboard",
 };

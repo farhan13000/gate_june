@@ -1,12 +1,9 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
-  BarChart2,
   BookOpen,
-  Clock,
   Target,
   Lightbulb,
-  Award,
   Trophy,
   Activity,
   ChevronRight
@@ -20,8 +17,6 @@ const NAV_ITEMS = [
   { label: "Skills & Mastery", href: "/dashboard/skills", icon: Target },
   { label: "Problem Analytics", href: "/dashboard/problems", icon: Activity },
   { label: "Learning Intelligence", href: "/dashboard/learning-intelligence", icon: Lightbulb },
-  { label: "Recommendations", href: "/dashboard/recommendations", icon: Award },
-  { label: "Weakness Analysis", href: "/dashboard/weak-areas", icon: BarChart2 },
 ];
 
 export default function DashboardSidebar() {

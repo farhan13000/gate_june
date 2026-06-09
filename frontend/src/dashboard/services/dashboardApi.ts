@@ -16,21 +16,31 @@ export async function dashboardFetch<T>(path: string, init?: RequestInit): Promi
 
 export const dashboardApi = {
   overview: () => dashboardFetch<{ stats: Record<string, unknown> }>("/overview"),
-  activity: (year?: number) => dashboardFetch<{
-    activity: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[];
-    year: number;
-    availableYears: number[];
-    startDate?: string;
-    endDate?: string;
-    stats: {
-      solvedAllTime: number;
-      solvedLastYear: number;
-      solvedLastMonth: number;
-      maxStreak: number;
-      streakLastYear: number;
-      streakLastMonth: number;
-    };
-  }>(`/activity/heatmap${year ? `?year=${encodeURIComponent(String(year))}` : ""}`),
+  activity: (year?: number) => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", String(year));
+    params.set("timezoneOffsetMinutes", String(new Date().getTimezoneOffset()));
+    const query = params.toString();
+    return dashboardFetch<{
+      activity: { date: string; count: number; studyTimeMinutes: number; accuracy: number }[];
+      year: number;
+      availableYears: number[];
+      startDate?: string;
+      endDate?: string;
+      stats: {
+        solvedAllTime: number;
+        solvedLastYear: number;
+        solvedLastMonth: number;
+        maxStreak: number;
+        streakLastYear: number;
+        streakLastMonth: number;
+        activeDays?: number;
+        totalSubmissions?: number;
+        averageAccuracy?: number;
+        bestDay?: { date: string; count: number; studyTimeMinutes: number; accuracy: number };
+      };
+    }>(`/activity/heatmap${query ? `?${query}` : ""}`);
+  },
   intelligenceIndex: () => dashboardFetch<{ index: number; details: Record<string, number> }>("/intelligence-index"),
   readinessScore: () => dashboardFetch<{
     readinessScore: number;
