@@ -9,11 +9,11 @@ import { toast } from "sonner";
 const navItems = [
   { label: "Home", href: "/" },
   { label: "Problems", href: "/problems" },
+  { label: "PYQ", href: "/pyq" },
   { label: "Contests", href: "/contests" },
   { label: "Theory", href: "/theory" },
   { label: "Leaderboard", href: "/leaderboard" },
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Discuss", href: "/discuss" },
 ];
 
 export default function Navbar() {

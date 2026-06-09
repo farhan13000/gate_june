@@ -11,6 +11,8 @@ import Footer from "./components/Footer";
 import Index from "./pages/Index";
 import Problems from "./pages/Problems";
 import ProblemDetail from "./pages/ProblemDetail";
+import PYQ from "./pages/PYQ";
+import PYQProblems from "./pages/PYQProblems";
 import Theory from "./pages/Theory";
 import Contests from "./pages/Contests";
 import ContestDetails from "./pages/ContestDetails";
@@ -89,6 +91,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/problems" element={<Problems />} />
+            <Route path="/pyq" element={<PYQ />} />
+            <Route path="/pyq/:subjectId" element={<PYQProblems />} />
             <Route
               path="/problems/:id"
               element={
@@ -170,7 +174,8 @@ const App = () => (
               }
             />
             <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/discuss" element={<Discuss />} />
+            <Route path="/about" element={<Discuss />} />
+            <Route path="/discuss" element={<Navigate to="/about" replace />} />
             <Route path="/announcements" element={<Announcements />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />

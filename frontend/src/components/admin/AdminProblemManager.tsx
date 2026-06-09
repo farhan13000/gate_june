@@ -24,6 +24,9 @@ export default function AdminProblemManager() {
     positiveMarks: 2,
     negativeMarks: 0.66,
     estimatedTime: 180,
+    isPyq: false,
+    yearAsked: "",
+    source: "",
     tags: "",
     options: [
       { text: "", isCorrect: true },
@@ -78,6 +81,9 @@ OUTPUT SHAPE
     { "text": "Option C", "isCorrect": false },
     { "text": "Option D", "isCorrect": false }
   ],
+  "isPyq": false,
+  "yearAsked": 2025,
+  "source": "GATE 2025 Official",
   "tags": ["concept-1", "concept-2"],
   "diagrams": [
     { "type": "mermaid", "title": "Optional diagram", "code": "graph TD\\\\nA-->B" }
@@ -108,6 +114,9 @@ OUTPUT SHAPE
       options: form.questionType === "NAT" ? [] : form.options,
       markingScheme: { positive: form.positiveMarks, negative: form.negativeMarks },
       estimatedTime: form.estimatedTime,
+      isPyq: form.isPyq,
+      yearAsked: form.yearAsked ? Number(form.yearAsked) : undefined,
+      source: form.source,
       tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
     };
     const res = await fetch("/api/admin/questions", {
@@ -192,6 +201,47 @@ OUTPUT SHAPE
             onChange={(e) => setForm({ ...form, tags: e.target.value })}
             className="rounded-sm border border-border px-3 py-2 text-xs"
           />
+        </div>
+        <div className="rounded-sm border border-border bg-secondary/20 p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={form.isPyq}
+                onChange={(e) => setForm({ ...form, isPyq: e.target.checked })}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-xs font-semibold text-foreground">Mark as PYQ</span>
+                <span className="mt-0.5 block text-[11px] leading-5 text-muted-foreground">
+                  Display this approved problem inside the PYQ section as well.
+                </span>
+              </span>
+            </label>
+            {form.isPyq && (
+              <span className="w-fit rounded-sm border border-primary/20 bg-primary/10 px-2 py-1 font-mono text-[10px] font-semibold uppercase text-primary">
+                PYQ enabled
+              </span>
+            )}
+          </div>
+
+          {form.isPyq && (
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                type="number"
+                placeholder="Year asked, e.g. 2025"
+                value={form.yearAsked}
+                onChange={(e) => setForm({ ...form, yearAsked: e.target.value })}
+                className="rounded-sm border border-border bg-card px-3 py-2 text-xs"
+              />
+              <input
+                placeholder='Source, e.g. "GATE 2025 Official"'
+                value={form.source}
+                onChange={(e) => setForm({ ...form, source: e.target.value })}
+                className="rounded-sm border border-border bg-card px-3 py-2 text-xs"
+              />
+            </div>
+          )}
         </div>
         <textarea
           placeholder="Statement (LaTeX supported)"

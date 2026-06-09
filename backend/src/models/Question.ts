@@ -24,6 +24,9 @@ export interface IQuestion extends Document {
   solution: any;
   markingScheme: { positive: number; negative: number };
   tags: string[];
+  isPyq?: boolean;
+  yearAsked?: number;
+  source?: string;
   estimatedTime: number;
   status: "draft" | "pending_review" | "approved" | "rejected";
   createdBy: mongoose.Types.ObjectId;
@@ -71,6 +74,9 @@ const questionSchema = new Schema<IQuestion>(
       negative: { type: Number, required: true, default: 0 },
     },
     tags: { type: [String], default: [] },
+    isPyq: { type: Boolean, default: false, index: true },
+    yearAsked: { type: Number, min: 1900, max: 2100, index: true },
+    source: { type: String, trim: true, default: "" },
     estimatedTime: { type: Number, default: 180 },
     status: {
       type: String,

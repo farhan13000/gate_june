@@ -21,6 +21,11 @@ const progressOptions = [
 ];
 const emptyDifficultyCounts = { easy: 0, medium: 0, hard: 0 };
 
+interface ProblemsProps {
+  mode?: "practice" | "pyq";
+  initialSubjectId?: string;
+}
+
 function countProblemDifficulties(items: Array<Record<string, unknown>>) {
   return items.reduce(
     (counts, item) => {
@@ -99,9 +104,12 @@ function ProblemStatusBadge({ problem }: { problem: any }) {
   );
 }
 
-export default function Problems() {
+export default function Problems({ mode = "practice", initialSubjectId }: ProblemsProps = {}) {
+  const isPyqMode = mode === "pyq";
   const { tree, loading: treeLoading, error: treeError, refresh: refreshTaxonomy } = useTaxonomy();
-  const [selection, setSelection] = useState<HierarchySelection>({});
+  const [selection, setSelection] = useState<HierarchySelection>(
+    initialSubjectId ? { subjectId: initialSubjectId } : {}
+  );
   const { stats, loading: statsLoading } = useTaxonomyStats(selection);
   const labels = resolveHierarchyLabels(tree, selection);
   const labelList = Object.values(labels).filter(Boolean) as string[];
@@ -121,6 +129,14 @@ export default function Problems() {
   const [sort, setSort] = useState("newest");
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    if (initialSubjectId) {
+      setSelection((current) =>
+        current.subjectId === initialSubjectId ? current : { subjectId: initialSubjectId }
+      );
+    }
+  }, [initialSubjectId]);
+
   const fetchProblems = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -132,6 +148,7 @@ export default function Problems() {
     if (questionType) params.set("questionType", questionType);
     if (progress) params.set("progress", progress);
     if (search.trim()) params.set("search", search.trim());
+    if (isPyqMode) params.set("pyq", "true");
     params.set("sort", sort);
     params.set("page", String(page));
     params.set("limit", String(pageSize));
@@ -165,7 +182,7 @@ export default function Problems() {
     } finally {
       setLoading(false);
     }
-  }, [selection, difficulty, questionType, progress, sort, search, page, pageSize]);
+  }, [selection, difficulty, questionType, progress, sort, search, page, pageSize, isPyqMode]);
 
   useEffect(() => {
     setPage(1);
@@ -291,8 +308,12 @@ export default function Problems() {
 
   return (
     <ContentExplorerLayout
-      title="Problems"
-      subtitle="Practice GATE DA questions organized by subject, chapter, topic, and subtopic."
+      title={isPyqMode ? "PYQ Problems" : "Problems"}
+      subtitle={
+        isPyqMode
+          ? "Practice previous-year GATE DA questions organized by subject, chapter, topic, and subtopic."
+          : "Practice GATE DA questions organized by subject, chapter, topic, and subtopic."
+      }
       tree={tree}
       treeLoading={treeLoading}
       treeError={treeError}
@@ -305,6 +326,7 @@ export default function Problems() {
       stats={stats}
       statsLoading={statsLoading}
       filters={filters}
+      resetLabel={isPyqMode ? "All PYQ" : "All problems"}
     >
       {labelList.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-sm border border-border bg-secondary/20 p-3">
@@ -330,7 +352,9 @@ export default function Problems() {
         <div className="bg-card border border-border border-l-4 border-l-foreground/30 rounded-sm p-4">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Questions</div>
           <div className="mt-1 font-mono text-2xl font-bold text-foreground">{total}</div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Available in current view</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {isPyqMode ? "PYQ available in current view" : "Available in current view"}
+          </p>
         </div>
         <div className="bg-card border border-border border-l-4 border-l-primary rounded-sm p-4">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Solved</div>
@@ -366,7 +390,9 @@ export default function Problems() {
           <div className="py-16 text-center text-sm text-muted-foreground">Loading problems...</div>
         ) : problems.length === 0 ? (
           <div className="px-4 py-16 text-center text-sm text-muted-foreground">
-            No problems in this selection. Try a broader level or add content via admin.
+            {isPyqMode
+              ? "No PYQ problems in this selection. Try a broader level or add PYQ-tagged content via admin."
+              : "No problems in this selection. Try a broader level or add content via admin."}
           </div>
         ) : (
           <>
@@ -548,7 +574,9 @@ export default function Problems() {
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-xs text-muted-foreground">{problems.length} Problems</span>
+              <span className="text-xs text-muted-foreground">
+                {problems.length} {isPyqMode ? "PYQ Problems" : "Problems"}
+              </span>
               <button
                 type="button"
                 onClick={clearFilters}

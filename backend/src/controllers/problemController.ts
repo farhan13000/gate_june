@@ -12,6 +12,18 @@ function buildQuestionFilter(query: Request["query"]): Record<string, unknown> {
   if (query.subtopicId) filter.subtopicId = query.subtopicId;
   if (query.difficulty) filter.difficulty = query.difficulty;
   if (query.questionType) filter.questionType = query.questionType;
+  const pyq = String(query.pyq || "").toLowerCase();
+  if (["1", "true", "yes"].includes(pyq)) {
+    const pyqPattern = /(pyq|previous[\s_-]*year|gate[\s_-]*(20\d{2}|da))/i;
+    filter.$or = [
+      { isPyq: true },
+      { yearAsked: { $exists: true, $ne: null } },
+      { source: { $regex: pyqPattern } },
+      { tags: { $elemMatch: { $regex: pyqPattern } } },
+      { contentId: { $regex: /^PYQ/i } },
+      { problemId: { $regex: /^PYQ/i } },
+    ];
+  }
   if (query.search) {
     filter.title = { $regex: String(query.search), $options: "i" };
   }
