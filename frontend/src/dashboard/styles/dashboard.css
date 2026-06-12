@@ -29,6 +29,18 @@
   box-shadow: 0 1px 2px hsl(0 0% 0% / 0.04);
 }
 
+.dashboard-canvas::after {
+  content: "";
+  position: absolute;
+  top: calc(4rem - 1px);
+  left: 0;
+  right: 0;
+  z-index: 35;
+  height: 1px;
+  background: var(--dash-border);
+  pointer-events: none;
+}
+
 .dashboard-grid-bg {
   background-image:
     linear-gradient(var(--dash-grid) 1px, transparent 1px),

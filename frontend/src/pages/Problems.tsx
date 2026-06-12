@@ -231,7 +231,7 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
           />
           <input
             type="text"
-            placeholder="Search title, ID or keyword"
+            placeholder="Search title or keyword"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full min-w-0 rounded-sm border border-border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -406,8 +406,7 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="mb-1 font-mono text-[11px] text-muted-foreground">
-                        #{(page - 1) * pageSize + idx + 1} -{" "}
-                        {problem.contentId || problem.problemId || String(problem._id).slice(-6)}
+                        #{(page - 1) * pageSize + idx + 1}
                       </div>
                       <div className="text-sm font-semibold text-foreground">
                         <LatexRenderer latex={problem.title} />
@@ -429,7 +428,6 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
               <table className="w-full table-fixed text-sm">
                 <colgroup>
                   <col className="w-14" />
-                  <col className="w-28" />
                   <col />
                   <col className="w-20" />
                   <col className="w-28" />
@@ -438,7 +436,6 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
                 <thead>
                   <tr className="border-b border-border bg-secondary/40">
                     <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">#</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">ID</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">Title</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">Type</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground">Difficulty</th>
@@ -450,9 +447,6 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
                     <tr key={problem._id} className="problem-row border-b border-border-faint last:border-0">
                       <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                         {(page - 1) * pageSize + idx + 1}
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                        {problem.contentId || problem.problemId || String(problem._id).slice(-6)}
                       </td>
                       <td className="px-3 py-3">
                         <Link

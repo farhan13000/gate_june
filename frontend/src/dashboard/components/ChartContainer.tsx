@@ -11,8 +11,8 @@ interface ChartContainerProps {
 export default function ChartContainer({ title, eyebrow, minWidth = 680, children }: ChartContainerProps) {
   return (
     <SectionCard title={title} eyebrow={eyebrow}>
-      <div className="dashboard-scrollbar overflow-x-auto">
-        <div style={{ minWidth }} className="h-full">
+      <div className="min-w-0 overflow-hidden">
+        <div style={{ minWidth: `min(${minWidth}px, 100%)` }} className="h-full min-w-0">
           {children}
         </div>
       </div>

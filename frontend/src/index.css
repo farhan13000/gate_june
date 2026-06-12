@@ -337,6 +337,11 @@
       min-width: 15rem;
     }
 
+    .taxonomy-explorer-toolbar {
+      min-height: 2.125rem;
+      margin-bottom: 0.5rem;
+    }
+
     .hierarchy-sidebar-panel {
       display: flex;
       flex-direction: column;

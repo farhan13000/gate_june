@@ -86,6 +86,11 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
     const marksAwarded = isCorrect
       ? (question.markingScheme?.positive ?? 1)
       : -(question.markingScheme?.negative ?? 0);
+    const parsedTimeTaken = Number(timeTaken);
+    const normalizedTimeTaken = Number.isFinite(parsedTimeTaken)
+      ? Math.max(1, Math.min(Math.round(parsedTimeTaken), 12 * 60 * 60))
+      : Math.max(1, Math.round(question.estimatedTime || 120));
+    const attemptNumber = await Submission.countDocuments({ userId, questionId }) + 1;
 
     const submission = new Submission({
       userId,
@@ -94,7 +99,13 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
       natAnswer: question.questionType === "NAT" ? natAnswer : undefined,
       isCorrect,
       marksAwarded,
-      timeTaken: timeTaken || 120, // default to 120s if not sent
+      timeTaken: normalizedTimeTaken,
+      subjectId: question.subjectId,
+      chapterId: question.chapterId,
+      topicId: question.topicId,
+      subtopicId: question.subtopicId,
+      difficulty: question.difficulty,
+      attemptNumber,
     });
 
     await submission.save();
@@ -105,6 +116,7 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
         _id: submission._id,
         isCorrect: submission.isCorrect,
         marksAwarded: submission.marksAwarded,
+        timeTaken: submission.timeTaken,
         createdAt: submission.createdAt,
       },
     });

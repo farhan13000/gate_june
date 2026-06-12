@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   Send,
@@ -38,6 +38,10 @@ export default function ProblemDetail() {
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState<{ isCorrect: boolean; marksAwarded: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(true);
+  const timerStartedAtRef = useRef<number | null>(null);
+  const timerAccumulatedRef = useRef(0);
 
   // Answer state per type
   const [natAnswer, setNatAnswer] = useState("");
@@ -63,7 +67,53 @@ export default function ProblemDetail() {
     }
   };
 
+  const currentElapsedSeconds = () => {
+    if (timerRunning && timerStartedAtRef.current !== null) {
+      return timerAccumulatedRef.current + Math.floor((Date.now() - timerStartedAtRef.current) / 1000);
+    }
+
+    return timerAccumulatedRef.current;
+  };
+
+  const formatDuration = (seconds?: number) => {
+    const safeSeconds = Math.max(0, Math.floor(seconds || 0));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const secs = safeSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+
+    return `${minutes}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const pauseTimer = () => {
+    const nextElapsed = currentElapsedSeconds();
+    timerAccumulatedRef.current = nextElapsed;
+    timerStartedAtRef.current = null;
+    setElapsedSeconds(nextElapsed);
+    setTimerRunning(false);
+  };
+
+  const resumeTimer = () => {
+    if (submitted) return;
+    timerStartedAtRef.current = Date.now();
+    setTimerRunning(true);
+  };
+
+  const resetTimer = (run = true) => {
+    timerAccumulatedRef.current = 0;
+    timerStartedAtRef.current = run ? Date.now() : null;
+    setElapsedSeconds(0);
+    setTimerRunning(run);
+  };
+
   useEffect(() => {
+    resetTimer(true);
+    setSubmitted(false);
+    setResult(null);
+
     fetch(`/api/problems/${id}`)
       .then(res => res.json())
       .then(data => {
@@ -82,6 +132,17 @@ export default function ProblemDetail() {
       fetchSubmissions();
     }
   }, [id, user, isAuthenticated]);
+
+  useEffect(() => {
+    if (!problem || submitted || !timerRunning) return;
+    if (timerStartedAtRef.current === null) timerStartedAtRef.current = Date.now();
+
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(currentElapsedSeconds());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [problem, submitted, timerRunning]);
 
   const toggleMsq = (optId: string) =>
     setMsqSelected(prev => prev.includes(optId) ? prev.filter(x => x !== optId) : [...prev, optId]);
@@ -122,6 +183,7 @@ export default function ProblemDetail() {
   const handleSubmit = async () => {
     if (!canSubmit() || !problem) return;
     setSubmitting(true);
+    const timeTaken = Math.max(1, currentElapsedSeconds());
     
     try {
       const res = await fetch(`/api/problems/${id}/submit`, {
@@ -130,7 +192,8 @@ export default function ProblemDetail() {
         body: JSON.stringify({
           mcqSelected,
           msqSelected,
-          natAnswer
+          natAnswer,
+          timeTaken
         }),
         credentials: "include"
       });
@@ -146,6 +209,10 @@ export default function ProblemDetail() {
         marksAwarded: data.submission.marksAwarded
       });
       setSubmitted(true);
+      timerAccumulatedRef.current = data.submission.timeTaken ?? timeTaken;
+      timerStartedAtRef.current = null;
+      setElapsedSeconds(data.submission.timeTaken ?? timeTaken);
+      setTimerRunning(false);
       if (data.submission.isCorrect) {
         toast.success("Correct answer!");
       } else {
@@ -164,6 +231,7 @@ export default function ProblemDetail() {
   const handleClear = () => {
     setNatAnswer(""); setMcqSelected(null); setMsqSelected([]);
     setSubmitted(false); setResult(null);
+    resetTimer(true);
   };
 
   if (loading) {
@@ -228,6 +296,28 @@ export default function ProblemDetail() {
 
   const correctSubmissions = submissions.filter(s => s.isCorrect).length;
   const totalSubmissions = submissions.length;
+  const averageTimeTaken = totalSubmissions
+    ? Math.round(submissions.reduce((sum, sub) => sum + (sub.timeTaken || 0), 0) / totalSubmissions)
+    : 0;
+  const optionLabelById = new Map(
+    (problem.options || []).map((opt: any, idx: number) => [
+      String(opt._id),
+      String.fromCharCode(65 + idx),
+    ])
+  );
+
+  const formatSubmittedAnswer = (sub: any) => {
+    if (sub.natAnswer) return `Value: ${sub.natAnswer}`;
+    if (sub.submittedOptionIds?.length) {
+      const labels = sub.submittedOptionIds
+        .map((optionId: string) => optionLabelById.get(String(optionId)))
+        .filter(Boolean);
+
+      return labels.length ? `Selected: ${labels.join(", ")}` : "Selected option";
+    }
+
+    return "N/A";
+  };
 
   return (
     <div className="w-full animate-in fade-in duration-300">
@@ -237,7 +327,7 @@ export default function ProblemDetail() {
           <ArrowLeft size={12} /> Problems
         </Link>
         <ChevronRight size={10} className="text-muted-foreground/50" />
-        <span className="font-mono text-muted-foreground/70">{problem._id.substring(0, 8)}</span>
+        <span className="text-muted-foreground/70">{problem.topic || "Problem"}</span>
       </div>
 
       {/* ── Two-column layout ─────────────────────────────────────── */}
@@ -249,15 +339,11 @@ export default function ProblemDetail() {
           <div className="problem-header-card">
             <div className="flex justify-between items-start gap-4">
               <div className="flex-1 min-w-0">
-                {/* ID + Topic breadcrumb */}
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-sm border border-border/60">
-                    <Hash size={9} />
-                    {problem._id.substring(0, 8)}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">·</span>
-                  <span className="text-[10px] text-muted-foreground font-medium">{problem.topic}</span>
-                </div>
+                {problem.topic && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] text-muted-foreground font-medium">{problem.topic}</span>
+                  </div>
+                )}
                 {/* Title */}
                 <h1 className="font-serif text-xl sm:text-2xl font-bold text-foreground mb-3 leading-tight">
                   <LatexRenderer latex={problem.title} />
@@ -432,7 +518,7 @@ export default function ProblemDetail() {
 
                 {/* Submission stats summary */}
                 {totalSubmissions > 0 && (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="problem-stat-card">
                       <div className="problem-stat-value">{totalSubmissions}</div>
                       <div className="problem-stat-label">Total Attempts</div>
@@ -444,6 +530,10 @@ export default function ProblemDetail() {
                     <div className="problem-stat-card">
                       <div className="problem-stat-value text-destructive">{totalSubmissions - correctSubmissions}</div>
                       <div className="problem-stat-label">Incorrect</div>
+                    </div>
+                    <div className="problem-stat-card">
+                      <div className="problem-stat-value">{formatDuration(averageTimeTaken)}</div>
+                      <div className="problem-stat-label">Avg Time</div>
                     </div>
                   </div>
                 )}
@@ -463,6 +553,7 @@ export default function ProblemDetail() {
                           <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Submitted At</th>
                           <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Status</th>
                           <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Answer Details</th>
+                          <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Time</th>
                           <th className="text-left py-2.5 px-4 text-muted-foreground font-mono font-medium text-[10px] uppercase">Marks</th>
                         </tr>
                       </thead>
@@ -489,7 +580,10 @@ export default function ProblemDetail() {
                                 </span>
                               </td>
                               <td className="py-3 px-4 font-mono text-muted-foreground">
-                                {sub.natAnswer ? `Value: ${sub.natAnswer}` : (sub.submittedOptionIds?.length ? `Option IDs: ${sub.submittedOptionIds.join(", ")}` : "N/A")}
+                                {formatSubmittedAnswer(sub)}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-muted-foreground">
+                                {formatDuration(sub.timeTaken)}
                               </td>
                               <td className={`py-3 px-4 font-mono font-bold ${sub.isCorrect ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
                                 {sub.marksAwarded > 0 ? `+${sub.marksAwarded}` : sub.marksAwarded}
@@ -518,6 +612,41 @@ export default function ProblemDetail() {
               <span className={`problem-type-chip-sm ${dc.bg} ${dc.text} ${dc.border}`}>
                 {problem.questionType}
               </span>
+            </div>
+
+            <div className="border-b border-border bg-secondary/20 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-sm border ${timerRunning && !submitted ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}>
+                    <Timer size={15} />
+                  </div>
+                  <div>
+                    <div className="font-mono text-lg font-bold leading-none text-foreground">
+                      {formatDuration(elapsedSeconds)}
+                    </div>
+                    <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {submitted ? "Submitted time" : timerRunning ? "Timer running" : "Timer paused"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={timerRunning ? pauseTimer : resumeTimer}
+                    disabled={submitted}
+                    className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {timerRunning ? "Pause" : "Resume"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resetTimer(!submitted)}
+                    className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-secondary"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Answer Body */}
@@ -666,7 +795,7 @@ export default function ProblemDetail() {
                     </div>
                     <div>
                       <div className="text-sm font-semibold text-green-700 dark:text-green-400">Correct Answer!</div>
-                      <div className="text-xs text-green-600/70 dark:text-green-400/70 mt-0.5">+{result.marksAwarded} marks awarded</div>
+                      <div className="text-xs text-green-600/70 dark:text-green-400/70 mt-0.5">+{result.marksAwarded} marks awarded in {formatDuration(elapsedSeconds)}</div>
                     </div>
                   </div>
                 ) : (
@@ -676,7 +805,7 @@ export default function ProblemDetail() {
                     </div>
                     <div>
                       <div className="text-sm font-semibold text-destructive">Incorrect Answer</div>
-                      <div className="text-xs text-destructive/70 mt-0.5">{result.marksAwarded} marks</div>
+                      <div className="text-xs text-destructive/70 mt-0.5">{result.marksAwarded} marks in {formatDuration(elapsedSeconds)}</div>
                     </div>
                   </div>
                 )}

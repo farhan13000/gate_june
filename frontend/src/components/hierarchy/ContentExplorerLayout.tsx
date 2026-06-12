@@ -82,7 +82,7 @@ export default function ContentExplorerLayout({
       <div className={`layout-sidebar-main layout-taxonomy-explorer ${!sidebarOpen ? "taxonomy-sidebar-closed" : ""}`}>
         {sidebarOpen && (
         <aside id="taxonomy-sidebar" ref={sidebarRef} className="layout-taxonomy-aside relative">
-          <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="taxonomy-explorer-toolbar flex items-center justify-between gap-2">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
               Subjects
             </span>
@@ -137,7 +137,7 @@ export default function ContentExplorerLayout({
         )}
 
         <div className="layout-main-col">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="taxonomy-explorer-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <HierarchyBreadcrumbs labels={labels} onNavigate={onBreadcrumbNavigate} />
             <div className="flex flex-wrap items-center gap-2">
               {hasSelection && (

@@ -58,6 +58,10 @@ export const dashboardApi = {
     testTypePerformance: Array<{ type: string; attempted: number; avgScore: number; avgAccuracy: number; bestRank: number | string }>;
     contestSummary: { ratedContests: number; highestRating: number; averageRank: number | string; avgPenalty: number };
   }>("/contest-performance"),
+  performanceSummary: (viewType: "subject" | "difficulty" | "questionType") =>
+    dashboardFetch<{ data: Array<Record<string, unknown>> }>(
+      `/problems/summary?viewType=${encodeURIComponent(viewType)}`
+    ),
   subjectIntelligence: () => dashboardFetch<{
     summary: { averageMastery: number; completedSubjects: number; revisionDue: number; highConfidence: number };
     subjects: Array<{
