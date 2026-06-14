@@ -6,6 +6,20 @@ import Theory from "../models/Theory";
 import Contest from "../models/Contest";
 import { invalidateHomeCache } from "../utils/homeCache";
 
+const APPROVAL_TAGS = ["GATE", "GATE DA", "Olympiad", "Advanced"] as const;
+type ApprovalTag = (typeof APPROVAL_TAGS)[number];
+
+const getApprovalTag = (tag: unknown): ApprovalTag | null => {
+  if (typeof tag !== "string") return null;
+  const normalized = tag.trim();
+  return APPROVAL_TAGS.find((allowedTag) => allowedTag === normalized) || null;
+};
+
+const addApprovalTag = (tags: string[] | undefined, tag: ApprovalTag): string[] => {
+  const currentTags = Array.isArray(tags) ? tags : [];
+  return currentTags.includes(tag) ? currentTags : [...currentTags, tag];
+};
+
 // --- Users ---
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -91,7 +105,7 @@ export const deleteQuestion = async (req: Request, res: Response): Promise<void>
 export const approveQuestion = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, tag } = req.body;
 
     const question = await Question.findById(id);
     if (!question) {
@@ -100,7 +114,15 @@ export const approveQuestion = async (req: Request, res: Response): Promise<void
     }
 
     question.status = status;
-    if (status === "approved") question.approvedBy = req.currentUser!._id;
+    if (status === "approved") {
+      const approvalTag = getApprovalTag(tag);
+      if (tag !== undefined && !approvalTag) {
+        res.status(400).json({ message: "Invalid approval tag" });
+        return;
+      }
+      question.approvedBy = req.currentUser!._id;
+      question.tags = addApprovalTag(question.tags, approvalTag || "GATE DA");
+    }
     question.auditLog.push({
       action: status === "approved" ? "Approved" : "Rejected",
       performedBy: req.currentUser!._id,
@@ -190,7 +212,7 @@ export const deleteTheory = async (req: Request, res: Response): Promise<void> =
 export const approveTheory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, tag } = req.body;
 
     const theory = await Theory.findById(id);
     if (!theory) {
@@ -199,7 +221,15 @@ export const approveTheory = async (req: Request, res: Response): Promise<void> 
     }
 
     theory.status = status;
-    if (status === "approved") theory.approvedBy = req.currentUser!._id;
+    if (status === "approved") {
+      const approvalTag = getApprovalTag(tag);
+      if (tag !== undefined && !approvalTag) {
+        res.status(400).json({ message: "Invalid approval tag" });
+        return;
+      }
+      theory.approvedBy = req.currentUser!._id;
+      theory.tags = addApprovalTag(theory.tags, approvalTag || "GATE DA");
+    }
     theory.auditLog.push({
       action: status === "approved" ? "Approved" : "Rejected",
       performedBy: req.currentUser!._id,

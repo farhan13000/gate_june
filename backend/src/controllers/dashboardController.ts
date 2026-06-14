@@ -8,6 +8,7 @@ import ContestStanding from "../models/ContestStanding";
 import ContestSubmission from "../models/ContestSubmission";
 import UserActivityLog from "../models/UserActivityLog";
 import Question from "../models/Question";
+import Subject from "../models/Subject";
 import { getContestState } from "../utils/contestLifecycle";
 
 const subjectsList = [
@@ -211,33 +212,47 @@ export const getPerformance = async (req: Request, res: Response) => {
     const submissions = await Submission.find({ userId }).populate("questionId").lean();
 
     if (viewType === "subject") {
-      const subjectStatsMap: Record<string, { attempted: number; correct: number; timeSum: number }> = {};
-      for (const sub of subjectsList) subjectStatsMap[sub] = { attempted: 0, correct: 0, timeSum: 0 };
+      const subjects = await Subject.find({ enabled: true }).sort({ order: 1, name: 1 }).lean();
+      const subjectNameById = new Map(subjects.map((subject) => [subject.subjectId, subject.name]));
+      const subjectStatsMap: Record<string, { subject: string; order: number; attempted: number; correct: number; timeSum: number }> = {};
+      subjects.forEach((subject) => {
+        subjectStatsMap[subject.subjectId] = {
+          subject: subject.name,
+          order: subject.order,
+          attempted: 0,
+          correct: 0,
+          timeSum: 0,
+        };
+      });
       
       submissions.forEach(sub => {
         const q = sub.questionId as any;
-        if (!q) return;
-        const matchedSubs = getSubjectsForTopic(q.topic);
-        matchedSubs.forEach(s => {
-          if (!subjectStatsMap[s]) subjectStatsMap[s] = { attempted: 0, correct: 0, timeSum: 0 };
-          subjectStatsMap[s].attempted++;
-          if (sub.isCorrect) subjectStatsMap[s].correct++;
-          subjectStatsMap[s].timeSum += (sub.timeTaken || 120);
-        });
+        const subjectId = sub.subjectId || q?.subjectId || "UNMAPPED";
+        if (!subjectStatsMap[subjectId]) {
+          subjectStatsMap[subjectId] = {
+            subject: subjectNameById.get(subjectId) || q?.topic || subjectId,
+            order: subjects.length + Object.keys(subjectStatsMap).length,
+            attempted: 0,
+            correct: 0,
+            timeSum: 0,
+          };
+        }
+        subjectStatsMap[subjectId].attempted++;
+        if (sub.isCorrect) subjectStatsMap[subjectId].correct++;
+        subjectStatsMap[subjectId].timeSum += (sub.timeTaken || 120);
       });
 
-      const data = Object.keys(subjectStatsMap)
-        .filter(s => subjectStatsMap[s].attempted > 0 || subjectsList.includes(s))
-        .map(subject => {
-        const stats = subjectStatsMap[subject];
+      const data = Object.values(subjectStatsMap)
+        .sort((a, b) => a.order - b.order || a.subject.localeCompare(b.subject))
+        .map(stats => {
         const accuracy = stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0;
         const avgTime = stats.attempted ? Math.round((stats.timeSum / stats.attempted / 60) * 10) / 10 : 0;
         return {
-          subject,
+          subject: stats.subject,
           attempted: stats.attempted,
           correct: stats.correct,
           accuracy,
-          avgTime: avgTime || 2.0,
+          avgTime,
           weak: stats.attempted > 0 && accuracy < 60
         };
       });
@@ -248,9 +263,10 @@ export const getPerformance = async (req: Request, res: Response) => {
       const diffMap = { Easy: { attempted: 0, correct: 0 }, Medium: { attempted: 0, correct: 0 }, Hard: { attempted: 0, correct: 0 } };
       submissions.forEach(sub => {
         const q = sub.questionId as any;
-        if (q && q.difficulty && diffMap[q.difficulty as "Easy" | "Medium" | "Hard"]) {
-          diffMap[q.difficulty as "Easy" | "Medium" | "Hard"].attempted++;
-          if (sub.isCorrect) diffMap[q.difficulty as "Easy" | "Medium" | "Hard"].correct++;
+        const difficulty = (sub.difficulty || q?.difficulty) as "Easy" | "Medium" | "Hard" | undefined;
+        if (difficulty && diffMap[difficulty]) {
+          diffMap[difficulty].attempted++;
+          if (sub.isCorrect) diffMap[difficulty].correct++;
         }
       });
       const data = (["Easy", "Medium", "Hard"] as const).map(level => {
@@ -275,7 +291,7 @@ export const getPerformance = async (req: Request, res: Response) => {
         const dbType = type === "MCQ (Single)" ? "MCQ" : type;
         const stats = typeMap[dbType];
         const avgTime = stats.attempted ? Math.round((stats.timeSum / stats.attempted / 60) * 10) / 10 : 0;
-        return { type, accuracy: stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0, attempted: stats.attempted, avgTime: avgTime || (type === "NAT" ? 4.2 : type === "MSQ" ? 3.1 : 1.6) };
+        return { type, accuracy: stats.attempted ? Math.round((stats.correct / stats.attempted) * 100) : 0, attempted: stats.attempted, avgTime };
       });
       return res.json({ data });
     }

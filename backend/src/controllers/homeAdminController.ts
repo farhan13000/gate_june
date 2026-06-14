@@ -655,7 +655,7 @@ export const createContestOnlyQuestion = async (req: Request, res: Response): Pr
     }
 
     const normalizedType = String(questionType || "MCQ").toUpperCase();
-    if (!["MCQ", "MSQ", "NAT"].includes(normalizedType)) {
+    if (!["MCQ", "MSQ", "NAT", "PROOF"].includes(normalizedType)) {
       res.status(400).json({ message: "Invalid question type" });
       return;
     }
@@ -671,7 +671,7 @@ export const createContestOnlyQuestion = async (req: Request, res: Response): Pr
       solution,
       difficulty: difficulty || "Medium",
       questionType: normalizedType,
-      options: normalizedType === "NAT" ? [] : options || [],
+      options: ["NAT", "PROOF"].includes(normalizedType) ? [] : options || [],
       markingScheme: markingScheme || { positive: 2, negative: 0.66 },
       estimatedTime: estimatedTime || 180,
       tags: [...(Array.isArray(tags) ? tags : []), "contest-only", `contest:${contest._id}`],

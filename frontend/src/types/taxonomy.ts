@@ -50,7 +50,7 @@ export interface TaxonomyStats {
   solvedCount?: number;
   attempts?: number;
   difficultyDistribution: { Easy: number; Medium: number; Hard: number };
-  questionTypeDistribution: { MCQ: number; MSQ: number; NAT: number };
+  questionTypeDistribution: { MCQ: number; MSQ: number; NAT: number; PROOF: number };
 }
 
 export interface ProblemsListResponse {

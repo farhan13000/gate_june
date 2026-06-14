@@ -3,7 +3,7 @@
  * Designed to be multi-domain scalable (DA, Maths, Physics, etc.)
  */
 
-export type QuestionType = "MCQ" | "MSQ" | "NAT";
+export type QuestionType = "MCQ" | "MSQ" | "NAT" | "PROOF";
 export type Difficulty = "Easy" | "Medium" | "Hard";
 export type Domain = "GATE_DA" | "GATE_CS" | "GATE_MA" | "GATE_PH" | string;
 

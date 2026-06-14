@@ -7,7 +7,7 @@ import { resolveHierarchyLabels, useTaxonomy, useTaxonomyStats } from "@/hooks/u
 import type { HierarchySelection, ProblemsListResponse } from "@/types/taxonomy";
 
 const difficulties = ["", "Easy", "Medium", "Hard"];
-const questionTypes = ["", "MCQ", "MSQ", "NAT"];
+const questionTypes = ["", "MCQ", "MSQ", "NAT", "PROOF"];
 const sortOptions = [
   { value: "newest", label: "Newest" },
   { value: "title", label: "Title" },
@@ -62,6 +62,7 @@ function typeBadge(type: string) {
   const base = "inline-flex min-w-[3.25rem] items-center justify-center rounded-sm border px-2 py-1 text-[11px] font-semibold";
   if (type === "MSQ") return `${base} border-primary/20 bg-primary/10 text-primary`;
   if (type === "NAT") return `${base} border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300`;
+  if (type === "PROOF") return `${base} border-green-500/25 bg-green-500/10 text-green-700 dark:text-green-300`;
   return `${base} border-border bg-secondary/40 text-foreground`;
 }
 

@@ -24,6 +24,7 @@ export interface ITheory extends Document {
   formulas: string[];
   diagrams: string[];
   highlights: string[];
+  tags: string[];
   status: "draft" | "pending_review" | "approved" | "rejected";
   createdBy: mongoose.Types.ObjectId;
   approvedBy?: mongoose.Types.ObjectId;
@@ -60,6 +61,7 @@ const theorySchema = new Schema<ITheory>(
     formulas: [{ type: String }],
     diagrams: [{ type: String }],
     highlights: [{ type: String }],
+    tags: { type: [String], default: [] },
     status: {
       type: String,
       enum: ["draft", "pending_review", "approved", "rejected"],

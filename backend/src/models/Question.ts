@@ -19,7 +19,7 @@ export interface IQuestion extends Document {
   difficulty: "Easy" | "Medium" | "Hard";
   statement: string;
   options?: { text: string; isCorrect: boolean }[];
-  questionType: "MCQ" | "MSQ" | "NAT";
+  questionType: "MCQ" | "MSQ" | "NAT" | "PROOF";
   imageUrl?: string;
   solution: any;
   markingScheme: { positive: number; negative: number };
@@ -66,7 +66,7 @@ const questionSchema = new Schema<IQuestion>(
         isCorrect: { type: Boolean, default: false },
       },
     ],
-    questionType: { type: String, enum: ["MCQ", "MSQ", "NAT"], required: true },
+    questionType: { type: String, enum: ["MCQ", "MSQ", "NAT", "PROOF"], required: true },
     imageUrl: { type: String },
     solution: { type: Schema.Types.Mixed, required: true },
     markingScheme: {

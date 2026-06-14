@@ -123,7 +123,7 @@ export const getTaxonomyStats = async (req: Request, res: Response): Promise<voi
     ]);
 
     const difficultyDist = { Easy: 0, Medium: 0, Hard: 0 };
-    const typeDist = { MCQ: 0, MSQ: 0, NAT: 0 };
+    const typeDist = { MCQ: 0, MSQ: 0, NAT: 0, PROOF: 0 };
     for (const q of questions) {
       if (q.difficulty in difficultyDist) {
         difficultyDist[q.difficulty as keyof typeof difficultyDist]++;

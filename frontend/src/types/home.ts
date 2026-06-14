@@ -10,7 +10,7 @@ export interface HomeProblemOfTheDay {
   topic: string;
   difficulty: "Easy" | "Medium" | "Hard";
   statement: string;
-  questionType: "MCQ" | "MSQ" | "NAT";
+  questionType: "MCQ" | "MSQ" | "NAT" | "PROOF";
   options?: HomeProblemOption[];
   imageUrl?: string;
 }
