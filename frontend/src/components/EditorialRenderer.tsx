@@ -7,6 +7,7 @@ import {
   Cpu,
   HelpCircle,
   Lightbulb,
+  MessageCircleQuestion,
   Route,
   Sigma,
   Sparkles,
@@ -23,6 +24,9 @@ interface Block {
   code?: string;
   language?: string;
   math?: string;
+  diagram?: unknown;
+  prompt?: string;
+  expectedObservation?: string;
 }
 
 interface EditorialData {
@@ -169,6 +173,64 @@ function renderEquationBlocks(value: unknown) {
   );
 }
 
+function renderEquationCard(equation: unknown, key: React.Key) {
+  const text = asText(equation);
+  if (!text) return null;
+
+  return (
+    <div key={key} className="overflow-x-auto rounded-sm border border-border bg-secondary/20 px-3 py-3 text-center shadow-inner">
+      <LatexRenderer latex={text} />
+    </div>
+  );
+}
+
+function renderInteractiveSolution(value: unknown, key: React.Key = "Interactive Solution") {
+  const parsed = parseMaybeJson(value);
+  const items = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  if (!items.length) return null;
+
+  return (
+    <section key={key} className="rounded-md border border-primary/15 bg-primary/5 p-4 shadow-sm">
+      <div className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+        <SectionIcon><MessageCircleQuestion size={13} /></SectionIcon>
+        <span>Interactive Checks</span>
+      </div>
+      <div className="space-y-3">
+        {items.map((item, index) => {
+          const parsedItem = parseMaybeJson(item);
+          const prompt = typeof parsedItem === "object" && parsedItem !== null
+            ? asText((parsedItem as GenericSolution).prompt || (parsedItem as GenericSolution).question || (parsedItem as GenericSolution).content)
+            : asText(parsedItem);
+          const expectedObservation = typeof parsedItem === "object" && parsedItem !== null
+            ? asText((parsedItem as GenericSolution).expectedObservation || (parsedItem as GenericSolution).observation || (parsedItem as GenericSolution).answer)
+            : "";
+
+          return (
+            <div key={index} className="grid gap-3 rounded-sm border border-primary/15 bg-background p-3 sm:grid-cols-[2rem_1fr]">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/25 bg-primary/10 font-mono text-[11px] font-bold text-primary">
+                {index + 1}
+              </span>
+              <div className="min-w-0 space-y-2">
+                {prompt && (
+                  <div className="text-sm font-medium leading-relaxed text-foreground">
+                    <LatexRenderer latex={prompt} />
+                  </div>
+                )}
+                {expectedObservation && (
+                  <div className="rounded-sm border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm leading-relaxed text-foreground/85">
+                    <span className="mr-1 font-semibold text-green-700 dark:text-green-400">Observation:</span>
+                    <LatexRenderer latex={expectedObservation} />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function renderFinalAnswer(value: unknown) {
   const finalAnswer = asText(value);
   if (!finalAnswer) return null;
@@ -190,57 +252,110 @@ function renderFinalAnswer(value: unknown) {
   );
 }
 
-function renderGenericSolution(solution: GenericSolution) {
-  const knownKeys = new Set([
-    "overview",
-    "summary",
-    "strategy",
-    "approach",
-    "detailed_steps",
-    "steps",
-    "solution_steps",
-    "narrative",
-    "paragraphs",
-    "equations",
-    "key_observation",
-    "keyObservation",
-    "keyInsight",
-    "mathematical_insight",
-    "mathematicalInsight",
-    "whyThisWorks",
-    "why_it_works",
-    "common_traps",
-    "commonTraps",
-    "complexity_or_reasoning",
-    "complexityOrReasoning",
-    "complexity",
-    "reasoning",
-    "final_answer",
-    "finalAnswer",
-    "answer",
-  ]);
+function formatInteractiveItems(value: unknown): string {
+  const parsed = parseMaybeJson(value);
+  const items = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  return items
+    .map((item) => {
+      const parsedItem = parseMaybeJson(item);
+      if (typeof parsedItem === "object" && parsedItem !== null) {
+        const prompt = asText((parsedItem as GenericSolution).prompt || (parsedItem as GenericSolution).question || "");
+        const observation = asText((parsedItem as GenericSolution).expectedObservation || (parsedItem as GenericSolution).observation || (parsedItem as GenericSolution).answer || "");
+        return [prompt && `Check: ${prompt}`, observation && `Observation: ${observation}`].filter(Boolean).join("\n");
+      }
+      return asText(parsedItem);
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
 
-  const blocks: React.ReactNode[] = [];
-  blocks.push(renderTextBlock("Strategy Overview", getFirstDefined(solution, ["overview", "summary", "strategy", "approach"]), <Sparkles size={13} />, "primary"));
-  blocks.push(renderParagraphListBlock("Solution Walkthrough", getFirstDefined(solution, ["narrative", "paragraphs", "detailed_steps", "steps", "solution_steps"])));
-  blocks.push(renderEquationBlocks(getFirstDefined(solution, ["equations"])));
-  blocks.push(renderTextBlock("Key Insight", getFirstDefined(solution, ["key_observation", "keyObservation", "keyInsight"]), <Lightbulb size={13} />, "amber"));
-  blocks.push(renderTextBlock("Why It Works", getFirstDefined(solution, ["mathematical_insight", "mathematicalInsight", "whyThisWorks", "why_it_works"]), <BookOpen size={13} />));
-  blocks.push(renderParagraphListBlock("Common Traps", getFirstDefined(solution, ["common_traps", "commonTraps"])));
-  blocks.push(renderTextBlock("Complexity Or Reasoning", getFirstDefined(solution, ["complexity_or_reasoning", "complexityOrReasoning", "complexity", "reasoning"]), <Cpu size={13} />));
-  blocks.push(renderFinalAnswer(getFirstDefined(solution, ["final_answer", "finalAnswer", "answer"])));
+function formatFlowBlocks(value: unknown): string {
+  const blocks = Array.isArray(value) ? value : [];
+  return blocks
+    .map((block) => {
+      if (!block || typeof block !== "object") return asText(block);
+      const item = block as Block;
+      const type = (item.type || "").toLowerCase();
+      if (["diagram", "visual", "figure"].includes(type)) return "";
+      if (["interactive", "interactivesolution", "check", "question"].includes(type)) {
+        return formatInteractiveItems(item.prompt || item.expectedObservation ? [{ prompt: item.prompt, expectedObservation: item.expectedObservation }] : item.content);
+      }
+      return asText(item.content || item.equation || item.math || item.code || "");
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
 
-  Object.entries(solution).forEach(([key, value]) => {
-    if (knownKeys.has(key) || value === undefined || value === null || value === "") return;
-    if (Array.isArray(parseMaybeJson(value))) {
-      blocks.push(renderParagraphListBlock(humanizeKey(key), value));
-    } else {
-      blocks.push(renderTextBlock(humanizeKey(key), value));
-    }
-  });
+function buildSimpleSolutionText(solution: GenericSolution): string {
+  const direct = getFirstDefined(solution, ["explanation", "solutionText", "solution_text", "detailedSolution", "detailed_solution", "content"]);
+  if (direct) return asText(direct);
 
-  const visibleBlocks = blocks.filter(Boolean);
-  if (!visibleBlocks.length) {
+  const parts = [
+    getFirstDefined(solution, ["overview", "summary", "strategy", "approach"]),
+    formatFlowBlocks(getFirstDefined(solution, ["blocks"])),
+    normalizeList(getFirstDefined(solution, ["narrative", "paragraphs", "detailed_steps", "steps", "solution_steps"])).join("\n\n"),
+    normalizeList(getFirstDefined(solution, ["equations"])).join("\n\n"),
+    getFirstDefined(solution, ["key_observation", "keyObservation", "keyInsight"]),
+    getFirstDefined(solution, ["mathematical_insight", "mathematicalInsight", "whyThisWorks", "why_it_works"]),
+    normalizeList(getFirstDefined(solution, ["common_traps", "commonTraps", "commonTrap"])).join("\n\n"),
+    getFirstDefined(solution, ["complexity_or_reasoning", "complexityOrReasoning", "complexity", "reasoning"]),
+    formatInteractiveItems(getFirstDefined(solution, ["interactiveSolution", "interactive_solution"])),
+  ];
+
+  return parts.map(asText).filter(Boolean).join("\n\n");
+}
+
+function renderSimpleSolution(solution: GenericSolution) {
+  const solutionText = buildSimpleSolutionText(solution);
+  const finalAnswer = getFirstDefined(solution, ["final_answer", "finalAnswer", "answer"]);
+  const unknownText = Object.entries(solution)
+    .filter(([key, value]) =>
+      ![
+        "explanation",
+        "solutionText",
+        "solution_text",
+        "detailedSolution",
+        "detailed_solution",
+        "content",
+        "overview",
+        "summary",
+        "strategy",
+        "approach",
+        "detailed_steps",
+        "steps",
+        "solution_steps",
+        "narrative",
+        "paragraphs",
+        "blocks",
+        "equations",
+        "diagram",
+        "diagrams",
+        "interactiveSolution",
+        "interactive_solution",
+        "key_observation",
+        "keyObservation",
+        "keyInsight",
+        "mathematical_insight",
+        "mathematicalInsight",
+        "whyThisWorks",
+        "why_it_works",
+        "common_traps",
+        "commonTraps",
+        "commonTrap",
+        "complexity_or_reasoning",
+        "complexityOrReasoning",
+        "complexity",
+        "reasoning",
+        "final_answer",
+        "finalAnswer",
+        "answer",
+      ].includes(key) && value !== undefined && value !== null && value !== ""
+    )
+    .map(([key, value]) => `${humanizeKey(key)}:\n${asText(value)}`)
+    .join("\n\n");
+  const combinedText = [solutionText, unknownText].filter(Boolean).join("\n\n");
+
+  if (!combinedText && !finalAnswer) {
     return (
       <div className="rounded-md border border-border bg-card p-4 text-sm leading-[1.9] text-foreground/85 shadow-sm">
         <LatexRenderer latex={asText(solution)} />
@@ -250,22 +365,77 @@ function renderGenericSolution(solution: GenericSolution) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-primary/15 bg-primary/5 p-4">
-        <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-primary/20 bg-background text-primary">
-            <BookOpen size={17} />
-          </span>
-          <div>
-            <div className="text-sm font-bold text-foreground">Editorial Roadmap</div>
-            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Read the strategy first, follow the numbered walkthrough, then use the equations and final answer to verify the result.
-            </div>
+      {combinedText && (
+        <section className="rounded-md border border-border bg-card p-4 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            <SectionIcon><BookOpen size={13} /></SectionIcon>
+            <span>Solution</span>
           </div>
-        </div>
-      </div>
-      {visibleBlocks}
+          <div className="text-sm leading-[1.9] text-foreground/85">
+            <LatexRenderer latex={combinedText} />
+          </div>
+        </section>
+      )}
+      {renderFinalAnswer(finalAnswer)}
     </div>
   );
+}
+
+function renderStructuredFlowBlock(block: Block, idx: number) {
+  const blockType = (block.type || "paragraph").toLowerCase();
+  const blockKey = `flow-${idx}-${block.type || "paragraph"}`;
+
+  if (["paragraph", "text", "explanation", "narrative"].includes(blockType)) {
+    const content = asText(block.content || block.math || "");
+    if (!content) return null;
+    return (
+      <div key={blockKey} className="text-sm leading-[1.9] text-foreground/85">
+        {block.title && (
+          <div className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            <LatexRenderer latex={block.title} />
+          </div>
+        )}
+        <LatexRenderer latex={content} />
+      </div>
+    );
+  }
+
+  if (["step"].includes(blockType)) {
+    return renderStructuredBlock(block, idx);
+  }
+
+  if (["equation", "equationblock", "math", "matrixblock"].includes(blockType)) {
+    return renderEquationCard(block.content || block.equation || block.math, blockKey);
+  }
+
+  if (["diagram", "visual", "figure"].includes(blockType)) {
+    return null;
+  }
+
+  if (["interactive", "interactivesolution", "check", "question"].includes(blockType)) {
+    return renderInteractiveSolution(
+      block.prompt || block.expectedObservation ? [{ prompt: block.prompt, expectedObservation: block.expectedObservation }] : block.content,
+      blockKey
+    );
+  }
+
+  if (["insight", "keyinsight", "observation", "intuition"].includes(blockType)) {
+    return renderTextBlock(block.title || "Key Insight", block.content, <Lightbulb size={13} />, "amber");
+  }
+
+  if (["warning", "pitfall", "trap", "commontrap"].includes(blockType)) {
+    return renderTextBlock(block.title || "Common Trap", block.content, <AlertTriangle size={13} />, "amber");
+  }
+
+  if (["finalanswer", "answer"].includes(blockType)) {
+    return renderFinalAnswer(block.content || block.math || "");
+  }
+
+  return renderStructuredBlock(block, idx);
+}
+
+function renderGenericSolution(solution: GenericSolution) {
+  return renderSimpleSolution(solution);
 }
 
 function renderStructuredBlock(block: Block, idx: number) {
@@ -348,6 +518,36 @@ function renderStructuredBlock(block: Block, idx: number) {
     case "finalAnswer":
       return renderFinalAnswer(block.content || "");
 
+    case "paragraph":
+    case "text":
+    case "explanation":
+      return (
+        <div key={idx} className="rounded-md border border-border bg-card p-4 text-sm leading-[1.9] text-foreground/85 shadow-sm">
+          {block.title && (
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              <LatexRenderer latex={block.title} />
+            </div>
+          )}
+          {block.content && <LatexRenderer latex={block.content} />}
+        </div>
+      );
+
+    case "equation":
+      return renderEquationCard(block.content || block.equation || block.math || "", idx);
+
+    case "diagram":
+    case "visual":
+    case "figure":
+      return null;
+
+    case "interactive":
+    case "interactiveSolution":
+    case "check":
+      return renderInteractiveSolution(
+        block.prompt || block.expectedObservation ? [{ prompt: block.prompt, expectedObservation: block.expectedObservation }] : block.content,
+        idx
+      );
+
     case "concept":
     case "theorem":
     case "derivation":
@@ -424,7 +624,7 @@ export default function EditorialRenderer({ solution }: EditorialRendererProps) 
   }
 
   if (Array.isArray(parsedSolution)) {
-    return renderParagraphListBlock("Solution Walkthrough", parsedSolution) || null;
+    return renderParagraphListBlock("Solution", parsedSolution) || null;
   }
 
   return (

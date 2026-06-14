@@ -50,9 +50,13 @@ RULES
 - Use the exact taxonomy IDs above. Do not invent taxonomy.
 - Return only parsable JSON, no markdown wrapper.
 - Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
-- Write the solution for the platform editorial renderer: overview card, numbered walkthrough cards, equation cards, insight card, and final answer card.
-- Keep narrative as 3-6 step-style paragraphs. Do not make one dense wall of text.
-- Put diagrams in structured JSON only when useful.
+- Keep the solution simple: one detailed explanation string plus finalAnswer.
+- Do not use solution.blocks, overview, keyInsight, whyThisWorks, commonTraps, diagram, or diagrams fields.
+- In solution.explanation, write clear paragraphs like a textbook solution. Include equations exactly where they are needed using display LaTeX.
+- If a diagram or graph would help, describe it inline inside solution.explanation as text, not as a JSON object.
+- Diagram format inside explanation: "Diagram: <title>\\n<node/step> -> <node/step> -> <node/step>".
+- Graph format inside explanation: "Graph: <title>\\nHorizontal axis: ...\\nVertical axis: ...\\nShape/key points: ...".
+- For counting/process/modeling problems, use compact ASCII flow such as "A elements -> choices in B -> product rule".
 
 OUTPUT SHAPE
 {
@@ -67,16 +71,7 @@ OUTPUT SHAPE
   "questionType": "${form.questionType}",
   "statement": "Clear statement with double-escaped LaTeX.",
   "solution": {
-    "overview": "One crisp strategy paragraph rendered as the Strategy Overview card.",
-    "narrative": [
-      "Step-style paragraph 1 of reasoning with valid inline LaTeX.",
-      "Step-style paragraph 2 explaining the main transformation or computation.",
-      "Step-style paragraph 3 connecting the calculation to the answer."
-    ],
-    "equations": ["\\\\[ important equation \\\\]"],
-    "keyInsight": "Main idea behind the solution, rendered as a highlighted insight card.",
-    "whyThisWorks": "Brief theorem, invariant, or reasoning principle that validates the method.",
-    "commonTraps": ["Common mistake or distractor logic to avoid."],
+    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\]. If useful, include an inline Diagram: or Graph: text block with escaped newlines.",
     "finalAnswer": "Final answer with units/precision if needed."
   },
   "options": [
@@ -88,10 +83,7 @@ OUTPUT SHAPE
   "isPyq": false,
   "yearAsked": 2025,
   "source": "GATE 2025 Official",
-  "tags": ["concept-1", "concept-2"],
-  "diagrams": [
-    { "type": "mermaid", "title": "Optional diagram", "code": "graph TD\\\\nA-->B" }
-  ]
+  "tags": ["concept-1", "concept-2"]
 }`;
 
   const copyPrompt = () => {
@@ -280,7 +272,7 @@ OUTPUT SHAPE
             </div>
           ))}
         <textarea
-          placeholder='Solution JSON, e.g. {"overview":"...","narrative":["..."],"equations":["\\\\[...\\\\]"],"finalAnswer":"..."}'
+          placeholder='Solution JSON, e.g. {"explanation":"Detailed solution with \\\\[...\\\\] where needed.","finalAnswer":"..."}'
           value={form.solution}
           onChange={(e) => setForm({ ...form, solution: e.target.value })}
           rows={4}

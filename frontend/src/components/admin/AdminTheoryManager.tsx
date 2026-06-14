@@ -35,7 +35,8 @@ Requirements:
 - Textbook-quality explanations with double-escaped LaTeX
 - Include key formulas and worked examples
 - Use Theorem:, Example:, GATE Example: block prefixes where appropriate
-- Markdown structure with clear headings
+- Use clear plain-text headings inside content.
+- Do not create a separate diagrams array. Put any visual explanation directly inside content as a readable block, e.g. "Diagram: Title\\nStep 1 -> Step 2 -> Step 3".
 
 Return only valid JSON, no markdown wrapper.`;
 

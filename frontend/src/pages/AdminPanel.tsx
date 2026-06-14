@@ -171,17 +171,7 @@ OUTPUT MUST BE:
   },
   "correct_answer": "A",
   "solution": {
-    "overview": "One crisp strategy paragraph rendered as the editorial Strategy Overview card.",
-    "narrative": [
-      "Step-style paragraph 1 with all math wrapped in \\\\( ... \\\\).",
-      "Step-style paragraph 2 explaining the transformation, computation, or proof idea.",
-      "Step-style paragraph 3 connecting the result to the answer."
-    ],
-    "equations": ["\\\\[ key equation used in the solution \\\\]"],
-    "keyInsight": "Hidden mathematical insight or elegant observation rendered as a highlighted insight card.",
-    "whyThisWorks": "Theoretical principle, invariant, theorem, or proof reason that validates the method.",
-    "commonTraps": ["Distractor 1 logic", "Distractor 2 logic"],
-    "complexityOrReasoning": "Time complexity, proof technique, or reasoning check when relevant.",
+    "explanation": "Detailed solution in simple textbook-style paragraphs. Include equations exactly where needed. If useful, include inline Diagram: or Graph: text blocks inside this same string using escaped newlines.",
     "finalAnswer": "Final answer exactly as it should appear in the final answer card."
   },
   "metadata": {
@@ -282,6 +272,7 @@ RETURN ONLY VALID JSON (NO PREAMBLE)
       "Enforce elite-level academic standards: IIT/IISc/TIFR rigor with concept fusion and mathematical depth.",
       "LaTeX SAFETY: Use ONLY double-escaped backslashes (\\\\frac, \\\\sigma). NO dollar signs, NO single backslash, NO markdown.",
       "JSON SAFETY: All quotes escaped, all braces matched, no trailing commas, parsable by JSON.parse().",
+      "SOLUTION FORMAT: Use only solution.explanation and solution.finalAnswer. Do not use solution.blocks or separate diagram fields.",
       "CONCEPT FUSION: Problems MUST combine 2+ GATE DA domains (e.g., Linear Algebra + Probability + Optimization).",
       "MATHEMATICAL DEPTH: Include asymptotic reasoning, hidden invariants, optimization insights, or proof intuition.",
       "QUALITY: No formula substitution shortcuts, no memory-based questions, no coaching institute templates.",
@@ -290,7 +281,7 @@ RETURN ONLY VALID JSON (NO PREAMBLE)
   },
   "Theory Article": {
     title: "GATE DA Comprehensive Theory Article Protocol",
-    description: "Use this protocol to generate syllabus-aligned, conceptually deep theory notes complete with LaTeX equations, Mermaid.js visual diagrams, and customized blocks.",
+    description: "Use this protocol to generate syllabus-aligned, conceptually deep theory notes with LaTeX equations and inline diagram/graph descriptions when useful.",
     promptTemplate: `You are an academic textbook author designing study materials for the GATE Data Science and AI syllabus.
 Your goal is to generate extremely detailed, textbook-quality study notes in standard JSON format.
 
@@ -303,17 +294,10 @@ STRUCTURAL COMPONENTS:
    - "Theorem: <Title>" followed by the mathematical theorem statement.
    - "Example: <Title>" followed by a detailed illustrative example.
    - "GATE Example: <Title>" followed by historical GATE problems with analytical solutions.
-3. MERMAID.JS DIAGRAMS:
-   - To illustrate data flows, decision boundaries, neural network layers, search trees, database relation relationships, or algorithmic steps, you MUST embed professional, valid Mermaid.js diagrams directly within the markdown content.
-   - Use standard Mermaid syntax inside a standard markdown code block:
-     \`\`\`mermaid
-     graph TD
-     A[Input Data] --> B(Standardization)
-     B --> C{PCA Projection}
-     C --> D[Eigenvector 1]
-     C --> E[Eigenvector 2]
-     \`\`\`
-   - Ensure the Mermaid code is fully correct, double-escaping any backslashes or newlines in the JSON string representation.
+3. INLINE VISUAL EXPLANATIONS:
+   - To illustrate data flows, decision boundaries, neural network layers, search trees, database relationships, or algorithmic steps, embed readable text diagrams directly inside the content string.
+   - Use escaped newlines and simple arrows so the reader page displays the diagram cleanly, e.g. "Diagram: PCA pipeline\\nRaw data -> Centering -> Covariance matrix -> Eigenvectors -> Projection".
+   - Do not create a separate diagrams array.
 
 CRITICAL LATEX FORMATTING RULES:
 1. NEVER write any mathematical variable, constant, equation, fraction, subscript, superscript, matrix, parameter, or math symbol as plain text!
@@ -345,12 +329,12 @@ JSON SCHEME REFERENCE:
     "chapterId": "4",
     "chapterTitle": "Dimensionality Reduction",
     "sectionId": "4.1",
-    "content": "## Core Concept of PCA\\n\\nPrincipal Component Analysis is a linear dimensionality reduction technique that finds the directions of maximum variance...\\n\\n\\\\frac{1}{n} X^T X\\\\) is the covariance matrix...\\n\\n\`\`\`mermaid\\ngraph LR\\nA[Data] --> B[Covariance Matrix] --> C[Eigenvalue Decomposition] --> D[Principal Components]\\n\`\`\`\\n\\nTheorem: Maximum Variance Projection\\nLet \\\\( u_1 \\\\) be the first principal direction...\\n\\nExample: 2D Data Projection\\nConsider a dataset of 3 points..."
+  "content": "Core Concept of PCA\\n\\nPrincipal Component Analysis is a linear dimensionality reduction technique that finds the directions of maximum variance...\\n\\n\\\\[ \\\\frac{1}{n} X^T X \\\\]\\n\\nDiagram: PCA pipeline\\nData -> Centering -> Covariance matrix -> Eigenvalue decomposition -> Principal components\\n\\nTheorem: Maximum Variance Projection\\nLet \\\\( u_1 \\\\) be the first principal direction...\\n\\nExample: 2D Data Projection\\nConsider a dataset of 3 points..."
   }
 ]`,
     rules: [
       "The response must be a 100% valid JSON array containing double-escaped LaTeX equations.",
-      "Embed visual Mermaid.js diagrams directly inside the markdown content for all complex structural or flow concepts.",
+      "Embed visual explanations directly inside the content string as readable Diagram: or Process flow: blocks with escaped newlines.",
       "Use custom block prefixes ('Theorem: [Title]', 'Example: [Title]', 'GATE Example: [Title]') to structure the layout of the notes."
     ]
   }
@@ -446,7 +430,13 @@ RENDERING AND LATEX CONTRACT
 - For MCQ/MSQ options, each option text can contain inline LaTeX and must be a JSON string.
 - For NAT final answers, put the exact answer in solution.finalAnswer and keep options as [] or omit options.
 - For PROOF questions, write a proof-style statement and solution; keep options as [] or omit options.
-- For diagrams, use objects only. Mermaid code must be one JSON string with escaped newlines, e.g. "graph TD\\\\nA[Start] --> B[Step]".
+- Keep each problem solution simple: use only solution.explanation and solution.finalAnswer.
+- Do not create solution.blocks, overview, narrative, equations, keyInsight, whyThisWorks, commonTraps, diagram, or diagrams fields for new problem JSON.
+- Put all reasoning, equations, checks, warnings, diagrams, and graphs directly inside solution.explanation as one well-written explanation string.
+- If a diagram would help, include it inline as readable text: "Diagram: <title>\\\\nStep 1 -> Step 2 -> Step 3".
+- If a graph would help, include it inline as readable text: "Graph: <title>\\\\nHorizontal axis: ...\\\\nVertical axis: ...\\\\nShape/key points: ...".
+- For process/modeling explanations, use compact text flows such as "Inputs in \\\\(A\\\\) -> choices in \\\\(B\\\\) -> product rule".
+- Do not create a separate diagrams array for theory articles either. Put visual explanations directly inside content as readable text blocks using escaped newlines.
 - Before returning, mentally run JSON.parse on the response and verify every math string renders with KaTeX.
 
 ${isProblem ? `PROBLEM ITEM SHAPE
@@ -462,19 +452,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "questionType": "MCQ|MSQ|NAT|PROOF",
   "statement": "Problem statement with inline math like \\\\( x^T A x \\\\) and display math like \\\\[ A = U\\\\Sigma V^T \\\\].",
   "solution": {
-    "overview": "One crisp strategy paragraph. This is rendered as the Strategy Overview card.",
-    "narrative": [
-      "Step-style paragraph 1 with all math wrapped in \\\\( ... \\\\). This becomes a numbered walkthrough card.",
-      "Step-style paragraph 2 that explains the transformation, computation, or proof idea.",
-      "Step-style paragraph 3 that connects the result to the answer."
-    ],
-    "equations": [
-      "\\\\[ \\\\operatorname*{argmin}_{x} \\\\|Ax-b\\\\|_2^2 \\\\]",
-      "\\\\[ A = U\\\\Sigma V^T \\\\]"
-    ],
-    "keyInsight": "The main observation that unlocks the problem. Rendered as a highlighted insight card.",
-    "whyThisWorks": "Short justification of the theorem, identity, invariant, or reasoning principle used.",
-    "commonTraps": ["A common wrong shortcut or distractor logic.", "A notation or boundary-condition mistake to avoid."],
+    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\]. If useful, include an inline Diagram: or Graph: text block with escaped newlines, not a JSON object.",
     "finalAnswer": "Final answer with valid LaTeX if mathematical, e.g. \\\\( \\\\frac{3}{2} \\\\)."
   },
   "options": [
@@ -492,13 +470,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "topic": "Exact topic name",
   "chapterTitle": "Exact chapter name",
   "sectionId": "SUBTOPIC_ID",
-  "content": "Well-structured article. Use headings as plain text, inline math as \\\\( ... \\\\), display equations as \\\\[ ... \\\\], and escaped newlines as \\\\n.",
+  "content": "Well-structured article. Use headings as plain text, inline math as \\\\( ... \\\\), display equations as \\\\[ ... \\\\], and escaped newlines as \\\\n. Put any visual explanation inline as a readable block such as Diagram: Title\\\\nStep 1 -> Step 2 -> Step 3.",
   "formulas": ["\\\\[ \\\\mathbb{E}[X] = \\\\int_{-\\\\infty}^{\\\\infty} x f_X(x)\\\\,dx \\\\]"],
   "examples": ["Worked example paragraph with valid inline LaTeX like \\\\( \\\\nabla f(x) = 0 \\\\)."],
-  "highlights": ["Key point with math wrapped as \\\\( ... \\\\) when needed."],
-  "diagrams": [
-    { "type": "mermaid", "title": "Optional diagram", "code": "graph TD\\\\nA-->B" }
-  ]
+  "highlights": ["Key point with math wrapped as \\\\( ... \\\\) when needed."]
 }`}`;
   };
 
@@ -716,6 +691,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     // Handle both elite protocol format and legacy format
     // Elite protocol: problem_statement, options{A/B/C/D}, difficulty{Foundational|Advanced|Elite Hard}
     // Backend format: statement, options[{text, isCorrect}], difficulty{Easy|Medium|Hard}
+    const normalizedSolution = item.solution && typeof item.solution === "object" && !Array.isArray(item.solution)
+      ? { ...item.solution }
+      : item.solution || {};
     
       const transformed: any = {
       subjectId: item.subjectId || "",
@@ -731,7 +709,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         : item.problem_type || item.questionType || "MCQ",
       statement: item.problem_statement || item.statement || "",
       tags: item.concepts || item.tags || [],
-      solution: item.solution || {},
+      solution: normalizedSolution,
       estimatedTime: item.estimatedTime || ((item.metadata?.estimated_time_minutes || 3) * 60),
       markingScheme: {
         positive: item.markingScheme?.positive ?? item.positiveMarks ?? 2,
@@ -1295,12 +1273,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "title": "Problem Title", "topic": "Exact topic name", "subtopic": "Exact subtopic name",
     "statement": "LaTeX...",
     "solution": {
-      "overview": "Strategy summary",
-      "narrative": ["Step-style paragraph 1", "Step-style paragraph 2"],
-      "equations": ["\\\\[ equation \\\\]"],
-      "keyInsight": "Main idea",
-      "whyThisWorks": "Reasoning principle",
-      "commonTraps": ["Mistake to avoid"],
+      "explanation": "Detailed solution with equations like \\\\[ equation \\\\]. If useful, add Diagram: or Graph: text inline.",
       "finalAnswer": "Answer"
     },
     "difficulty": "Medium", "questionType": "MCQ", "positiveMarks": 2, "negativeMarks": 0.5,
@@ -1412,73 +1385,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                                     <span>💡</span> Solution
                                   </div>
                                   
-                                  {typeof item.solution === 'string' ? (
-                                    <div className="leading-relaxed text-xs">
-                                      <LatexRenderer latex={item.solution} />
-                                    </div>
-                                  ) : (
-                                    <div className="space-y-2 text-xs">
-                                      {item.solution.overview && (
-                                        <div>
-                                          <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Overview:</div>
-                                          <div className="leading-relaxed pl-2">
-                                            <LatexRenderer latex={item.solution.overview} />
-                                          </div>
-                                        </div>
-                                      )}
-                                      
-                                      {item.solution.detailed_steps && Array.isArray(item.solution.detailed_steps) && (
-                                        <div>
-                                          <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Steps:</div>
-                                          <ol className="list-decimal list-inside space-y-1 pl-2">
-                                            {item.solution.detailed_steps.map((step: string, si: number) => (
-                                              <li key={si} className="leading-relaxed text-xs">
-                                                <LatexRenderer latex={step} />
-                                              </li>
-                                            ))}
-                                          </ol>
-                                        </div>
-                                      )}
-
-                                      {item.solution.steps && Array.isArray(item.solution.steps) && (
-                                        <div>
-                                          <div className="font-semibold text-amber-700 dark:text-amber-300 mb-1">Steps:</div>
-                                          <ol className="list-decimal list-inside space-y-1 pl-2">
-                                            {item.solution.steps.map((step: string, si: number) => (
-                                              <li key={si} className="leading-relaxed text-xs">
-                                                <LatexRenderer latex={step} />
-                                              </li>
-                                            ))}
-                                          </ol>
-                                        </div>
-                                      )}
-                                      
-                                      {item.solution.key_observation && (
-                                        <div>
-                                          <div className="font-semibold text-amber-700 dark:text-amber-300">Key Observation:</div>
-                                          <div className="leading-relaxed pl-2 text-xs">
-                                            <LatexRenderer latex={item.solution.key_observation} />
-                                          </div>
-                                        </div>
-                                      )}
-                                      
-                                      {item.solution.mathematical_insight && (
-                                        <div>
-                                          <div className="font-semibold text-amber-700 dark:text-amber-300">Mathematical Insight:</div>
-                                          <div className="leading-relaxed pl-2 text-xs">
-                                            <LatexRenderer latex={item.solution.mathematical_insight} />
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {(item.solution.finalAnswer || item.solution.final_answer) && (
-                                        <div className="rounded-sm border border-green-500/20 bg-green-500/10 p-2">
-                                          <span className="font-semibold text-green-700">Final answer: </span>
-                                          <LatexRenderer latex={item.solution.finalAnswer || item.solution.final_answer} />
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
+                                  <EditorialRenderer solution={item.solution} />
                                 </div>
                               )}
                             </div>
@@ -2149,7 +2056,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                           setEditItem({...editItem, solution: raw});
                         }
                       }}
-                      placeholder='Plain text or JSON, e.g. {"overview":"...","narrative":["..."],"finalAnswer":"..."}'
+                      placeholder='Plain text or JSON, e.g. {"explanation":"Detailed solution with \\\\[...\\\\] where needed.","finalAnswer":"..."}'
                       className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary"
                     /></div>
                   <div className="rounded-sm border border-border bg-secondary/10 p-4">
