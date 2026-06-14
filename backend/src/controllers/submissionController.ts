@@ -2,6 +2,14 @@ import { Request, Response } from "express";
 import Question from "../models/Question";
 import Submission from "../models/Submission";
 
+const isProofStyleQuestion = (question: any): boolean => {
+  if (question.questionType === "PROOF") return true;
+  const tags = Array.isArray(question.tags) ? question.tags.join(" ") : "";
+  const title = String(question.title || "");
+  const statement = String(question.statement || "").trim();
+  return /\b(proof|prove)\b/i.test(tags) || /\bprove\s+that\b/i.test(title) || /^(prove|show that)\b/i.test(statement);
+};
+
 // POST /api/problems/:id/submit
 export const submitAnswer = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -21,7 +29,11 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
 
     let isCorrect = false;
 
-    if (question.questionType === "MCQ") {
+    const isProofStyle = isProofStyleQuestion(question);
+
+    if (isProofStyle) {
+      isCorrect = true;
+    } else if (question.questionType === "MCQ") {
       if (!mcqSelected) {
         res.status(400).json({ message: "No option selected for MCQ" });
         return;
@@ -88,14 +100,33 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
       : -(question.markingScheme?.negative ?? 0);
     const parsedTimeTaken = Number(timeTaken);
     const normalizedTimeTaken = Number.isFinite(parsedTimeTaken)
-      ? Math.max(1, Math.min(Math.round(parsedTimeTaken), 12 * 60 * 60))
-      : Math.max(1, Math.round(question.estimatedTime || 120));
+      ? Math.max(0, Math.min(Math.round(parsedTimeTaken), 12 * 60 * 60))
+      : 0;
+
+    if (isCorrect) {
+      const existingCorrectSubmission = await Submission.findOne({ userId, questionId, isCorrect: true }).sort({ createdAt: 1 });
+      if (existingCorrectSubmission) {
+        res.status(200).json({
+          message: "Problem already solved. Correct submission was not counted again.",
+          duplicateCorrect: true,
+          submission: {
+            _id: existingCorrectSubmission._id,
+            isCorrect: true,
+            marksAwarded: 0,
+            timeTaken: normalizedTimeTaken,
+            createdAt: existingCorrectSubmission.createdAt,
+          },
+        });
+        return;
+      }
+    }
+
     const attemptNumber = await Submission.countDocuments({ userId, questionId }) + 1;
 
     const submission = new Submission({
       userId,
       questionId,
-      submittedOptionIds: question.questionType === "MCQ" ? [mcqSelected] : (question.questionType === "MSQ" ? msqSelected : []),
+      submittedOptionIds: isProofStyle ? [] : (question.questionType === "MCQ" ? [mcqSelected] : (question.questionType === "MSQ" ? msqSelected : [])),
       natAnswer: question.questionType === "NAT" ? natAnswer : undefined,
       isCorrect,
       marksAwarded,

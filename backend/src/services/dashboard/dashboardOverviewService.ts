@@ -21,12 +21,12 @@ function lastNDays(days: number) {
 }
 
 async function getSubmissionStats(userId: Types.ObjectId) {
-  const [totalAttempts, correctAttempts, solvedQuestions, submissions] = await Promise.all([
+  const [totalAttempts, solvedQuestions, submissions] = await Promise.all([
     Submission.countDocuments({ userId }),
-    Submission.countDocuments({ userId, isCorrect: true }),
     Submission.distinct("questionId", { userId, isCorrect: true }),
     Submission.find({ userId }).select("createdAt isCorrect timeTaken subjectId difficulty").sort({ createdAt: -1 }).lean(),
   ]);
+  const correctAttempts = solvedQuestions.length;
 
   const accuracy = totalAttempts ? Math.round((correctAttempts / totalAttempts) * 100) : 0;
   const activeDays = Array.from(new Set(submissions.map((item) => toDateKey(new Date(item.createdAt))))).sort().reverse();

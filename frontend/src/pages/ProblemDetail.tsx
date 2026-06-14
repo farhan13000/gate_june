@@ -27,6 +27,15 @@ import { toast } from "sonner";
 
 type Tab = "statement" | "editorial" | "submissions";
 
+const isProofProblem = (problem: any): boolean => {
+  if (!problem) return false;
+  if (problem.questionType === "PROOF") return true;
+  const tags = Array.isArray(problem.tags) ? problem.tags.join(" ") : "";
+  const title = String(problem.title || "");
+  const statement = String(problem.statement || "").trim();
+  return /\b(proof|prove)\b/i.test(tags) || /\bprove\s+that\b/i.test(title) || /^(prove|show that)\b/i.test(statement);
+};
+
 export default function ProblemDetail() {
   const { id } = useParams();
   const { user, isAuthenticated } = useAuth();
@@ -36,10 +45,11 @@ export default function ProblemDetail() {
 
   const [tab, setTab] = useState<Tab>("statement");
   const [submitted, setSubmitted] = useState(false);
-  const [result, setResult] = useState<{ isCorrect: boolean; marksAwarded: number } | null>(null);
+  const [result, setResult] = useState<{ isCorrect: boolean; marksAwarded: number; duplicateCorrect?: boolean } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(true);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerUsed, setTimerUsed] = useState(false);
   const timerStartedAtRef = useRef<number | null>(null);
   const timerAccumulatedRef = useRef(0);
 
@@ -99,6 +109,7 @@ export default function ProblemDetail() {
   const resumeTimer = () => {
     if (submitted) return;
     timerStartedAtRef.current = Date.now();
+    setTimerUsed(true);
     setTimerRunning(true);
   };
 
@@ -106,11 +117,12 @@ export default function ProblemDetail() {
     timerAccumulatedRef.current = 0;
     timerStartedAtRef.current = run ? Date.now() : null;
     setElapsedSeconds(0);
+    setTimerUsed(run);
     setTimerRunning(run);
   };
 
   useEffect(() => {
-    resetTimer(true);
+    resetTimer(false);
     setSubmitted(false);
     setResult(null);
 
@@ -149,6 +161,7 @@ export default function ProblemDetail() {
 
   const canSubmit = () => {
     if (!problem) return false;
+    if (isProofProblem(problem)) return true;
     if (problem.questionType === "NAT") return natAnswer.trim().length > 0;
     if (problem.questionType === "MCQ") return mcqSelected !== null;
     return msqSelected.length > 0;
@@ -183,7 +196,7 @@ export default function ProblemDetail() {
   const handleSubmit = async () => {
     if (!canSubmit() || !problem) return;
     setSubmitting(true);
-    const timeTaken = Math.max(1, currentElapsedSeconds());
+    const timeTaken = timerUsed ? Math.max(1, currentElapsedSeconds()) : 0;
     
     try {
       const res = await fetch(`/api/problems/${id}/submit`, {
@@ -193,6 +206,7 @@ export default function ProblemDetail() {
           mcqSelected,
           msqSelected,
           natAnswer,
+          proofDone: isProofProblem(problem),
           timeTaken
         }),
         credentials: "include"
@@ -206,14 +220,19 @@ export default function ProblemDetail() {
       const data = await res.json();
       setResult({
         isCorrect: data.submission.isCorrect,
-        marksAwarded: data.submission.marksAwarded
+        marksAwarded: data.submission.marksAwarded,
+        duplicateCorrect: Boolean(data.duplicateCorrect)
       });
       setSubmitted(true);
       timerAccumulatedRef.current = data.submission.timeTaken ?? timeTaken;
       timerStartedAtRef.current = null;
       setElapsedSeconds(data.submission.timeTaken ?? timeTaken);
       setTimerRunning(false);
-      if (data.submission.isCorrect) {
+      if (data.duplicateCorrect) {
+        toast.info("Already solved. This correct submission was not counted again.");
+      } else if (isProofProblem(problem)) {
+        toast.success("Marked as done.");
+      } else if (data.submission.isCorrect) {
         toast.success("Correct answer!");
       } else {
         toast.error("Incorrect answer.");
@@ -231,7 +250,7 @@ export default function ProblemDetail() {
   const handleClear = () => {
     setNatAnswer(""); setMcqSelected(null); setMsqSelected([]);
     setSubmitted(false); setResult(null);
-    resetTimer(true);
+    resetTimer(false);
   };
 
   if (loading) {
@@ -257,12 +276,14 @@ export default function ProblemDetail() {
     MCQ: "Multiple Choice (1 correct)",
     MSQ: "Multiple Select (1 or more correct)",
     NAT: "Numerical Answer Type",
+    PROOF: "Proof / Derivation",
   };
 
   const qTypeShort: Record<string, string> = {
     MCQ: "MCQ",
     MSQ: "MSQ",
     NAT: "NAT",
+    PROOF: "PROOF",
   };
 
   const difficultyConfig: Record<string, { bg: string; text: string; border: string; icon: React.ReactNode }> = {
@@ -287,6 +308,8 @@ export default function ProblemDetail() {
   };
 
   const dc = difficultyConfig[problem.difficulty] || difficultyConfig.Medium;
+  const proofProblem = isProofProblem(problem);
+  const displayQuestionType = proofProblem ? "PROOF" : problem.questionType;
 
   const tabConfig: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "statement", label: "Statement", icon: <FileText size={14} /> },
@@ -294,7 +317,9 @@ export default function ProblemDetail() {
     { key: "submissions", label: "Submissions", icon: <History size={14} /> },
   ];
 
-  const correctSubmissions = submissions.filter(s => s.isCorrect).length;
+  const rawCorrectSubmissions = submissions.filter(s => s.isCorrect).length;
+  const correctSubmissions = rawCorrectSubmissions > 0 ? 1 : 0;
+  const incorrectSubmissions = submissions.filter(s => !s.isCorrect).length;
   const totalSubmissions = submissions.length;
   const averageTimeTaken = totalSubmissions
     ? Math.round(submissions.reduce((sum, sub) => sum + (sub.timeTaken || 0), 0) / totalSubmissions)
@@ -307,6 +332,7 @@ export default function ProblemDetail() {
   );
 
   const formatSubmittedAnswer = (sub: any) => {
+    if (isProofProblem(problem)) return "Marked done";
     if (sub.natAnswer) return `Value: ${sub.natAnswer}`;
     if (sub.submittedOptionIds?.length) {
       const labels = sub.submittedOptionIds
@@ -363,7 +389,7 @@ export default function ProblemDetail() {
                     {problem.difficulty}
                   </span>
                   <span className="problem-type-chip">
-                    {qTypeShort[problem.questionType]}
+                    {qTypeShort[displayQuestionType] || displayQuestionType}
                   </span>
                 </div>
               </div>
@@ -382,7 +408,7 @@ export default function ProblemDetail() {
             <div className="problem-meta-strip">
               <div className="problem-meta-item">
                 <span className="problem-meta-label">Type</span>
-                <span className="problem-meta-value">{qTypeLabel[problem.questionType]}</span>
+                <span className="problem-meta-value">{qTypeLabel[displayQuestionType] || displayQuestionType}</span>
               </div>
               <div className="problem-meta-divider" />
               <div className="problem-meta-item">
@@ -494,9 +520,18 @@ export default function ProblemDetail() {
 
             {tab === "editorial" && (
               <div className="space-y-4 animate-in fade-in duration-200">
-                <div className="problem-section-header">
-                  <BookOpen size={14} className="text-primary" />
-                  <span>Editorial Solution</span>
+                <div className="rounded-md border border-primary/15 bg-primary/5 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-primary/20 bg-background text-primary">
+                      <BookOpen size={17} />
+                    </span>
+                    <div>
+                      <div className="text-sm font-bold text-foreground">Editorial Solution</div>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        A guided solution path with strategy, reasoning, key equations, and the final answer.
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <div className="text-foreground/85 leading-[1.8]">
                   <EditorialRenderer solution={problem.solution} />
@@ -528,7 +563,7 @@ export default function ProblemDetail() {
                       <div className="problem-stat-label">Correct</div>
                     </div>
                     <div className="problem-stat-card">
-                      <div className="problem-stat-value text-destructive">{totalSubmissions - correctSubmissions}</div>
+                      <div className="problem-stat-value text-destructive">{incorrectSubmissions}</div>
                       <div className="problem-stat-label">Incorrect</div>
                     </div>
                     <div className="problem-stat-card">
@@ -610,14 +645,17 @@ export default function ProblemDetail() {
                 <span className="text-sm font-semibold text-foreground">Your Answer</span>
               </div>
               <span className={`problem-type-chip-sm ${dc.bg} ${dc.text} ${dc.border}`}>
-                {problem.questionType}
+                {displayQuestionType}
               </span>
             </div>
 
             <div className="border-b border-border bg-secondary/20 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-sm border ${timerRunning && !submitted ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}>
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-sm border ${timerRunning && !submitted ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}
+                    title="Recommended: start the timer while solving so your learning dashboard can track real pacing and time efficiency."
+                  >
                     <Timer size={15} />
                   </div>
                   <div>
@@ -625,7 +663,7 @@ export default function ProblemDetail() {
                       {formatDuration(elapsedSeconds)}
                     </div>
                     <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {submitted ? "Submitted time" : timerRunning ? "Timer running" : "Timer paused"}
+                      {submitted ? "Submitted time" : timerRunning ? "Timer running" : timerUsed ? "Timer stopped" : "Timer idle"}
                     </div>
                   </div>
                 </div>
@@ -634,13 +672,14 @@ export default function ProblemDetail() {
                     type="button"
                     onClick={timerRunning ? pauseTimer : resumeTimer}
                     disabled={submitted}
+                    title="Recommended: use the timer so your learning dashboard can track pacing, hesitation, and time efficiency."
                     className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {timerRunning ? "Pause" : "Resume"}
+                    {timerRunning ? "Stop" : "Start"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => resetTimer(!submitted)}
+                    onClick={() => resetTimer(false)}
                     className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-secondary"
                   >
                     Reset
@@ -651,7 +690,21 @@ export default function ProblemDetail() {
 
             {/* Answer Body */}
             <div className="problem-answer-body">
-              {problem.questionType === "NAT" && (
+              {proofProblem && (
+                <div className="space-y-3">
+                  <div className="rounded-sm border border-primary/20 bg-primary/5 p-4">
+                    <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <BookOpen size={14} className="text-primary" />
+                      Proof-based problem
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Work through the proof or derivation on paper. When you are satisfied, mark it as done to save your progress and time.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!proofProblem && problem.questionType === "NAT" && (
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground leading-relaxed flex items-center gap-1.5">
                     <Timer size={12} />
@@ -679,7 +732,7 @@ export default function ProblemDetail() {
                 </div>
               )}
 
-              {problem.questionType === "MCQ" && (
+              {!proofProblem && problem.questionType === "MCQ" && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
                     <Target size={12} />
@@ -731,7 +784,7 @@ export default function ProblemDetail() {
                 </div>
               )}
 
-              {problem.questionType === "MSQ" && (
+              {!proofProblem && problem.questionType === "MSQ" && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
                     <Target size={12} />
@@ -788,7 +841,27 @@ export default function ProblemDetail() {
             {/* Result Banner */}
             {submitted && result && (
               <div className={`problem-result-banner ${result.isCorrect ? 'problem-result-correct' : 'problem-result-incorrect'}`}>
-                {result.isCorrect ? (
+                {proofProblem ? (
+                  <div className="flex items-center gap-3">
+                    <div className="problem-result-icon-correct">
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-green-700 dark:text-green-400">Marked as Done</div>
+                      <div className="text-xs text-green-600/70 dark:text-green-400/70 mt-0.5">Completed in {formatDuration(elapsedSeconds)}</div>
+                    </div>
+                  </div>
+                ) : result.isCorrect && result.duplicateCorrect ? (
+                  <div className="flex items-center gap-3">
+                    <div className="problem-result-icon-correct">
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-green-700 dark:text-green-400">Already Solved</div>
+                      <div className="text-xs text-green-600/70 dark:text-green-400/70 mt-0.5">Correct again, but not counted a second time.</div>
+                    </div>
+                  </div>
+                ) : result.isCorrect ? (
                   <div className="flex items-center gap-3">
                     <div className="problem-result-icon-correct">
                       <CheckCircle2 size={18} />
@@ -831,7 +904,7 @@ export default function ProblemDetail() {
                 ) : (
                   <>
                     <Send size={12} />
-                    <span>Submit</span>
+                    <span>{proofProblem ? "Mark as Done" : "Submit"}</span>
                   </>
                 )}
               </button>

@@ -171,16 +171,18 @@ OUTPUT MUST BE:
   },
   "correct_answer": "A",
   "solution": {
-    "overview": "Solution strategy summary",
-    "detailed_steps": [
-      "Step 1 with full LaTeX: \\\\frac{a}{b}",
-      "Step 2 with insight",
-      "..."
+    "overview": "One crisp strategy paragraph rendered as the editorial Strategy Overview card.",
+    "narrative": [
+      "Step-style paragraph 1 with all math wrapped in \\\\( ... \\\\).",
+      "Step-style paragraph 2 explaining the transformation, computation, or proof idea.",
+      "Step-style paragraph 3 connecting the result to the answer."
     ],
-    "key_observation": "Hidden mathematical insight or elegant observation",
-    "mathematical_insight": "Theoretical principle or abstract reasoning",
-    "common_traps": ["Distractor 1 logic", "Distractor 2 logic"],
-    "complexity_or_reasoning": "Time complexity or proof technique"
+    "equations": ["\\\\[ key equation used in the solution \\\\]"],
+    "keyInsight": "Hidden mathematical insight or elegant observation rendered as a highlighted insight card.",
+    "whyThisWorks": "Theoretical principle, invariant, theorem, or proof reason that validates the method.",
+    "commonTraps": ["Distractor 1 logic", "Distractor 2 logic"],
+    "complexityOrReasoning": "Time complexity, proof technique, or reasoning check when relevant.",
+    "finalAnswer": "Final answer exactly as it should appear in the final answer card."
   },
   "metadata": {
     "exam_style": "GATE DA / IISc / TIFR",
@@ -354,6 +356,17 @@ JSON SCHEME REFERENCE:
   }
 };
 
+const APPROVAL_TAGS = ["GATE", "GATE DA", "Olympiad", "Advanced"] as const;
+type ApprovalTag = (typeof APPROVAL_TAGS)[number];
+const REVIEWABLE_STATUSES = ["pending_review", "draft", "rejected"];
+
+const getInitialApprovalTag = (item: any): ApprovalTag => {
+  const existingTag = Array.isArray(item?.tags)
+    ? item.tags.find((tag: string) => APPROVAL_TAGS.includes(tag as ApprovalTag))
+    : undefined;
+  return (existingTag as ApprovalTag | undefined) || "GATE DA";
+};
+
 type Section =
   | "Overview"
   | "Taxonomy Manager"
@@ -374,32 +387,67 @@ export default function AdminPanel() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { tree: taxonomyTree } = useTaxonomy();
-  const taxonomyPromptContext = useMemo(() => buildTaxonomyPromptContext(taxonomyTree), [taxonomyTree]);
+  const [bulkPromptSubjectId, setBulkPromptSubjectId] = useState("");
+  const selectedPromptSubject = useMemo(
+    () => taxonomyTree.find((subject) => subject.subjectId === bulkPromptSubjectId) || taxonomyTree[0],
+    [bulkPromptSubjectId, taxonomyTree]
+  );
+  const taxonomyPromptContext = useMemo(
+    () => buildTaxonomyPromptContext(selectedPromptSubject ? [selectedPromptSubject] : []),
+    [selectedPromptSubject]
+  );
   const taxonomyCounts = useMemo(() => {
-    const chapters = taxonomyTree.flatMap((subject) => subject.chapters || []);
+    const scopedTree = selectedPromptSubject ? [selectedPromptSubject] : [];
+    const chapters = scopedTree.flatMap((subject) => subject.chapters || []);
     const topics = chapters.flatMap((chapter) => chapter.topics || []);
     const subtopics = topics.flatMap((topic) => topic.subtopics || []);
     return {
-      subjects: taxonomyTree.length,
+      subjects: scopedTree.length,
       chapters: chapters.length,
       topics: topics.length,
       subtopics: subtopics.length,
     };
-  }, [taxonomyTree]);
+  }, [selectedPromptSubject]);
 
   const buildSyncedCreationPrompt = () => {
     const isProblem = qForm.type === "Problem";
-    return `Create ${isProblem ? "GATE DA problems" : "GATE DA theory articles"} as valid JSON only.
+    const subjectName = selectedPromptSubject
+      ? `${selectedPromptSubject.name}${selectedPromptSubject.code ? ` (${selectedPromptSubject.code})` : ""}`
+      : "the selected subject";
+    return `Create ${isProblem ? "GATE DA problems" : "GATE DA theory articles"} as valid JSON only for this exact subject taxonomy: ${subjectName}.
 
-CURRENT TAXONOMY
-Use only these IDs. Do not invent taxonomy.
+CURRENT SUBJECT TAXONOMY
+Use only these IDs. Do not invent taxonomy, do not use IDs from any other subject, and do not leave taxonomy fields blank.
 ${taxonomyPromptContext}
+
+SUBJECT-SCOPED COVERAGE
+- Generate content only from the subject listed above.
+- Spread items across available chapters, topics, and subtopics instead of repeating one branch.
+- Prefer underused-looking subtopics and mix direct, conceptual, and synthesis-style items.
+- If a requested count is not specified, create 10 high-quality items.
 
 OUTPUT MODE
 - Return a JSON array for bulk creation.
 - Every item must include subjectId, chapterId, topicId, and subtopicId.
 - Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
 - No markdown wrapper, no prose outside JSON.
+
+RENDERING AND LATEX CONTRACT
+- The frontend renders strings with KaTeX/LaTeX-aware renderers, so every mathematical expression must be valid LaTeX inside a valid JSON string.
+- Inline math must be wrapped as "\\\\( ... \\\\)".
+- Display math must be wrapped as "\\\\[ ... \\\\]".
+- Because this is JSON, every LaTeX backslash must be double escaped. Write "\\\\frac", "\\\\sum", "\\\\lambda", "\\\\mathbb{R}", not "\\frac", "\\sum", "\\lambda".
+- Never use dollar math delimiters like "$x$", "$$x$$", or markdown code fences for equations.
+- Escape quotes inside strings as "\\\"" and newlines as "\\n". Do not insert raw line breaks inside JSON string values.
+- Use plain UTF-8 text only for prose. Use LaTeX commands for math symbols, matrices, vectors, probability notation, expectations, gradients, integrals, limits, and complexity notation.
+- Good inline example: "For \\\\( X \\\\sim \\\\mathcal{N}(\\\\mu, \\\\sigma^2) \\\\), compute \\\\( \\\\mathbb{E}[X] \\\\)."
+- Good display example: "\\\\[ \\\\nabla f(x) = A^T(Ax-b) \\\\]"
+- Bad examples: "$E[X]$", "\\frac{a}{b}", "lambda_1", "x^T A x" without LaTeX delimiters.
+- For MCQ/MSQ options, each option text can contain inline LaTeX and must be a JSON string.
+- For NAT final answers, put the exact answer in solution.finalAnswer and keep options as [] or omit options.
+- For PROOF questions, write a proof-style statement and solution; keep options as [] or omit options.
+- For diagrams, use objects only. Mermaid code must be one JSON string with escaped newlines, e.g. "graph TD\\\\nA[Start] --> B[Step]".
+- Before returning, mentally run JSON.parse on the response and verify every math string renders with KaTeX.
 
 ${isProblem ? `PROBLEM ITEM SHAPE
 {
@@ -411,18 +459,27 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "topic": "Exact topic name",
   "subtopic": "Exact subtopic name",
   "difficulty": "Easy|Medium|Hard",
-  "questionType": "MCQ|MSQ|NAT",
-  "statement": "Problem statement with double-escaped LaTeX.",
+  "questionType": "MCQ|MSQ|NAT|PROOF",
+  "statement": "Problem statement with inline math like \\\\( x^T A x \\\\) and display math like \\\\[ A = U\\\\Sigma V^T \\\\].",
   "solution": {
-    "overview": "Short strategy paragraph.",
-    "narrative": ["Paragraph reasoning, not tiny numbered steps."],
-    "equations": ["\\\\[ key equation \\\\]"],
-    "keyInsight": "Core idea.",
-    "finalAnswer": "Final answer."
+    "overview": "One crisp strategy paragraph. This is rendered as the Strategy Overview card.",
+    "narrative": [
+      "Step-style paragraph 1 with all math wrapped in \\\\( ... \\\\). This becomes a numbered walkthrough card.",
+      "Step-style paragraph 2 that explains the transformation, computation, or proof idea.",
+      "Step-style paragraph 3 that connects the result to the answer."
+    ],
+    "equations": [
+      "\\\\[ \\\\operatorname*{argmin}_{x} \\\\|Ax-b\\\\|_2^2 \\\\]",
+      "\\\\[ A = U\\\\Sigma V^T \\\\]"
+    ],
+    "keyInsight": "The main observation that unlocks the problem. Rendered as a highlighted insight card.",
+    "whyThisWorks": "Short justification of the theorem, identity, invariant, or reasoning principle used.",
+    "commonTraps": ["A common wrong shortcut or distractor logic.", "A notation or boundary-condition mistake to avoid."],
+    "finalAnswer": "Final answer with valid LaTeX if mathematical, e.g. \\\\( \\\\frac{3}{2} \\\\)."
   },
   "options": [
-    { "text": "Option A", "isCorrect": true },
-    { "text": "Option B", "isCorrect": false }
+    { "text": "\\\\( \\\\lambda = 1 \\\\)", "isCorrect": true },
+    { "text": "\\\\( \\\\lambda = 0 \\\\)", "isCorrect": false }
   ],
   "tags": ["concept"]
 }` : `THEORY ITEM SHAPE
@@ -435,10 +492,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "topic": "Exact topic name",
   "chapterTitle": "Exact chapter name",
   "sectionId": "SUBTOPIC_ID",
-  "content": "Well-structured article with double-escaped LaTeX.",
-  "formulas": ["\\\\[ formula \\\\]"],
-  "examples": ["Worked example paragraph."],
-  "highlights": ["Key point."],
+  "content": "Well-structured article. Use headings as plain text, inline math as \\\\( ... \\\\), display equations as \\\\[ ... \\\\], and escaped newlines as \\\\n.",
+  "formulas": ["\\\\[ \\\\mathbb{E}[X] = \\\\int_{-\\\\infty}^{\\\\infty} x f_X(x)\\\\,dx \\\\]"],
+  "examples": ["Worked example paragraph with valid inline LaTeX like \\\\( \\\\nabla f(x) = 0 \\\\)."],
+  "highlights": ["Key point with math wrapped as \\\\( ... \\\\) when needed."],
   "diagrams": [
     { "type": "mermaid", "title": "Optional diagram", "code": "graph TD\\\\nA-->B" }
   ]
@@ -459,6 +516,8 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
   // Bulk Selection State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [approvalTags, setApprovalTags] = useState<Record<string, ApprovalTag>>({});
+  const [bulkApprovalTag, setBulkApprovalTag] = useState<ApprovalTag>("GATE DA");
 
   // Reset selection on section change
   useEffect(() => {
@@ -504,17 +563,22 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         fetch("/api/admin/questions"),
         fetch("/api/admin/theories"),
       ]);
-      const pendingStatuses = ["pending_review", "draft"];
       let pending: any[] = [];
       if (qRes.ok) {
         const qs = await qRes.json();
-        pending = [...pending, ...qs.filter((q: any) => pendingStatuses.includes(q.status)).map((q: any) => ({...q, _contentType: "question"}))];
+        pending = [...pending, ...qs.filter((q: any) => REVIEWABLE_STATUSES.includes(q.status)).map((q: any) => ({...q, _contentType: "question"}))];
       }
       if (tRes.ok) {
         const ts = await tRes.json();
-        pending = [...pending, ...ts.filter((t: any) => pendingStatuses.includes(t.status)).map((t: any) => ({...t, _contentType: "theory"}))];
+        pending = [...pending, ...ts.filter((t: any) => REVIEWABLE_STATUSES.includes(t.status)).map((t: any) => ({...t, _contentType: "theory"}))];
       }
       setPendingQuestions(pending);
+      setApprovalTags((current) =>
+        pending.reduce<Record<string, ApprovalTag>>((next, item) => {
+          next[item._id] = current[item._id] || getInitialApprovalTag(item);
+          return next;
+        }, {})
+      );
     } catch (error) {}
   };
 
@@ -548,7 +612,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
       const isTheory = qForm.type === "Theory Article";
       const payload = isTheory 
         ? { title: qForm.title, topic: qForm.topic, chapterId: qForm.chapterId, chapterTitle: qForm.chapterTitle, sectionId: qForm.sectionId, content: qForm.statement, imageUrl: qForm.imageUrl }
-        : { ...qForm, options: qForm.questionType === "NAT" ? [] : qForm.options, markingScheme: { positive: qForm.positiveMarks, negative: qForm.negativeMarks } };
+        : { ...qForm, options: ["NAT", "PROOF"].includes(qForm.questionType) ? [] : qForm.options, markingScheme: { positive: qForm.positiveMarks, negative: qForm.negativeMarks } };
       
       const endpoint = isTheory ? "/api/admin/theories" : "/api/admin/questions";
       
@@ -662,7 +726,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
       topic: item.topic || "",
       subtopic: item.subtopic || "",
       difficulty: mapDifficulty(item.difficulty) || "Medium",
-      questionType: item.problem_type || item.questionType || "MCQ",
+      questionType: String(item.problem_type || item.questionType || "MCQ").toUpperCase() === "PROOF"
+        ? "PROOF"
+        : item.problem_type || item.questionType || "MCQ",
       statement: item.problem_statement || item.statement || "",
       tags: item.concepts || item.tags || [],
       solution: item.solution || {},
@@ -717,10 +783,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         errors.push(`#${itemNo}: missing taxonomy IDs (subjectId, chapterId, topicId, subtopicId)`);
       }
       if (!item.statement) errors.push(`#${itemNo}: missing problem statement`);
-      if (item.questionType !== "NAT" && (!Array.isArray(item.options) || item.options.length < 2)) {
+      if (!["NAT", "PROOF"].includes(item.questionType) && (!Array.isArray(item.options) || item.options.length < 2)) {
         errors.push(`#${itemNo}: MCQ/MSQ needs at least 2 options`);
       }
-      if (item.questionType !== "NAT" && !item.options?.some((opt: any) => opt.isCorrect)) {
+      if (!["NAT", "PROOF"].includes(item.questionType) && !item.options?.some((opt: any) => opt.isCorrect)) {
         errors.push(`#${itemNo}: mark at least one correct option`);
       }
     } else {
@@ -761,16 +827,22 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     } catch(e) { toast.error("Network error during upload"); }
   };
 
-  const handleApprove = async (id: string, status: "approved" | "rejected", contentType: "question" | "theory" = "question") => {
+  const handleApprove = async (
+    id: string,
+    status: "approved" | "rejected",
+    contentType: "question" | "theory" = "question",
+    tag?: ApprovalTag
+  ) => {
     try {
       const endpoint = contentType === "theory"
         ? `/api/admin/theories/${id}/approve`
         : `/api/admin/questions/${id}/approve`;
+      const selectedTag = tag || approvalTags[id] || "GATE DA";
       
       const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(status === "approved" ? { status, tag: selectedTag } : { status }),
       });
       
       if (res.ok) {
@@ -815,7 +887,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
       return fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status })
+        body: JSON.stringify(status === "approved" ? { status, tag: bulkApprovalTag } : { status })
       });
     });
 
@@ -853,6 +925,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const [allQuestions, setAllQuestions] = useState<any[]>([]);
   const [allTheories, setAllTheories] = useState<any[]>([]);
   const [inventoryTab, setInventoryTab] = useState<"problems" | "theories">("problems");
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState("all");
+  const [inventoryDifficultyFilter, setInventoryDifficultyFilter] = useState("all");
+  const [problemBankStatusFilter, setProblemBankStatusFilter] = useState("approved");
+  const [problemBankDifficultyFilter, setProblemBankDifficultyFilter] = useState("all");
   const [editItem, setEditItem] = useState<any | null>(null);
   const [historyItem, setHistoryItem] = useState<any | null>(null);
   const [previewItem, setPreviewItem] = useState<any | null>(null);
@@ -912,12 +988,23 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const handleSaveEdit = async () => {
     if (!editItem) return;
     try {
-      const isTheory = !!editItem.chapterId;
+      const isTheory = editItem._contentType === "theory" || (editItem.questionType === undefined && editItem.content !== undefined);
       const endpoint = isTheory ? `/api/admin/theories/${editItem._id}` : `/api/admin/questions/${editItem._id}`;
+      const editablePayload = { ...editItem };
+      delete editablePayload._contentType;
+      delete editablePayload._id;
+      delete editablePayload.createdBy;
+      delete editablePayload.approvedBy;
+      delete editablePayload.auditLog;
+      delete editablePayload.createdAt;
+      delete editablePayload.updatedAt;
+      if (["rejected", "draft"].includes(editablePayload.status)) {
+        editablePayload.status = "pending_review";
+      }
       const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editItem, note: editNote }),
+        body: JSON.stringify({ ...editablePayload, note: editNote }),
       });
       if (res.ok) {
         toast.success("Saved successfully!");
@@ -933,6 +1020,29 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     if (s === "pending_review") return "bg-amber-500/10 text-amber-600 border-amber-500/20";
     return "bg-secondary text-muted-foreground border-border";
   };
+
+  const reviewStatusLabel = (s: string) => {
+    if (s === "pending_review") return "Pending";
+    if (s === "rejected") return "Rejected";
+    if (s === "draft") return "Draft";
+    return s;
+  };
+
+  const matchesStatusFilter = (item: any, filter: string) => filter === "all" || item.status === filter;
+  const matchesDifficultyFilter = (item: any, filter: string) => filter === "all" || item.difficulty === filter;
+
+  const filteredInventoryQuestions = useMemo(
+    () => allQuestions.filter((q) => matchesStatusFilter(q, inventoryStatusFilter) && matchesDifficultyFilter(q, inventoryDifficultyFilter)),
+    [allQuestions, inventoryStatusFilter, inventoryDifficultyFilter]
+  );
+  const filteredInventoryTheories = useMemo(
+    () => allTheories.filter((t) => matchesStatusFilter(t, inventoryStatusFilter)),
+    [allTheories, inventoryStatusFilter]
+  );
+  const filteredProblemBankQuestions = useMemo(
+    () => allQuestions.filter((q) => matchesStatusFilter(q, problemBankStatusFilter) && matchesDifficultyFilter(q, problemBankDifficultyFilter)),
+    [allQuestions, problemBankStatusFilter, problemBankDifficultyFilter]
+  );
 
   return (
     <div className="min-h-screen bg-background pb-20 site-main-shell">
@@ -1107,20 +1217,42 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                         {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.title}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(buildSyncedCreationPrompt());
-                        toast.success("Taxonomy-synced AI prompt copied!");
-                      }}
-                      className="flex items-center gap-1.5 text-[10px] bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1 rounded-sm border border-primary/20 transition-all font-bold self-start sm:self-auto shrink-0"
-                    >
-                      <Clipboard size={10} /> Copy AI Prompt Template
-                    </button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                      <select
+                        value={selectedPromptSubject?.subjectId || ""}
+                        onChange={(e) => setBulkPromptSubjectId(e.target.value)}
+                        className="min-w-[12rem] rounded-sm border border-primary/20 bg-background px-2.5 py-1.5 text-[10px] font-semibold text-foreground outline-none focus:border-primary"
+                      >
+                        {taxonomyTree.length === 0 && <option value="">No taxonomy loaded</option>}
+                        {taxonomyTree.map((subject) => (
+                          <option key={subject.subjectId} value={subject.subjectId}>
+                            {subject.name}{subject.code ? ` (${subject.code})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(buildSyncedCreationPrompt());
+                          toast.success(`${selectedPromptSubject?.name || "Subject"} prompt copied!`);
+                        }}
+                        disabled={!selectedPromptSubject}
+                        className="flex items-center justify-center gap-1.5 text-[10px] bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1.5 rounded-sm border border-primary/20 transition-all font-bold self-start sm:self-auto shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Clipboard size={10} /> Copy Subject Prompt
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
                     {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.description}
                   </p>
+                  {selectedPromptSubject && (
+                    <div className="mb-3 rounded-sm border border-primary/15 bg-background/70 px-3 py-2 text-[11px] text-muted-foreground">
+                      Prompt target: <span className="font-semibold text-foreground">{selectedPromptSubject.name}</span>
+                      {selectedPromptSubject.code ? <span className="font-mono"> / {selectedPromptSubject.code}</span> : null}
+                      <span className="ml-1">({selectedPromptSubject.subjectId})</span>
+                    </div>
+                  )}
                   <div className="mb-3 grid grid-cols-2 gap-2 border-y border-primary/10 py-3 sm:grid-cols-4">
                     {(["subjects", "chapters", "topics", "subtopics"] as const).map((key) => (
                       <div key={key} className="rounded-sm border border-primary/15 bg-background/70 px-2 py-1.5 text-center">
@@ -1129,6 +1261,14 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       </div>
                     ))}
                   </div>
+                  <details className="mb-3 rounded-sm border border-primary/15 bg-background/70">
+                    <summary className="cursor-pointer px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-foreground">
+                      Preview selected subject prompt
+                    </summary>
+                    <pre className="max-h-72 overflow-auto border-t border-primary/10 p-3 whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      {buildSyncedCreationPrompt()}
+                    </pre>
+                  </details>
                   <div className="space-y-1.5 border-t border-primary/10 pt-3">
                     <span className="text-[10px] font-bold text-foreground block uppercase tracking-wider mb-1">Strict Rules:</span>
                     {CREATION_PROTOCOLS[qForm.type as keyof typeof CREATION_PROTOCOLS]?.rules.map((rule, idx) => (
@@ -1153,7 +1293,16 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "topicId": "TOPIC_ID_FROM_TAXONOMY",
     "subtopicId": "SUBTOPIC_ID_FROM_TAXONOMY",
     "title": "Problem Title", "topic": "Exact topic name", "subtopic": "Exact subtopic name",
-    "statement": "LaTeX...", "solution": "LaTeX...",
+    "statement": "LaTeX...",
+    "solution": {
+      "overview": "Strategy summary",
+      "narrative": ["Step-style paragraph 1", "Step-style paragraph 2"],
+      "equations": ["\\\\[ equation \\\\]"],
+      "keyInsight": "Main idea",
+      "whyThisWorks": "Reasoning principle",
+      "commonTraps": ["Mistake to avoid"],
+      "finalAnswer": "Answer"
+    },
     "difficulty": "Medium", "questionType": "MCQ", "positiveMarks": 2, "negativeMarks": 0.5,
     "options": [ { "text": "Option A", "isCorrect": true }, { "text": "Option B", "isCorrect": false } ]
   }
@@ -1442,7 +1591,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                             <div>
                               <label className="block text-xs font-bold text-foreground mb-1.5">Question Type</label>
                               <select value={qForm.questionType} onChange={e=>setQForm({...qForm, questionType: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none">
-                                <option>MCQ</option><option>MSQ</option><option>NAT</option>
+                                <option>MCQ</option><option>MSQ</option><option>NAT</option><option>PROOF</option>
                               </select>
                             </div>
                           </div>
@@ -1492,7 +1641,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                               <LatexRenderer latex={qForm.statement} />
                             </div>
                           )}
-                          {qForm.type === "Problem" && qForm.questionType !== "NAT" && (
+                          {qForm.type === "Problem" && !["NAT", "PROOF"].includes(qForm.questionType) && (
                             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                               {qForm.options.filter((option) => option.text.trim()).map((option, index) => (
                                 <div
@@ -1531,13 +1680,23 @@ ${isProblem ? `PROBLEM ITEM SHAPE
           <div className="w-full">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
               <h2 className="text-lg font-bold font-serif text-foreground">Content Approval Queue</h2>
-              <span className="text-xs bg-amber-500/10 border border-amber-500/20 text-amber-600 px-2.5 py-1 rounded-sm font-bold">{pendingQuestions.length} Awaiting Review</span>
+              <span className="text-xs bg-amber-500/10 border border-amber-500/20 text-amber-600 px-2.5 py-1 rounded-sm font-bold">{pendingQuestions.length} Reviewable Items</span>
             </div>
 
             {selectedIds.size > 0 && (
               <div className="bg-primary/10 border border-primary/20 rounded-md p-3 mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
                 <div className="flex flex-wrap gap-2">
+                  <select
+                    value={bulkApprovalTag}
+                    onChange={(e) => setBulkApprovalTag(e.target.value as ApprovalTag)}
+                    className="rounded-sm border border-border bg-background px-2 py-1.5 text-xs font-medium text-foreground"
+                    title="Tag to apply when bulk approving"
+                  >
+                    {APPROVAL_TAGS.map((tag) => (
+                      <option key={tag} value={tag}>{tag}</option>
+                    ))}
+                  </select>
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
                   <button onClick={() => handleBulkApprove("rejected")} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Bulk Reject</button>
                   <button onClick={() => handleBulkApprove("approved")} className="admin-approval-glow px-3 py-1.5 text-xs bg-primary hover:bg-red-hover text-primary-foreground border border-primary rounded-sm font-medium transition-colors">Bulk Approve</button>
@@ -1555,6 +1714,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                     <th className="py-3 px-4 font-bold">Type</th>
                     <th className="py-3 px-4 font-bold">Creator</th>
                     <th className="py-3 px-4 font-bold">Status</th>
+                    <th className="py-3 px-4 font-bold">Approval Tag</th>
                     <th className="py-3 px-4 font-bold text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1578,7 +1738,18 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       </td>
                       <td className="py-3.5 px-4 text-muted-foreground">{q.createdBy?.fullName || "Admin"}</td>
                       <td className="py-3.5 px-4">
-                        <span className="px-1.5 py-0.5 rounded-sm bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold text-[10px] uppercase">{q.status === "draft" ? "Draft" : "Pending"}</span>
+                        <span className={`px-1.5 py-0.5 rounded-sm border font-bold text-[10px] uppercase ${statusColor(q.status)}`}>{reviewStatusLabel(q.status)}</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <select
+                          value={approvalTags[q._id] || getInitialApprovalTag(q)}
+                          onChange={(e) => setApprovalTags((current) => ({ ...current, [q._id]: e.target.value as ApprovalTag }))}
+                          className="w-full min-w-[7rem] rounded-sm border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                        >
+                          {APPROVAL_TAGS.map((tag) => (
+                            <option key={tag} value={tag}>{tag}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex gap-2 justify-end">
@@ -1590,7 +1761,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                     </tr>
                   ))}
                   {pendingQuestions.length === 0 && (
-                    <tr><td colSpan={6} className="py-16 text-center text-muted-foreground text-sm">✅ All caught up! No pending content to review.</td></tr>
+                    <tr><td colSpan={8} className="py-16 text-center text-muted-foreground text-sm">✅ All caught up! No pending content to review.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1612,12 +1783,52 @@ ${isProblem ? `PROBLEM ITEM SHAPE
               </div>
             </div>
 
+            <div className="rounded-md border border-border bg-secondary/10 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Status</label>
+                  <select
+                    value={inventoryStatusFilter}
+                    onChange={(e) => setInventoryStatusFilter(e.target.value)}
+                    className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="approved">Approved</option>
+                    <option value="pending_review">Pending</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+                {inventoryTab === "problems" && (
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Difficulty</label>
+                    <select
+                      value={inventoryDifficultyFilter}
+                      onChange={(e) => setInventoryDifficultyFilter(e.target.value)}
+                      className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground"
+                    >
+                      <option value="all">All difficulties</option>
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                    </select>
+                  </div>
+                )}
+                <div className="flex items-end">
+                  <div className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    Showing <span className="font-mono font-bold text-foreground">{inventoryTab === "problems" ? filteredInventoryQuestions.length : filteredInventoryTheories.length}</span> of{" "}
+                    <span className="font-mono font-bold text-foreground">{inventoryTab === "problems" ? allQuestions.length : allTheories.length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {selectedIds.size > 0 && (
               <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
-                  <button onClick={() => handleBulkDelete(inventoryTab === "problems" ? allQuestions : allTheories)} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
+                  <button onClick={() => handleBulkDelete(inventoryTab === "problems" ? filteredInventoryQuestions : filteredInventoryTheories)} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
                 </div>
               </div>
             )}
@@ -1627,7 +1838,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 <table className="w-full text-xs text-left">
                   <thead className="bg-secondary/20 border-b border-border text-muted-foreground">
                     <tr>
-                      <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === allQuestions.length && allQuestions.length > 0} onChange={() => toggleAllSelection(allQuestions)} className="cursor-pointer" /></th>
+                      <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={filteredInventoryQuestions.length > 0 && filteredInventoryQuestions.every(q => selectedIds.has(q._id))} onChange={() => toggleAllSelection(filteredInventoryQuestions)} className="cursor-pointer" /></th>
                       <th className="py-3 px-2 font-bold">Content ID</th>
                       <th className="py-3 px-4 font-bold">Title</th>
                       <th className="py-3 px-4 font-bold">Topic</th>
@@ -1639,7 +1850,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {allQuestions.map(q => (
+                    {filteredInventoryQuestions.map(q => (
                       <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
                         <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
                         <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
@@ -1653,13 +1864,13 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                           <div className="flex gap-1.5 justify-end">
                             <button onClick={() => setPreviewItem({...q, _contentType: "question"})} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="Preview"><Eye size={12}/></button>
                             <button onClick={() => setHistoryItem(q)} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="View History"><Clock size={12}/></button>
-                            <button onClick={() => { setEditItem({...q}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
+                            <button onClick={() => { setEditItem({...q, _contentType: "question"}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
                             <button onClick={() => handleDelete(q._id, "question")} className="p-1.5 border border-red-200 rounded-sm hover:bg-red-500/10 text-red-400" title="Delete"><Trash2 size={12}/></button>
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {allQuestions.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">No problems found.</td></tr>}
+                    {filteredInventoryQuestions.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-muted-foreground">No problems match the selected filters.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1670,7 +1881,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 <table className="w-full text-xs text-left">
                   <thead className="bg-secondary/20 border-b border-border text-muted-foreground">
                     <tr>
-                      <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === allTheories.length && allTheories.length > 0} onChange={() => toggleAllSelection(allTheories)} className="cursor-pointer" /></th>
+                      <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={filteredInventoryTheories.length > 0 && filteredInventoryTheories.every(t => selectedIds.has(t._id))} onChange={() => toggleAllSelection(filteredInventoryTheories)} className="cursor-pointer" /></th>
                       <th className="py-3 px-2 font-bold">Content ID</th>
                       <th className="py-3 px-4 font-bold">Title</th>
                       <th className="py-3 px-4 font-bold">Topic</th>
@@ -1681,7 +1892,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {allTheories.map(t => (
+                    {filteredInventoryTheories.map(t => (
                       <tr key={t._id} className="hover:bg-secondary/20 transition-colors">
                         <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(t._id)} onChange={() => toggleSelection(t._id)} className="cursor-pointer" /></td>
                         <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{t.contentId || t._id.substring(0,8).toUpperCase()}</span></td>
@@ -1700,7 +1911,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                         </td>
                       </tr>
                     ))}
-                    {allTheories.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">No theory articles found.</td></tr>}
+                    {filteredInventoryTheories.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">No theory articles match the selected filters.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1711,14 +1922,52 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         {/* ── PROBLEM BANK (Approved only, with upvotes) ── */}
         {activeSection === "Problem Bank" && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold font-serif text-foreground">Problem Bank — Approved & Live</h2>
+            <h2 className="text-lg font-bold font-serif text-foreground">Problem Bank</h2>
+
+            <div className="rounded-md border border-border bg-secondary/10 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Status</label>
+                  <select
+                    value={problemBankStatusFilter}
+                    onChange={(e) => setProblemBankStatusFilter(e.target.value)}
+                    className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="approved">Approved</option>
+                    <option value="pending_review">Pending</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Difficulty</label>
+                  <select
+                    value={problemBankDifficultyFilter}
+                    onChange={(e) => setProblemBankDifficultyFilter(e.target.value)}
+                    className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground"
+                  >
+                    <option value="all">All difficulties</option>
+                    <option value="Easy">Easy</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    Showing <span className="font-mono font-bold text-foreground">{filteredProblemBankQuestions.length}</span> of{" "}
+                    <span className="font-mono font-bold text-foreground">{allQuestions.length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
             
             {selectedIds.size > 0 && (
               <div className="bg-primary/10 border border-primary/20 rounded-md p-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <span className="text-sm font-bold text-primary">{selectedIds.size} items selected</span>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Clear Selection</button>
-                  <button onClick={() => handleBulkDelete(allQuestions.filter(q => q.status === "approved"))} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
+                  <button onClick={() => handleBulkDelete(filteredProblemBankQuestions)} className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-sm font-medium transition-colors">Delete Selected</button>
                 </div>
               </div>
             )}
@@ -1727,18 +1976,19 @@ ${isProblem ? `PROBLEM ITEM SHAPE
               <table className="w-full text-xs text-left">
                 <thead className="bg-secondary/20 border-b border-border text-muted-foreground">
                   <tr>
-                    <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={selectedIds.size === allQuestions.filter(q => q.status === "approved").length && selectedIds.size > 0} onChange={() => toggleAllSelection(allQuestions.filter(q => q.status === "approved"))} className="cursor-pointer" /></th>
+                    <th className="py-3 px-4 w-10 text-center"><input type="checkbox" checked={filteredProblemBankQuestions.length > 0 && filteredProblemBankQuestions.every(q => selectedIds.has(q._id))} onChange={() => toggleAllSelection(filteredProblemBankQuestions)} className="cursor-pointer" /></th>
                     <th className="py-3 px-2 font-bold">Content ID</th>
                     <th className="py-3 px-4 font-bold">Title</th>
                     <th className="py-3 px-4 font-bold">Topic</th>
                     <th className="py-3 px-4 font-bold">Type</th>
                     <th className="py-3 px-4 font-bold">Difficulty</th>
+                    <th className="py-3 px-4 font-bold">Status</th>
                     <th className="py-3 px-4 font-bold">Upvotes</th>
                     <th className="py-3 px-4 font-bold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {allQuestions.filter(q => q.status === "approved").map(q => (
+                  {filteredProblemBankQuestions.map(q => (
                     <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
                       <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
                       <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
@@ -1748,17 +1998,18 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       <td className="py-3 px-4">
                         <span className={`px-1.5 py-0.5 rounded-sm border text-[10px] font-bold ${ q.difficulty==="Hard" ? "bg-red-500/10 text-red-600 border-red-500/20" : q.difficulty==="Medium" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-green-500/10 text-green-600 border-green-500/20" }`}>{q.difficulty}</span>
                       </td>
+                      <td className="py-3 px-4"><span className={`px-1.5 py-0.5 rounded-sm border text-[10px] font-bold uppercase ${statusColor(q.status)}`}>{reviewStatusLabel(q.status)}</span></td>
                       <td className="py-3 px-4 font-mono font-bold text-primary">{q.upvotes || 0}</td>
                       <td className="py-3 px-4">
                         <div className="flex gap-1.5 justify-end">
                           <button onClick={() => setPreviewItem({...q, _contentType: "question"})} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="Preview"><Eye size={12}/></button>
                           <button onClick={() => setHistoryItem(q)} className="p-1.5 border border-border rounded-sm hover:bg-secondary text-muted-foreground" title="History"><Clock size={12}/></button>
-                          <button onClick={() => { setEditItem({...q}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
+                          <button onClick={() => { setEditItem({...q, _contentType: "question"}); setEditNote(""); }} className="p-1.5 border border-border rounded-sm hover:bg-primary/10 hover:text-primary text-muted-foreground" title="Edit"><Edit2 size={12}/></button>
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {allQuestions.filter(q => q.status === "approved").length === 0 && <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">No approved problems yet.</td></tr>}
+                  {filteredProblemBankQuestions.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-muted-foreground">No problems match the selected filters.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1792,7 +2043,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 <div><label className="text-xs font-bold text-foreground block mb-1.5">Topic</label>
                   <input value={editItem.topic || ""} onChange={e => setEditItem({...editItem, topic: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
               </div>
-              {editItem.chapterId !== undefined ? (
+              {(editItem._contentType === "theory" || (editItem.questionType === undefined && editItem.content !== undefined)) ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">Chapter ID</label>
@@ -1807,18 +2058,119 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 </>
               ) : (
                 <>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Subject ID</label>
+                      <input value={editItem.subjectId || ""} onChange={e => setEditItem({...editItem, subjectId: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Chapter ID</label>
+                      <input value={editItem.chapterId || ""} onChange={e => setEditItem({...editItem, chapterId: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Topic ID</label>
+                      <input value={editItem.topicId || ""} onChange={e => setEditItem({...editItem, topicId: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Subtopic ID</label>
+                      <input value={editItem.subtopicId || ""} onChange={e => setEditItem({...editItem, subtopicId: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                  </div>
                   <div><label className="text-xs font-bold text-foreground block mb-1.5">Statement (LaTeX)</label>
                     <textarea rows={5} value={editItem.statement} onChange={e => setEditItem({...editItem, statement: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary" /></div>
-                  <div><label className="text-xs font-bold text-foreground block mb-1.5">Solution (LaTeX)</label>
-                    <textarea rows={4} value={editItem.solution} onChange={e => setEditItem({...editItem, solution: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary" /></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">Difficulty</label>
                       <select value={editItem.difficulty} onChange={e => setEditItem({...editItem, difficulty: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none">
                         <option>Easy</option><option>Medium</option><option>Hard</option></select></div>
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Question Type</label>
+                      <select
+                        value={editItem.questionType || "MCQ"}
+                        onChange={e => setEditItem({
+                          ...editItem,
+                          questionType: e.target.value,
+                          options: ["NAT", "PROOF"].includes(e.target.value) ? [] : (editItem.options?.length ? editItem.options : [{ text: "", isCorrect: true }, { text: "", isCorrect: false }]),
+                        })}
+                        className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none"
+                      >
+                        <option>MCQ</option><option>MSQ</option><option>NAT</option><option>PROOF</option>
+                      </select></div>
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">+Marks</label>
                       <input type="number" step="0.5" value={editItem.markingScheme?.positive} onChange={e => setEditItem({...editItem, markingScheme: {...editItem.markingScheme, positive: parseFloat(e.target.value)}})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none" /></div>
                     <div><label className="text-xs font-bold text-foreground block mb-1.5">-Marks</label>
                       <input type="number" step="0.5" value={editItem.markingScheme?.negative} onChange={e => setEditItem({...editItem, markingScheme: {...editItem.markingScheme, negative: parseFloat(e.target.value)}})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none" /></div>
+                  </div>
+                  {!["NAT", "PROOF"].includes(editItem.questionType) && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="text-xs font-bold text-foreground">Options</label>
+                        <button
+                          type="button"
+                          onClick={() => setEditItem({...editItem, options: [...(editItem.options || []), { text: "", isCorrect: false }]})}
+                          className="px-2 py-1 text-[11px] border border-border rounded-sm hover:bg-secondary"
+                        >
+                          Add option
+                        </button>
+                      </div>
+                      {(editItem.options || []).map((option: any, index: number) => (
+                        <div key={option._id || index} className="flex min-w-0 items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(option.isCorrect)}
+                            onChange={e => {
+                              const options = [...(editItem.options || [])];
+                              options[index] = { ...options[index], isCorrect: e.target.checked };
+                              setEditItem({ ...editItem, options });
+                            }}
+                          />
+                          <input
+                            value={option.text || ""}
+                            onChange={e => {
+                              const options = [...(editItem.options || [])];
+                              options[index] = { ...options[index], text: e.target.value };
+                              setEditItem({ ...editItem, options });
+                            }}
+                            placeholder={`Option ${index + 1}`}
+                            className="min-w-0 flex-1 px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditItem({ ...editItem, options: (editItem.options || []).filter((_: any, optionIndex: number) => optionIndex !== index) })}
+                            className="px-2 py-2 text-[11px] border border-border rounded-sm hover:bg-red-500/10 hover:text-red-500"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div><label className="text-xs font-bold text-foreground block mb-1.5">Tags (comma separated)</label>
+                    <input value={(editItem.tags || []).join(", ")} onChange={e => setEditItem({...editItem, tags: e.target.value.split(",").map(tag => tag.trim()).filter(Boolean)})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                  <div><label className="text-xs font-bold text-foreground block mb-1.5">Solution / Editorial</label>
+                    <textarea
+                      rows={7}
+                      value={typeof editItem.solution === "string" ? editItem.solution : JSON.stringify(editItem.solution || {}, null, 2)}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        try {
+                          setEditItem({...editItem, solution: JSON.parse(raw)});
+                        } catch {
+                          setEditItem({...editItem, solution: raw});
+                        }
+                      }}
+                      placeholder='Plain text or JSON, e.g. {"overview":"...","narrative":["..."],"finalAnswer":"..."}'
+                      className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary"
+                    /></div>
+                  <div className="rounded-sm border border-border bg-secondary/10 p-4">
+                    <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Live preview</div>
+                    <div className="space-y-4">
+                      <h3 className="font-serif text-base font-bold text-foreground"><LatexRenderer latex={editItem.title || ""} /></h3>
+                      <div className="rounded-sm border border-border bg-card p-3 text-sm"><LatexRenderer latex={editItem.statement || ""} /></div>
+                      {!["NAT", "PROOF"].includes(editItem.questionType) && (editItem.options || []).length > 0 && (
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {(editItem.options || []).map((option: any, index: number) => (
+                            <div key={option._id || index} className={`rounded-sm border p-2 text-xs ${option.isCorrect ? "border-green-500/30 bg-green-500/10 text-green-700" : "border-border bg-card"}`}>
+                              <span className="mr-2 font-mono font-bold">{String.fromCharCode(65 + index)}.</span>
+                              <LatexRenderer latex={option.text || ""} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="rounded-sm border border-border bg-card p-3">
+                        <EditorialRenderer solution={editItem.solution} />
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -2056,22 +2408,39 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 </div>
               )}
 
+              {previewItem.status !== "approved" && (
+                <div className="rounded-sm border border-border bg-secondary/20 p-3">
+                  <label className="block text-xs font-bold text-foreground mb-1.5">Approval tag</label>
+                  <select
+                    value={approvalTags[previewItem._id] || getInitialApprovalTag(previewItem)}
+                    onChange={(e) => setApprovalTags((current) => ({ ...current, [previewItem._id]: e.target.value as ApprovalTag }))}
+                    className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary sm:max-w-xs"
+                  >
+                    {APPROVAL_TAGS.map((tag) => (
+                      <option key={tag} value={tag}>{tag}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Action Buttons inside Preview */}
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-5 border-t border-border">
                 <button onClick={() => setPreviewItem(null)} className="px-5 py-2 text-xs border border-border rounded-sm hover:bg-secondary">
                   Close
                 </button>
-                {previewItem.status !== "approved" && previewItem.status !== "rejected" && (
+                {previewItem.status !== "approved" && (
                   <>
-                    <button 
-                      onClick={() => {
-                        handleApprove(previewItem._id, "rejected", previewItem._contentType);
-                        setPreviewItem(null);
-                      }} 
-                      className="px-5 py-2 text-xs border border-red-200 hover:bg-red-500/10 hover:text-red-500 rounded-sm transition-colors"
-                    >
-                      Reject
-                    </button>
+                    {previewItem.status !== "rejected" && (
+                      <button
+                        onClick={() => {
+                          handleApprove(previewItem._id, "rejected", previewItem._contentType);
+                          setPreviewItem(null);
+                        }}
+                        className="px-5 py-2 text-xs border border-red-200 hover:bg-red-500/10 hover:text-red-500 rounded-sm transition-colors"
+                      >
+                        Reject
+                      </button>
+                    )}
                     <button 
                       onClick={() => {
                         handleApprove(previewItem._id, "approved", previewItem._contentType);

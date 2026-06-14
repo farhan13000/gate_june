@@ -50,7 +50,8 @@ RULES
 - Use the exact taxonomy IDs above. Do not invent taxonomy.
 - Return only parsable JSON, no markdown wrapper.
 - Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
-- Write the solution as polished paragraphs, not a long numbered list.
+- Write the solution for the platform editorial renderer: overview card, numbered walkthrough cards, equation cards, insight card, and final answer card.
+- Keep narrative as 3-6 step-style paragraphs. Do not make one dense wall of text.
 - Put diagrams in structured JSON only when useful.
 
 OUTPUT SHAPE
@@ -66,13 +67,16 @@ OUTPUT SHAPE
   "questionType": "${form.questionType}",
   "statement": "Clear statement with double-escaped LaTeX.",
   "solution": {
-    "overview": "One short strategy paragraph.",
+    "overview": "One crisp strategy paragraph rendered as the Strategy Overview card.",
     "narrative": [
-      "Paragraph 1 of reasoning with LaTeX.",
-      "Paragraph 2 connecting the calculation to the answer."
+      "Step-style paragraph 1 of reasoning with valid inline LaTeX.",
+      "Step-style paragraph 2 explaining the main transformation or computation.",
+      "Step-style paragraph 3 connecting the calculation to the answer."
     ],
     "equations": ["\\\\[ important equation \\\\]"],
-    "keyInsight": "Main idea behind the solution.",
+    "keyInsight": "Main idea behind the solution, rendered as a highlighted insight card.",
+    "whyThisWorks": "Brief theorem, invariant, or reasoning principle that validates the method.",
+    "commonTraps": ["Common mistake or distractor logic to avoid."],
     "finalAnswer": "Final answer with units/precision if needed."
   },
   "options": [
@@ -111,7 +115,7 @@ OUTPUT SHAPE
       solution: form.solution,
       difficulty: form.difficulty,
       questionType: form.questionType,
-      options: form.questionType === "NAT" ? [] : form.options,
+      options: ["NAT", "PROOF"].includes(form.questionType) ? [] : form.options,
       markingScheme: { positive: form.positiveMarks, negative: form.negativeMarks },
       estimatedTime: form.estimatedTime,
       isPyq: form.isPyq,
@@ -187,6 +191,7 @@ OUTPUT SHAPE
             <option>MCQ</option>
             <option>MSQ</option>
             <option>NAT</option>
+            <option>PROOF</option>
           </select>
           <input
             type="number"
@@ -250,7 +255,7 @@ OUTPUT SHAPE
           rows={4}
           className="w-full rounded-sm border border-border px-3 py-2 font-mono text-xs"
         />
-        {form.questionType !== "NAT" &&
+        {!["NAT", "PROOF"].includes(form.questionType) &&
           form.options.map((opt, i) => (
             <div key={i} className="flex min-w-0 items-center gap-2">
               <input
