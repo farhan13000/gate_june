@@ -908,9 +908,33 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const [problemBankStatusFilter, setProblemBankStatusFilter] = useState("approved");
   const [problemBankDifficultyFilter, setProblemBankDifficultyFilter] = useState("all");
   const [editItem, setEditItem] = useState<any | null>(null);
+  const [editMode, setEditMode] = useState<"fields" | "json">("fields");
+  const [editJson, setEditJson] = useState<string>("");
+  const [editJsonError, setEditJsonError] = useState<string>("");
   const [historyItem, setHistoryItem] = useState<any | null>(null);
   const [previewItem, setPreviewItem] = useState<any | null>(null);
   const [editNote, setEditNote] = useState("");
+
+  const handleEditJsonChange = (value: string) => {
+    setEditJson(value);
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        setEditJsonError("Raw JSON must be an object representing this item");
+        return;
+      }
+      setEditItem({ ...parsed });
+      setEditJsonError("");
+    } catch (error: any) {
+      setEditJsonError(error?.message || "Invalid JSON");
+    }
+  };
+
+  useEffect(() => {
+    if (!editItem) return;
+    setEditJson(JSON.stringify(editItem, null, 2));
+    setEditJsonError("");
+  }, [editItem]);
 
   const fetchAllContent = async () => {
     try {
@@ -1944,12 +1968,50 @@ ${isProblem ? `PROBLEM ITEM SHAPE
               <button onClick={() => setEditItem(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className="text-xs font-bold text-foreground block mb-1.5">Title</label>
-                  <input value={editItem.title || ""} onChange={e => setEditItem({...editItem, title: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
-                <div><label className="text-xs font-bold text-foreground block mb-1.5">Topic</label>
-                  <input value={editItem.topic || ""} onChange={e => setEditItem({...editItem, topic: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+              <div className="flex gap-2 items-center flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setEditMode("fields")}
+                  className={`rounded-sm px-3 py-2 text-xs font-semibold border transition ${editMode === "fields" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}
+                >
+                  Field editor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditMode("json")}
+                  className={`rounded-sm px-3 py-2 text-xs font-semibold border transition ${editMode === "json" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-foreground hover:bg-secondary"}`}
+                >
+                  Raw JSON editor
+                </button>
+                <span className="text-[10px] text-muted-foreground">Switch between field editing and full JSON editing.</span>
               </div>
+
+              {editMode === "json" ? (
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                    <div>
+                      <label className="text-xs font-bold text-foreground block mb-1.5">Raw JSON payload</label>
+                      <p className="text-[10px] text-muted-foreground">Paste or edit the full problem/theory JSON object here. Valid JSON updates the preview live.</p>
+                    </div>
+                    <div className={`text-[10px] font-medium ${editJsonError ? "text-red-500" : "text-emerald-700"}`}>
+                      {editJsonError ? editJsonError : "JSON is valid"}
+                    </div>
+                  </div>
+                  <textarea
+                    rows={16}
+                    value={editJson}
+                    onChange={e => handleEditJsonChange(e.target.value)}
+                    className="w-full px-3 py-3 text-xs bg-background border border-border rounded-sm outline-none font-mono resize-y focus:border-primary"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Title</label>
+                      <input value={editItem.title || ""} onChange={e => setEditItem({...editItem, title: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                    <div><label className="text-xs font-bold text-foreground block mb-1.5">Topic</label>
+                      <input value={editItem.topic || ""} onChange={e => setEditItem({...editItem, topic: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
+                  </div>
               {(editItem._contentType === "theory" || (editItem.questionType === undefined && editItem.content !== undefined)) ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2079,6 +2141,8 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       </div>
                     </div>
                   </div>
+                </>
+              )}
                 </>
               )}
               <div><label className="text-xs font-bold text-foreground block mb-1.5">Image URL</label>
