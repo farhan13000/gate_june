@@ -1,6 +1,6 @@
 import { CheckCircle2, Circle, Clock3, RotateCcw, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import ContentExplorerLayout from "@/components/hierarchy/ContentExplorerLayout";
 import LatexRenderer from "@/components/LatexRenderer";
 import { resolveHierarchyLabels, useTaxonomy, useTaxonomyStats } from "@/hooks/useTaxonomy";
@@ -107,28 +107,36 @@ function ProblemStatusBadge({ problem }: { problem: any }) {
 
 export default function Problems({ mode = "practice", initialSubjectId }: ProblemsProps = {}) {
   const isPyqMode = mode === "pyq";
+  const [searchParams, setSearchParams] = useSearchParams();
   const { tree, loading: treeLoading, error: treeError, refresh: refreshTaxonomy } = useTaxonomy();
-  const [selection, setSelection] = useState<HierarchySelection>(
-    initialSubjectId ? { subjectId: initialSubjectId } : {}
-  );
+  const [selection, setSelection] = useState<HierarchySelection>(() => ({
+    subjectId: initialSubjectId || searchParams.get("subjectId") || undefined,
+    chapterId: searchParams.get("chapterId") || undefined,
+    topicId: searchParams.get("topicId") || undefined,
+    subtopicId: searchParams.get("subtopicId") || undefined,
+  }));
   const { stats, loading: statsLoading } = useTaxonomyStats(selection);
   const labels = resolveHierarchyLabels(tree, selection);
   const labelList = Object.values(labels).filter(Boolean) as string[];
 
   const [problems, setProblems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page")) || 1));
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(() => {
+    const savedPageSize = Number(searchParams.get("limit"));
+    return [10, 25, 50, 100].includes(savedPageSize) ? savedPageSize : 25;
+  });
   const [problemDifficultyCounts, setProblemDifficultyCounts] = useState(emptyDifficultyCounts);
   const [progressStats, setProgressStats] = useState({ solved: 0, attempts: 0 });
 
-  const [difficulty, setDifficulty] = useState("");
-  const [questionType, setQuestionType] = useState("");
-  const [progress, setProgress] = useState("");
-  const [sort, setSort] = useState("newest");
-  const [search, setSearch] = useState("");
+  const [difficulty, setDifficulty] = useState(() => searchParams.get("difficulty") || "");
+  const [questionType, setQuestionType] = useState(() => searchParams.get("questionType") || "");
+  const [progress, setProgress] = useState(() => searchParams.get("progress") || "");
+  const [sort, setSort] = useState(() => searchParams.get("sort") || "newest");
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
+  const hasInitializedPageRef = useRef(false);
 
   useEffect(() => {
     if (initialSubjectId) {
@@ -186,8 +194,38 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
   }, [selection, difficulty, questionType, progress, sort, search, page, pageSize, isPyqMode]);
 
   useEffect(() => {
+    if (!hasInitializedPageRef.current) {
+      hasInitializedPageRef.current = true;
+      return;
+    }
     setPage(1);
   }, [selection, difficulty, questionType, progress, sort, search, pageSize]);
+
+  const problemSetSearch = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selection.subjectId) params.set("subjectId", selection.subjectId);
+    if (selection.chapterId) params.set("chapterId", selection.chapterId);
+    if (selection.topicId) params.set("topicId", selection.topicId);
+    if (selection.subtopicId) params.set("subtopicId", selection.subtopicId);
+    if (difficulty) params.set("difficulty", difficulty);
+    if (questionType) params.set("questionType", questionType);
+    if (progress) params.set("progress", progress);
+    if (search.trim()) params.set("search", search.trim());
+    if (isPyqMode) params.set("pyq", "true");
+    params.set("sort", sort);
+    params.set("page", String(page));
+    params.set("limit", String(pageSize));
+    return params;
+  }, [selection, difficulty, questionType, progress, search, isPyqMode, sort, page, pageSize]);
+
+  const problemSetSearchString = problemSetSearch.toString();
+  const detailSearch = problemSetSearchString ? `?${problemSetSearchString}` : "";
+
+  useEffect(() => {
+    if (searchParams.toString() !== problemSetSearchString) {
+      setSearchParams(problemSetSearch, { replace: true });
+    }
+  }, [problemSetSearch, problemSetSearchString, searchParams, setSearchParams]);
 
   useEffect(() => {
     fetchProblems();
@@ -401,7 +439,7 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
               {problems.map((problem, idx) => (
                 <Link
                   key={problem._id}
-                  to={`/problems/${problem._id}`}
+                  to={`/problems/${problem._id}${detailSearch}`}
                   className="block p-4 transition-colors hover:bg-secondary/40"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -451,7 +489,7 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
                       </td>
                       <td className="px-3 py-3">
                         <Link
-                          to={`/problems/${problem._id}`}
+                          to={`/problems/${problem._id}${detailSearch}`}
                           className="line-clamp-2 font-medium text-foreground transition-colors hover:text-primary"
                         >
                           <LatexRenderer latex={problem.title} />

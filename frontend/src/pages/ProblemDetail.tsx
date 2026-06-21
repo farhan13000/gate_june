@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import {
   Send,
   RotateCcw,
@@ -14,6 +14,8 @@ import {
   Award,
   Target,
   Zap,
+  ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Hash,
   TrendingUp,
@@ -27,6 +29,13 @@ import { toast } from "sonner";
 
 type Tab = "statement" | "editorial" | "submissions";
 
+type ProblemNavigation = {
+  total: number;
+  position: number;
+  previous: { id: string; title: string } | null;
+  next: { id: string; title: string } | null;
+};
+
 const isProofProblem = (problem: any): boolean => {
   if (!problem) return false;
   if (problem.questionType === "PROOF") return true;
@@ -38,10 +47,14 @@ const isProofProblem = (problem: any): boolean => {
 
 export default function ProblemDetail() {
   const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
 
   const [problem, setProblem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [navigation, setNavigation] = useState<ProblemNavigation | null>(null);
+  const [showRelatedTags, setShowRelatedTags] = useState(false);
 
   const [tab, setTab] = useState<Tab>("statement");
   const [submitted, setSubmitted] = useState(false);
@@ -52,6 +65,7 @@ export default function ProblemDetail() {
   const [timerUsed, setTimerUsed] = useState(false);
   const timerStartedAtRef = useRef<number | null>(null);
   const timerAccumulatedRef = useRef(0);
+  const detailScrollerRef = useRef<HTMLDivElement>(null);
 
   // Answer state per type
   const [natAnswer, setNatAnswer] = useState("");
@@ -122,28 +136,59 @@ export default function ProblemDetail() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
+    setLoading(true);
+    setProblem(null);
+    setNavigation(null);
+    setShowRelatedTags(false);
+    setUpvotes(0);
+    setHasUpvoted(false);
     resetTimer(false);
+    setTab("statement");
     setSubmitted(false);
     setResult(null);
+    setNatAnswer("");
+    setMcqSelected(null);
+    setMsqSelected([]);
+    detailScrollerRef.current?.scrollTo({ top: 0, behavior: "auto" });
 
     fetch(`/api/problems/${id}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Problem not found");
+        return res.json();
+      })
       .then(data => {
+        if (cancelled) return;
         setProblem(data);
         setUpvotes(data.upvotes || 0);
-        if (user && data.upvotedBy) {
-          setHasUpvoted(data.upvotedBy.includes(user.id));
-        }
+        setHasUpvoted(Boolean(user && data.upvotedBy?.includes(user.id)));
         setLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setLoading(false);
+      });
+
+    fetch(`/api/problems/${id}/navigation${location.search}`, { credentials: "include" })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled) setNavigation(data);
+      })
+      .catch(() => {
+        if (!cancelled) setNavigation(null);
       });
 
     if (isAuthenticated) {
       fetchSubmissions();
+    } else {
+      setSubmissions([]);
     }
-  }, [id, user, isAuthenticated]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, user, isAuthenticated, location.search]);
 
   useEffect(() => {
     if (!problem || submitted || !timerRunning) return;
@@ -155,6 +200,31 @@ export default function ProblemDetail() {
 
     return () => window.clearInterval(interval);
   }, [problem, submitted, timerRunning]);
+
+  useEffect(() => {
+    const handleKeyboardNavigation = (event: KeyboardEvent) => {
+      if (event.key !== "[" && event.key !== "]") return;
+
+      const activeElement = document.activeElement;
+      const isTyping =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement ||
+        Boolean(activeElement?.getAttribute("contenteditable"));
+      if (isTyping) return;
+
+      const direction = event.key === "[" ? "previous" : "next";
+      const destination = navigation?.[direction];
+      if (!destination) return;
+
+      event.preventDefault();
+      setNavigation(null);
+      navigate(`/problems/${destination.id}${location.search}`);
+    };
+
+    window.addEventListener("keydown", handleKeyboardNavigation);
+    return () => window.removeEventListener("keydown", handleKeyboardNavigation);
+  }, [location.search, navigate, navigation]);
 
   const toggleMsq = (optId: string) =>
     setMsqSelected(prev => prev.includes(optId) ? prev.filter(x => x !== optId) : [...prev, optId]);
@@ -345,21 +415,70 @@ export default function ProblemDetail() {
     return "N/A";
   };
 
+  const navigationParams = new URLSearchParams(location.search);
+  const isPyqPracticeSet = navigationParams.get("pyq") === "true";
+  const subjectId = navigationParams.get("subjectId");
+  const returnPath = isPyqPracticeSet ? `/pyq/${encodeURIComponent(subjectId || "all")}` : "/problems";
+  const questionsHref = `${returnPath}${location.search}`;
+  const moveToQuestion = (direction: "previous" | "next") => {
+    const destination = navigation?.[direction];
+    if (destination) {
+      setNavigation(null);
+      navigate(`/problems/${destination.id}${location.search}`);
+    }
+  };
+
+  const positiveMarks = problem.markingScheme?.positive ?? 1;
+  const negativeMarks = problem.markingScheme?.negative ?? 0;
+
   return (
     <div className="w-full animate-in fade-in duration-300">
       {/* ── Breadcrumb ────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-5">
-        <Link to="/problems" className="hover:text-foreground flex items-center gap-1 transition-colors">
-          <ArrowLeft size={12} /> Problems
-        </Link>
-        <ChevronRight size={10} className="text-muted-foreground/50" />
-        <span className="text-muted-foreground/70">{problem.topic || "Problem"}</span>
+      <div className="mb-5 flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1.5">
+          <Link to={questionsHref} className="hover:text-foreground flex items-center gap-1 transition-colors">
+            <ArrowLeft size={12} /> {isPyqPracticeSet ? "PYQ Questions" : "Problems"}
+          </Link>
+          <ChevronRight size={10} className="text-muted-foreground/50" />
+          <span className="text-muted-foreground/70">{problem.topic || "Problem"}</span>
+        </div>
+        {navigation && (
+          <nav className="question-navigation" aria-label="Question navigation">
+            <span className="question-navigation-progress">
+              Question <strong>{navigation.position}</strong> of {navigation.total}
+            </span>
+            <div className="question-navigation-actions">
+              <button
+                type="button"
+                onClick={() => moveToQuestion("previous")}
+                disabled={!navigation.previous}
+                className="question-navigation-button"
+                aria-label="Previous question"
+                title={navigation.previous ? `Previous: ${navigation.previous.title} ([)` : "No previous question"}
+              >
+                <ChevronLeft size={15} />
+                <span className="hidden sm:inline">Previous</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => moveToQuestion("next")}
+                disabled={!navigation.next}
+                className="question-navigation-button question-navigation-button-primary"
+                aria-label="Next question"
+                title={navigation.next ? `Next: ${navigation.next.title} (])` : "No next question"}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
 
       {/* ── Two-column layout ─────────────────────────────────────── */}
       <div className="problem-detail-layout">
         {/* ═══ LEFT PANEL ═══ */}
-        <div className="problem-detail-left">
+        <div ref={detailScrollerRef} className="problem-detail-left">
 
           {/* ── Problem Header Card ─────────────────────────────── */}
           <div className="problem-header-card">
@@ -391,6 +510,16 @@ export default function ProblemDetail() {
                   <span className="problem-type-chip">
                     {qTypeShort[displayQuestionType] || displayQuestionType}
                   </span>
+                  <span
+                    className="problem-scoring-chip"
+                    aria-label={`Scoring: plus ${positiveMarks} for a correct answer and minus ${negativeMarks} for a wrong answer`}
+                    title="Scoring"
+                  >
+                    <Award size={11} />
+                    <span className="text-green-600 dark:text-green-400">+{positiveMarks}</span>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="text-destructive">-{negativeMarks}</span>
+                  </span>
                 </div>
               </div>
 
@@ -409,15 +538,6 @@ export default function ProblemDetail() {
               <div className="problem-meta-item">
                 <span className="problem-meta-label">Type</span>
                 <span className="problem-meta-value">{qTypeLabel[displayQuestionType] || displayQuestionType}</span>
-              </div>
-              <div className="problem-meta-divider" />
-              <div className="problem-meta-item">
-                <span className="problem-meta-label">Marks</span>
-                <span className="problem-meta-value">
-                  <span className="text-green-600 dark:text-green-400">+{problem.markingScheme?.positive || 1}</span>
-                  <span className="mx-1 text-muted-foreground">/</span>
-                  <span className="text-destructive">-{problem.markingScheme?.negative || 0}</span>
-                </span>
               </div>
               {totalSubmissions > 0 && (
                 <>
@@ -477,42 +597,36 @@ export default function ProblemDetail() {
                   </div>
                 </section>
 
-                {/* Marking Scheme Card */}
-                <section className="problem-marking-card">
-                  <div className="flex items-center gap-2 mb-2.5">
-                    <Award size={14} className="text-muted-foreground" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Marking Scheme</span>
-                  </div>
-                  <div className="flex gap-6 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-green-700 dark:text-green-400 font-medium">
-                        +{problem.markingScheme?.positive || 1} for correct answer
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-500" />
-                      <span className="text-destructive font-medium">
-                        -{problem.markingScheme?.negative || 0} for wrong answer
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
                 {/* Tags section */}
                 {problem.tags && problem.tags.length > 0 && (
-                  <section>
-                    <div className="problem-section-header">
-                      <Hash size={14} className="text-primary" />
-                      <span>Related Concepts</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {problem.tags.map((tag: string, i: number) => (
-                        <span key={i} className="text-[11px] px-2.5 py-1 bg-secondary/60 border border-border rounded-sm text-muted-foreground font-medium">
-                          {tag}
+                  <section className="border-t border-border/60 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowRelatedTags((visible) => !visible)}
+                      aria-expanded={showRelatedTags}
+                      className="flex w-full items-center justify-between gap-3 rounded-sm px-1 py-1.5 text-left text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Hash size={14} className="text-primary" />
+                        {showRelatedTags ? "Hide related concepts" : "Show related concepts"}
+                        <span className="rounded-full border border-border bg-secondary/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                          {problem.tags.length}
                         </span>
-                      ))}
-                    </div>
+                      </span>
+                      <ChevronDown
+                        size={15}
+                        className={`text-muted-foreground transition-transform ${showRelatedTags ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {showRelatedTags && (
+                      <div className="mt-3 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                        {problem.tags.map((tag: string, i: number) => (
+                          <span key={i} className="text-[11px] px-2.5 py-1 bg-secondary/60 border border-border rounded-sm text-muted-foreground font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 )}
               </div>
@@ -891,23 +1005,30 @@ export default function ProblemDetail() {
                 <RotateCcw size={12} />
                 <span>Clear</span>
               </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!canSubmit() || submitted || submitting}
-                className="problem-submit-btn"
-              >
-                {submitting ? (
-                  <>
-                    <div className="problem-submit-spinner" />
-                    <span>Submitting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={12} />
-                    <span>{proofProblem ? "Mark as Done" : "Submit"}</span>
-                  </>
-                )}
-              </button>
+              {submitted && navigation?.next ? (
+                <button onClick={() => moveToQuestion("next")} className="problem-submit-btn">
+                  <span>Next Question</span>
+                  <ChevronRight size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={!canSubmit() || submitted || submitting}
+                  className="problem-submit-btn"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="problem-submit-spinner" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={12} />
+                      <span>{proofProblem ? "Mark as Done" : "Submit"}</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

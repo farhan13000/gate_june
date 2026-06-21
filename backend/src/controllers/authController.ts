@@ -118,7 +118,7 @@ export const googleCallback = (req: Request, res: Response): void => {
     const token = generateToken(user._id.toString());
     setTokenCookie(res, token);
 
-    res.redirect(`${process.env.CLIENT_URL || "http://localhost:8080"}/dashboard`);
+    res.redirect(`${process.env.CLIENT_URL || "http://localhost:8080"}/`);
   } catch (error) {
     console.error("Google callback error:", error);
     res.redirect(`${process.env.CLIENT_URL || "http://localhost:8080"}/login?error=server_error`);

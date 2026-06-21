@@ -1,5 +1,5 @@
 import express from "express";
-import { getApprovedQuestions, getQuestionById, toggleUpvote, getApprovedTheories, getTheoryById } from "../controllers/problemController";
+import { getApprovedQuestions, getQuestionById, getQuestionNavigation, toggleUpvote, getApprovedTheories, getTheoryById } from "../controllers/problemController";
 import { submitAnswer, getQuestionSubmissions } from "../controllers/submissionController";
 import { optionalAuth, requireAuth } from "../middleware/auth";
 
@@ -11,6 +11,7 @@ router.get("/theories/:id", getTheoryById);
 
 // Question routes
 router.get("/", optionalAuth, getApprovedQuestions);
+router.get("/:id/navigation", optionalAuth, getQuestionNavigation);
 router.get("/:id", getQuestionById);
 router.post("/:id/upvote", requireAuth, toggleUpvote);
 router.post("/:id/submit", requireAuth, submitAnswer);

@@ -30,6 +30,51 @@ function buildQuestionFilter(query: Request["query"]): Record<string, unknown> {
   return filter;
 }
 
+function getQuestionSort(sort: string): Record<string, 1 | -1> {
+  if (sort === "difficulty") return { difficulty: 1, createdAt: -1, _id: -1 };
+  if (sort === "title") return { title: 1, _id: 1 };
+  return { createdAt: -1, _id: -1 };
+}
+
+async function applyProgressFilter(
+  filter: Record<string, unknown>,
+  progress: string,
+  userId?: mongoose.Types.ObjectId
+): Promise<void> {
+  if (!progress || !userId) return;
+
+  const baseIds = await Question.find(filter).select("_id").lean();
+  const ids = baseIds.map((question) => question._id);
+  const rows = ids.length
+    ? await Submission.aggregate([
+        { $match: { userId, questionId: { $in: ids } } },
+        {
+          $group: {
+            _id: "$questionId",
+            attempts: { $sum: 1 },
+            solved: { $max: { $cond: ["$isCorrect", 1, 0] } },
+          },
+        },
+      ])
+    : [];
+
+  const solvedIds = new Set(rows.filter((row) => row.solved > 0).map((row) => String(row._id)));
+  const attemptedIds = new Set(rows.map((row) => String(row._id)));
+  let filteredIds: mongoose.Types.ObjectId[] = ids;
+
+  if (progress === "solved") {
+    filteredIds = ids.filter((questionId) => solvedIds.has(String(questionId)));
+  } else if (progress === "attempted") {
+    filteredIds = ids.filter(
+      (questionId) => attemptedIds.has(String(questionId)) && !solvedIds.has(String(questionId))
+    );
+  } else if (progress === "unsolved") {
+    filteredIds = ids.filter((questionId) => !solvedIds.has(String(questionId)));
+  }
+
+  filter._id = { $in: filteredIds };
+}
+
 export const getApprovedQuestions = async (req: Request, res: Response): Promise<void> => {
   try {
     const filter = buildQuestionFilter(req.query);
@@ -39,40 +84,8 @@ export const getApprovedQuestions = async (req: Request, res: Response): Promise
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
     const skip = (page - 1) * limit;
 
-    if (progress && req.currentUser) {
-      const baseIds = await Question.find(filter).select("_id").lean();
-      const ids = baseIds.map((question) => question._id);
-      const rows = ids.length
-        ? await Submission.aggregate([
-            { $match: { userId: req.currentUser._id, questionId: { $in: ids } } },
-            {
-              $group: {
-                _id: "$questionId",
-                attempts: { $sum: 1 },
-                solved: { $max: { $cond: ["$isCorrect", 1, 0] } },
-              },
-            },
-          ])
-        : [];
-
-      const solvedIds = new Set(rows.filter((row) => row.solved > 0).map((row) => String(row._id)));
-      const attemptedIds = new Set(rows.map((row) => String(row._id)));
-      let filteredIds: mongoose.Types.ObjectId[] = ids;
-
-      if (progress === "solved") {
-        filteredIds = ids.filter((id) => solvedIds.has(String(id)));
-      } else if (progress === "attempted") {
-        filteredIds = ids.filter((id) => attemptedIds.has(String(id)) && !solvedIds.has(String(id)));
-      } else if (progress === "unsolved") {
-        filteredIds = ids.filter((id) => !solvedIds.has(String(id)));
-      }
-
-      filter._id = { $in: filteredIds };
-    }
-
-    let sortOpt: Record<string, 1 | -1> = { createdAt: -1 };
-    if (sort === "difficulty") sortOpt = { difficulty: 1, createdAt: -1 };
-    if (sort === "title") sortOpt = { title: 1 };
+    await applyProgressFilter(filter, progress, req.currentUser?._id);
+    const sortOpt = getQuestionSort(sort);
 
     const [questions, total, difficultyRows, allMatchingQuestionIds] = await Promise.all([
       Question.find(filter)
@@ -163,6 +176,39 @@ export const getApprovedQuestions = async (req: Request, res: Response): Promise
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch questions" });
+  }
+};
+
+export const getQuestionNavigation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const filter = buildQuestionFilter(req.query);
+    const progress = String(req.query.progress || "");
+    const sort = String(req.query.sort || "newest");
+
+    await applyProgressFilter(filter, progress, req.currentUser?._id);
+
+    const questions = await Question.find(filter)
+      .select("_id title")
+      .sort(getQuestionSort(sort))
+      .lean();
+    const currentIndex = questions.findIndex((question) => String(question._id) === req.params.id);
+
+    if (currentIndex === -1) {
+      res.status(404).json({ message: "Question not found in this practice set" });
+      return;
+    }
+
+    const toNavigationItem = (question?: { _id: mongoose.Types.ObjectId; title: string }) =>
+      question ? { id: String(question._id), title: question.title } : null;
+
+    res.json({
+      total: questions.length,
+      position: currentIndex + 1,
+      previous: toNavigationItem(questions[currentIndex - 1]),
+      next: toNavigationItem(questions[currentIndex + 1]),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load question navigation" });
   }
 };
 

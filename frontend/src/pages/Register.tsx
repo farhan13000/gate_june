@@ -20,7 +20,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    navigate("/dashboard", { replace: true });
+    navigate("/", { replace: true });
     return null;
   }
 
@@ -54,7 +54,7 @@ export default function Register() {
       toast.success("Account created!", {
         description: "Welcome to GATE DA Scholar.",
       });
-      navigate("/dashboard", { replace: true });
+      navigate("/", { replace: true });
     } else {
       setError(result.message);
       toast.error("Registration Failed", {

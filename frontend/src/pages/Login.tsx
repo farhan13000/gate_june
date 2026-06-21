@@ -22,7 +22,7 @@ export default function Login() {
 
   // Redirect if already logged in
   if (isAuthenticated) {
-    const from = (location.state as any)?.from?.pathname || "/dashboard";
+    const from = (location.state as any)?.from?.pathname || "/";
     navigate(from, { replace: true });
     return null;
   }
@@ -39,7 +39,7 @@ export default function Login() {
       toast.success("Welcome back!", {
         description: "You have successfully signed in.",
       });
-      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      const from = (location.state as any)?.from?.pathname || "/";
       navigate(from, { replace: true });
     } else {
       setError(result.message);
