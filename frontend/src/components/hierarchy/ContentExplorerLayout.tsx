@@ -61,21 +61,9 @@ export default function ContentExplorerLayout({
       style={{ "--taxonomy-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <header className="page-header">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1>{title}</h1>
-            <p>{subtitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSidebarOpen((open) => !open)}
-            className="inline-flex items-center justify-center gap-2 self-start rounded-sm border border-border bg-card px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary"
-            aria-expanded={sidebarOpen}
-            aria-controls="taxonomy-sidebar"
-          >
-            {sidebarOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
-            {sidebarOpen ? "Close subjects" : "Show subjects"}
-          </button>
+        <div>
+          <h1>{title}</h1>
+          <p>{subtitle}</p>
         </div>
       </header>
 
@@ -86,13 +74,25 @@ export default function ContentExplorerLayout({
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
               Subjects
             </span>
-            <button
-              type="button"
-              onClick={resetSelection}
-              className="shrink-0 rounded-sm border border-border px-2 py-1 text-[10px] font-medium hover:bg-secondary"
-            >
-              All
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={resetSelection}
+                className="shrink-0 rounded-sm border border-border px-2 py-1 text-[10px] font-medium hover:bg-secondary"
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-[10px] font-medium text-foreground hover:bg-secondary"
+                aria-label="Close subjects"
+                title="Close subjects"
+              >
+                <PanelLeftClose size={13} />
+                <span className="hidden sm:inline">Close</span>
+              </button>
+            </div>
           </div>
           <div className="panel-sidebar hierarchy-sidebar-panel sticky top-20">
             <HierarchySidebar

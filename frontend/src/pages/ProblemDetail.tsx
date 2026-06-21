@@ -587,13 +587,15 @@ export default function ProblemDetail() {
                     <FileText size={14} className="text-primary" />
                     <span>Problem Statement</span>
                   </div>
-                  {problem.imageUrl && (
-                    <div className="mb-4 p-2 bg-secondary/20 border border-border rounded-sm inline-block">
-                      <img src={problem.imageUrl} alt="Problem Diagram" className="rounded-sm max-h-64 object-cover" />
+                  <div className="problem-statement-reading">
+                    {problem.imageUrl && (
+                      <div className="mb-4 border border-border bg-secondary/20 p-2 text-center">
+                        <img src={problem.imageUrl} alt="Problem Diagram" className="mx-auto max-h-64 max-w-full rounded-sm object-contain" />
+                      </div>
+                    )}
+                    <div className="problem-statement-body">
+                      <LatexRenderer latex={problem.statement} />
                     </div>
-                  )}
-                  <div className="problem-statement-body">
-                    <LatexRenderer latex={problem.statement} />
                   </div>
                 </section>
 

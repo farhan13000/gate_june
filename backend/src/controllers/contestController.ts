@@ -464,7 +464,6 @@ export const getContestPracticeRoom = async (req: Request, res: Response): Promi
     });
 
     const questions = (contest.questions || []).map((question: any) => {
-      const hasPracticeSubmission = latestSubmissionsByQuestion.has(String(question._id));
       return {
         _id: question._id,
         title: question.title,
@@ -479,9 +478,9 @@ export const getContestPracticeRoom = async (req: Request, res: Response): Promi
         options: (question.options || []).map((option: any) => ({
           _id: option._id,
           text: option.text,
-          ...(hasPracticeSubmission ? { isCorrect: option.isCorrect } : {}),
+          isCorrect: option.isCorrect,
         })),
-        ...(hasPracticeSubmission ? { solution: question.solution } : {}),
+        solution: question.solution,
       };
     });
 

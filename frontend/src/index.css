@@ -383,6 +383,14 @@
   }
 
   @media (max-width: 1023px) {
+    .layout-sidebar-main {
+      gap: 1rem;
+    }
+
+    .layout-main-col {
+      min-width: 0;
+    }
+
     .hierarchy-sidebar-panel {
       max-height: min(72vh, 42rem);
       padding: 0;
@@ -733,6 +741,10 @@
   .problem-statement-body {
     @apply text-foreground/85 leading-[1.85] text-sm;
     font-family: var(--font-serif);
+  }
+
+  .problem-statement-reading {
+    @apply mx-auto mt-5 w-full max-w-3xl rounded-sm border border-border/60 bg-background/40 p-4 sm:p-5;
   }
 
   /* ── Submission Stat Cards ────────────────────────────────────── */

@@ -317,7 +317,6 @@ export default function Problems({ mode = "practice", initialSubjectId }: Proble
       </div>
       <div className="flex flex-col gap-2 border-t border-border pt-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Progress</span>
           {progressOptions.map((option) => (
             <button
               key={option.value || "all"}

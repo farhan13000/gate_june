@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useMatch, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock3, Eye, Flag, Gavel, Send } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Clock3, Eye, FileText, Flag, Gavel, Send } from "lucide-react";
 import { toast } from "sonner";
 import LatexRenderer from "@/components/LatexRenderer";
 import EditorialRenderer from "@/components/EditorialRenderer";
@@ -131,6 +131,7 @@ export default function ContestRoom() {
   const [standingMeta, setStandingMeta] = useState({ frozen: false, final: false });
   const [claimForm, setClaimForm] = useState({ type: "answer_key", title: "", description: "" });
   const [claimQuestionId, setClaimQuestionId] = useState("");
+  const [practiceTab, setPracticeTab] = useState<"statement" | "editorial">("statement");
   const isPracticeMode = isPracticeRoute || room?.mode === "practice";
 
   const loadRoom = useCallback(async () => {
@@ -241,6 +242,7 @@ export default function ContestRoom() {
 
   useEffect(() => {
     const submitted = activeQuestion?._id ? submittedByQuestion.get(String(activeQuestion._id)) : null;
+    setPracticeTab("statement");
     setMcqSelected(submitted?.answer?.mcqSelected || null);
     setMsqSelected(Array.isArray(submitted?.answer?.msqSelected) ? submitted.answer.msqSelected.map(String) : []);
     setNatAnswer(submitted?.answer?.natAnswer || "");
@@ -251,7 +253,9 @@ export default function ContestRoom() {
   const attemptedCount = room?.standing?.attemptedCount ?? submittedByQuestion.size;
   const totalQuestions = questions.length;
   const resultsVisible = Boolean(room?.canReveal);
-  const answerReviewVisible = resultsVisible || (isPracticeMode && Boolean(activeSubmission));
+  const answerKey = activeQuestion ? getCorrectAnswer(activeQuestion) : "";
+  const hasAnswerKey = Array.isArray(answerKey) ? answerKey.length > 0 : Boolean(String(answerKey).trim());
+  const answerReviewVisible = hasAnswerKey && (resultsVisible || (isPracticeMode && Boolean(activeSubmission)));
   const timeCard = useMemo(() => {
     if (!room) return { label: "Time", value: "--" };
     if (isPracticeMode) return { label: "Mode", value: "Practice" };
@@ -529,9 +533,60 @@ export default function ContestRoom() {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,24rem)]">
-        <main className="academic-card min-w-0 p-5 sm:p-8">
-          <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className={isPracticeMode ? "problem-detail-layout" : "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,24rem)]"}>
+        <main className={isPracticeMode ? "problem-detail-left" : "academic-card min-w-0 p-4 sm:p-5"}>
+          {isPracticeMode && (
+            <>
+              <div className="problem-header-card">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    {activeQuestion.topic && (
+                      <div className="mb-2 text-[10px] font-medium text-muted-foreground">{activeQuestion.topic}</div>
+                    )}
+                    <h2 className="mb-3 font-serif text-xl font-bold leading-tight text-foreground sm:text-2xl">
+                      <LatexRenderer latex={activeQuestion.title} />
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="problem-tag-chip">Question {activeIndex + 1}</span>
+                      {activeQuestion.topic && <span className="problem-tag-chip">{activeQuestion.topic}</span>}
+                      <span className="problem-difficulty-chip border-primary/20 bg-primary/10 text-primary">
+                        {activeQuestion.difficulty}
+                      </span>
+                      <span className="problem-type-chip">{activeQuestion.questionType}</span>
+                      <span className="problem-scoring-chip">
+                        <span className="text-green-600 dark:text-green-400">+{activeQuestion.markingScheme?.positive ?? 1}</span>
+                        <span className="text-muted-foreground">/</span>
+                        <span className="text-destructive">-{activeQuestion.markingScheme?.negative ?? 0}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-sm border border-primary/20 bg-primary/10 px-2 py-1 font-mono text-[10px] font-bold text-primary">
+                    PRACTICE
+                  </span>
+                </div>
+              </div>
+              <div className="problem-tab-bar">
+                <button
+                  type="button"
+                  onClick={() => setPracticeTab("statement")}
+                  className={`problem-tab ${practiceTab === "statement" ? "problem-tab-active" : ""}`}
+                >
+                  <FileText size={14} /> Statement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPracticeTab("editorial")}
+                  className={`problem-tab ${practiceTab === "editorial" ? "problem-tab-active" : ""}`}
+                >
+                  <BookOpen size={14} /> Editorial
+                </button>
+              </div>
+            </>
+          )}
+          <div className={isPracticeMode ? "problem-tab-content" : ""}>
+          {(!isPracticeMode || practiceTab === "statement") && (
+            <>
+          <div className={`mb-4 flex flex-wrap items-center gap-2 ${isPracticeMode ? "hidden" : ""}`}>
             <span className="rounded-sm border border-border bg-secondary/40 px-2.5 py-1 font-mono text-xs font-bold">
               Q{activeIndex + 1}
             </span>
@@ -550,20 +605,26 @@ export default function ContestRoom() {
               </span>
             )}
           </div>
-          <h2 className="mb-5 font-serif text-xl sm:text-2xl font-bold text-foreground leading-tight">
+          <h2 className={`mb-4 font-serif text-lg sm:text-xl font-bold text-foreground leading-tight ${isPracticeMode ? "hidden" : ""}`}>
             <LatexRenderer latex={activeQuestion.title} />
           </h2>
+          {isPracticeMode && (
+            <div className="problem-section-header">
+              <FileText size={14} className="text-primary" />
+              <span>Problem Statement</span>
+            </div>
+          )}
           {activeQuestion.imageUrl && (
             <img src={activeQuestion.imageUrl} alt={activeQuestion.title} className="mb-5 max-h-80 w-full rounded-sm border border-border object-contain bg-secondary/10 p-2" />
           )}
-          <div className="prose prose-sm sm:prose-base max-w-none text-foreground/90 leading-relaxed font-serif">
+          <div className="prose prose-sm max-w-none text-sm text-foreground/85 leading-[1.85] font-serif">
             <LatexRenderer latex={activeQuestion.statement} />
           </div>
 
           {answerReviewVisible && (
-            <div className="mt-8 border-t border-border pt-6">
+            <div className="mt-6 border-t border-border pt-5">
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="font-serif text-lg font-bold">Answer Key</h3>
+                <h3 className="font-serif text-base font-bold">Answer Key</h3>
                 {!isPracticeMode && room.claimsOpen && (
                   <button
                     type="button"
@@ -575,10 +636,10 @@ export default function ContestRoom() {
                   </button>
                 )}
               </div>
-              <div className="rounded-sm border border-primary/20 bg-primary/10 p-4 text-sm text-foreground">
-                {Array.isArray(getCorrectAnswer(activeQuestion)) ? (
+              <div className="rounded-sm border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+                {Array.isArray(answerKey) ? (
                   <div className="space-y-2">
-                    {(getCorrectAnswer(activeQuestion) as string[]).map((answer, index) => (
+                    {(answerKey as string[]).map((answer, index) => (
                       <div key={`${answer}-${index}`} className="flex gap-2">
                         <span className="font-mono text-primary font-bold">{index + 1}.</span>
                         <LatexRenderer latex={answer} />
@@ -586,7 +647,7 @@ export default function ContestRoom() {
                     ))}
                   </div>
                 ) : (
-                  <LatexRenderer latex={String(getCorrectAnswer(activeQuestion) || "See editorial")} />
+                  <LatexRenderer latex={String(answerKey)} />
                 )}
               </div>
               {!isPracticeMode && (claimsByQuestion.get(String(activeQuestion._id)) || []).length > 0 && (
@@ -612,7 +673,7 @@ export default function ContestRoom() {
                   </div>
                 </div>
               )}
-              {activeQuestion.solution && (
+              {!isPracticeMode && activeQuestion.solution && (
                 <div className="mt-8">
                   <h3 className="mb-4 font-serif text-lg font-bold border-b border-border pb-2">Editorial Solution</h3>
                   <EditorialRenderer solution={activeQuestion.solution} />
@@ -620,10 +681,40 @@ export default function ContestRoom() {
               )}
             </div>
           )}
+            </>
+          )}
+          {isPracticeMode && practiceTab === "editorial" && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="rounded-md border border-primary/15 bg-primary/5 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-primary/20 bg-background text-primary">
+                    <BookOpen size={17} />
+                  </span>
+                  <div>
+                    <div className="text-sm font-bold text-foreground">Editorial Solution</div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      The same solution attached to this problem in the problem bank.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              {activeQuestion.solution ? (
+                <div className="text-foreground/85 leading-[1.8]">
+                  <EditorialRenderer solution={activeQuestion.solution} />
+                </div>
+              ) : (
+                <div className="rounded-sm border border-border bg-secondary/20 p-5 text-sm text-muted-foreground">
+                  Editorial is not available for this problem yet.
+                </div>
+              )}
+            </div>
+          )}
+          </div>
         </main>
 
-        <aside className="academic-card flex flex-col overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
-          <div className="border-b border-border bg-secondary/25 px-5 py-4">
+        <aside className={isPracticeMode ? "problem-detail-right" : "academic-card flex flex-col overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]"}>
+          <div className={isPracticeMode ? "problem-answer-panel" : "contents"}>
+          <div className={isPracticeMode ? "problem-answer-header" : "border-b border-border bg-secondary/25 px-4 py-3"}>
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-bold text-foreground">Your Answer</div>
@@ -648,26 +739,26 @@ export default function ContestRoom() {
               )}
             </div>
           </div>
-          <div className="flex-1 space-y-4 p-5 overflow-y-auto custom-scrollbar">
+          <div className={isPracticeMode ? "problem-answer-body space-y-3" : "flex-1 space-y-3 p-4 overflow-y-auto custom-scrollbar"}>
             {activeQuestion.questionType === "NAT" && (
               <input
                 value={natAnswer}
                 onChange={(event) => setNatAnswer(event.target.value)}
                 disabled={activeLocked}
                 placeholder="Enter numerical answer"
-                className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-70 font-mono shadow-sm"
+                className="w-full rounded-sm border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-70 font-mono shadow-sm"
               />
             )}
 
             {activeQuestion.questionType === "MCQ" && (
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {(activeQuestion.options || []).map((option) => (
                   <button
                     key={option._id}
                     type="button"
                     disabled={activeLocked}
                     onClick={() => setMcqSelected(option._id)}
-                    className={`w-full rounded-sm border p-4 text-left text-sm disabled:cursor-not-allowed disabled:opacity-75 transition-all ${
+                    className={`w-full rounded-sm border p-3 text-left text-sm disabled:cursor-not-allowed disabled:opacity-75 transition-all ${
                       mcqSelected === option._id ? "border-primary bg-primary/10 shadow-[0_0_0_1px_hsla(var(--primary)/1)]" : "border-border bg-background hover:bg-secondary/30 hover:border-muted-foreground/30"
                     }`}
                   >
@@ -678,7 +769,7 @@ export default function ContestRoom() {
             )}
 
             {activeQuestion.questionType === "MSQ" && (
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {(activeQuestion.options || []).map((option) => {
                   const selected = msqSelected.includes(option._id);
                   return (
@@ -691,7 +782,7 @@ export default function ContestRoom() {
                           selected ? current.filter((id) => id !== option._id) : [...current, option._id]
                         )
                       }
-                      className={`w-full rounded-sm border p-4 text-left text-sm disabled:cursor-not-allowed disabled:opacity-75 transition-all flex items-start gap-3 ${
+                      className={`w-full rounded-sm border p-3 text-left text-sm disabled:cursor-not-allowed disabled:opacity-75 transition-all flex items-start gap-3 ${
                         selected ? "border-primary bg-primary/10 shadow-[0_0_0_1px_hsla(var(--primary)/1)]" : "border-border bg-background hover:bg-secondary/30 hover:border-muted-foreground/30"
                       }`}
                     >
@@ -707,7 +798,7 @@ export default function ContestRoom() {
               </div>
             )}
           </div>
-          <div className="space-y-3 border-t border-border p-5 bg-card">
+          <div className={isPracticeMode ? "problem-answer-footer flex-col" : "space-y-3 border-t border-border bg-card p-4"}>
             {!activeLocked && room.canSubmit && (
               <div className="rounded-sm border border-amber-500/25 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-200 font-medium">
                 {isPracticeMode ? "Practice submissions are separate from contest standings and ratings." : "Saving again updates your latest response for this question."}
@@ -722,6 +813,7 @@ export default function ContestRoom() {
               <Send size={14} />
               {isPracticeMode ? "Submit Practice Answer" : activeSubmission ? "Update Saved Answer" : "Save Answer"}
             </button>
+          </div>
           </div>
         </aside>
       </div>
