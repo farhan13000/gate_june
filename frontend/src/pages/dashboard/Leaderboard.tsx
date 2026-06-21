@@ -1,11 +1,11 @@
-import ComingSoon from "@/components/dashboard/ComingSoon";
+import FeatureLocked from "@/dashboard/components/FeatureLocked";
 
 export default function Leaderboard() {
   return (
-    <div className="w-full">
-      <ComingSoon 
-        title="Global Leaderboards Coming Soon"
-        description="See how you stack up against other GATE DA aspirants globally, weekly, and among your peers."
+    <div className="min-w-0 space-y-5">
+      <FeatureLocked
+        title="Leaderboard"
+        description="Leaderboard access is being prepared. Check back soon to compare your rank globally, weekly, and among your peers."
       />
     </div>
   );

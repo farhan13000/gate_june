@@ -11,3 +11,4 @@ export { default as SectionCard } from "./SectionCard";
 export { default as SkeletonLoader } from "./SkeletonLoader";
 export { default as StatCard } from "./StatCard";
 export { default as TimelineContainer } from "./TimelineContainer";
+export { default as FeatureLocked } from "./FeatureLocked";
