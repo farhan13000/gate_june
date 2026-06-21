@@ -12,7 +12,6 @@ const navItems = [
   { label: "PYQ", href: "/pyq" },
   { label: "Contests", href: "/contests" },
   { label: "Theory", href: "/theory" },
-  { label: "Leaderboard", href: "/leaderboard" },
   { label: "Dashboard", href: "/dashboard" },
 ];
 
