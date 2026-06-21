@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useMatch, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Clock3, Eye, Flag, Gavel, Send } from "lucide-react";
 import { toast } from "sonner";
 import LatexRenderer from "@/components/LatexRenderer";
@@ -114,10 +114,12 @@ export default function ContestRoom() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const practiceMatch = useMatch("/contests/:id/practice");
   const { refreshUser } = useAuth();
-  const isPracticeRoute = location.pathname.endsWith("/practice");
+  const isPracticeRoute = Boolean(practiceMatch || location.pathname.endsWith("/practice"));
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roomError, setRoomError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [mcqSelected, setMcqSelected] = useState<string | null>(null);
   const [msqSelected, setMsqSelected] = useState<string[]>([]);
@@ -133,11 +135,16 @@ export default function ContestRoom() {
 
   const loadRoom = useCallback(async () => {
     setLoading(true);
+    setRoomError(null);
     try {
       const endpoint = isPracticeRoute ? `/api/contests/${id}/practice-room` : `/api/contests/${id}/room`;
       const res = await fetch(endpoint, { credentials: "include" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to load contest room");
+      if (!res.ok) {
+        const message = data?.message || "Failed to load contest room";
+        setRoomError(message);
+        throw new Error(message);
+      }
       setRoom(data);
     } catch (error: any) {
       toast.error(error.message || "Failed to load contest room");
@@ -197,6 +204,13 @@ export default function ContestRoom() {
     };
     return () => es.close();
   }, [id, isPracticeRoute, loadRoom, room?.contest.contestState]);
+
+  // Ensure active index reset when a new room or question set loads
+  useEffect(() => {
+    if (!room) return;
+    const qlen = room.contest?.questions?.length || 0;
+    setActiveIndex((currentIndex) => (qlen > 0 ? Math.min(currentIndex, qlen - 1) : 0));
+  }, [room?.contest?._id, room?.contest?.questions?.length]);
 
   const questions = room?.contest.questions || [];
   const activeQuestion = questions[activeIndex];
@@ -373,9 +387,16 @@ export default function ContestRoom() {
   }
 
   if (!room || !activeQuestion) {
+    const noQuestions = Boolean(room && !activeQuestion && questions.length === 0);
     return (
       <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Contest room is not available.</p>
+        <p className="text-sm text-muted-foreground">
+          {roomError
+            ? roomError
+            : noQuestions
+            ? "This contest currently has no questions available."
+            : `Contest room loaded but no active question found. Question count: ${questions.length}, active index: ${activeIndex}.`}
+        </p>
         <Link to="/contests" className="mt-4 inline-flex btn-outline px-4 py-2 text-xs">Back to contests</Link>
       </div>
     );

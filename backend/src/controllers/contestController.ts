@@ -9,8 +9,8 @@ import RatingHistory from "../models/RatingHistory";
 import Submission from "../models/Submission";
 import { normalizeContestRating } from "../utils/ratingDefaults";
 import { getContestState, isContestOpenForArena, isContestOpenForRegistration, isPostContestState } from "../utils/contestLifecycle";
+import { getClockLifecycle, syncContestLifecycleById, syncDueContestLifecycles } from "../utils/contestLifecycleSync";
 import { recomputeContestRanks, recomputeUserStanding } from "../utils/contestScoring";
-import { syncContestLifecycleById, syncDueContestLifecycles } from "../utils/contestLifecycleSync";
 
 function normalizeNat(value: string) {
   return String(value || "").trim().toLowerCase();
@@ -70,7 +70,7 @@ async function attachUserRegistration(contests: any[], userId?: string) {
     return contests.map((contest) => ({
       ...contest,
       userRegistration: null,
-      contestState: getContestState(contest),
+      contestState: getClockedContestState(contest),
     }));
   }
 
@@ -81,13 +81,17 @@ async function attachUserRegistration(contests: any[], userId?: string) {
   return contests.map((contest) => ({
     ...contest,
     userRegistration: byContest.get(String(contest._id)) || null,
-    contestState: getContestState(contest),
+    contestState: getClockedContestState(contest),
   }));
 }
 
 function writeSse(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function getClockedContestState(contest: any) {
+  return getContestState({ ...contest, lifecycle: getClockLifecycle(contest) });
 }
 
 async function buildPublicContests(userId?: string) {
@@ -125,7 +129,7 @@ async function buildContestStandingsPayload(contestId: string, currentUserId?: s
   if (!contest) return null;
 
   await recomputeContestRanks(contest._id);
-  const state = getContestState(contest);
+  const state = getClockedContestState(contest);
   const isFrozen = ["frozen", "live"].includes(state) && contest.freezeTime && Date.now() >= new Date(contest.freezeTime).getTime();
   const showFinal = isPostContestState(state);
   const useVisible = Boolean(isFrozen && !showFinal);
@@ -326,7 +330,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const state = getContestState(contest);
+    const state = getClockedContestState(contest);
     if (!isContestOpenForArena(contest) && !isPostContestState(state)) {
       res.status(403).json({ message: "Contest room opens when the contest goes live" });
       return;
@@ -438,7 +442,7 @@ export const getContestPracticeRoom = async (req: Request, res: Response): Promi
       return;
     }
 
-    const state = getContestState(contest);
+    const state = getClockedContestState(contest);
     if (!isPostContestState(state)) {
       res.status(403).json({ message: "Practice opens after the contest ends" });
       return;
@@ -717,7 +721,7 @@ export const submitContestPracticeAnswer = async (req: Request, res: Response): 
       res.status(404).json({ message: "Contest not found" });
       return;
     }
-    if (!isPostContestState(getContestState(contest))) {
+    if (!isPostContestState(getClockedContestState(contest))) {
       res.status(403).json({ message: "Practice opens after the contest ends" });
       return;
     }

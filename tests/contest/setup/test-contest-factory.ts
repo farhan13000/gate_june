@@ -14,10 +14,8 @@ async function createContestWithLifecycle(lifecycle: string, overrides: Record<s
   cSeq += 1;
   const actorId = overrides.createdBy || new mongoose.Types.ObjectId();
   const { start, end } = contestTimes(
-    ["live", "frozen", "ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(lifecycle)
-      ? -60 * 60_000
-      : 60 * 60_000,
-    lifecycle === "ended" || lifecycle.includes("claim") || lifecycle.includes("final") || lifecycle === "ratings_applied" ? 30 * 60_000 : 60 * 60_000
+    ["live", "frozen"].includes(lifecycle) ? -30 * 60_000 : ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(lifecycle) ? -60 * 60_000 : 60 * 60_000,
+    lifecycle === "live" ? 90 * 60_000 : lifecycle === "ended" || lifecycle.includes("claim") || lifecycle.includes("final") || lifecycle === "ratings_applied" ? 30 * 60_000 : 60 * 60_000
   );
   const question = overrides.question || (await createMCQQuestion({ createdBy: actorId }));
   return Contest.create({

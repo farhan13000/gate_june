@@ -12,6 +12,7 @@ import {
   deleteTheory,
   approveTheory,
   bulkUpload,
+  exportAdminContent,
 } from "../controllers/adminController";
 import {
   getHomeSettings,
@@ -121,6 +122,7 @@ router.delete("/theories/:id", deleteTheory);
 
 // Bulk Upload
 router.post("/bulk-upload", bulkUpload);
+router.get("/exports/content", exportAdminContent);
 
 // Home page management
 router.get("/home-settings", getHomeSettings);

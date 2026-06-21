@@ -12,6 +12,7 @@ import {
   Trophy,
   CheckSquare,
   ScrollText,
+  DownloadCloud,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -24,6 +25,7 @@ export type AdminSectionId =
   | "User Analytics"
   | "Content Management"
   | "Problem Bank"
+  | "Export Manager"
   | "Content Inventory"
   | "Contest Factory"
   | "Contest Claims"
@@ -51,6 +53,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: "Content Management", label: "Create / Bulk", icon: PenLine },
       { id: "Content Inventory", label: "Inventory", icon: Archive },
       { id: "Problem Bank", label: "Problem Bank", icon: Database },
+      { id: "Export Manager", label: "Exports", icon: DownloadCloud },
       { id: "Approval Dashboard", label: "Approvals", icon: CheckSquare },
     ],
   },

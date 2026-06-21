@@ -4,6 +4,10 @@ import User from "../models/User";
 import Question from "../models/Question";
 import Theory from "../models/Theory";
 import Contest from "../models/Contest";
+import Subject from "../models/Subject";
+import Chapter from "../models/Chapter";
+import Topic from "../models/Topic";
+import Subtopic from "../models/Subtopic";
 import { invalidateHomeCache } from "../utils/homeCache";
 
 const APPROVAL_TAGS = ["GATE", "GATE DA", "Olympiad", "Advanced"] as const;
@@ -242,6 +246,76 @@ export const approveTheory = async (req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     console.error("[approveTheory] Error saving theory:", error);
     res.status(500).json({ message: error.message || "Failed to approve theory" });
+  }
+};
+
+export const exportAdminContent = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const [subjects, chapters, topics, subtopics, questions, theories] = await Promise.all([
+      Subject.find().sort({ order: 1, name: 1 }).lean(),
+      Chapter.find().sort({ order: 1, name: 1 }).lean(),
+      Topic.find().sort({ order: 1, name: 1 }).lean(),
+      Subtopic.find().sort({ order: 1, name: 1 }).lean(),
+      Question.find().lean(),
+      Theory.find().lean(),
+    ]);
+
+    const validSubtopicIds = new Set(subtopics.map((subtopic) => subtopic.subtopicId));
+    const problemsBySubtopic = new Map<string, any[]>();
+    const theoriesBySubtopic = new Map<string, any[]>();
+    const unmappedProblems: any[] = [];
+    const unmappedTheories: any[] = [];
+
+    for (const question of questions) {
+      const subtopicId = question.subtopicId;
+      if (subtopicId && validSubtopicIds.has(subtopicId)) {
+        if (!problemsBySubtopic.has(subtopicId)) problemsBySubtopic.set(subtopicId, []);
+        problemsBySubtopic.get(subtopicId)!.push(question);
+      } else {
+        unmappedProblems.push(question);
+      }
+    }
+
+    for (const theory of theories) {
+      const subtopicId = theory.subtopicId;
+      if (subtopicId && validSubtopicIds.has(subtopicId)) {
+        if (!theoriesBySubtopic.has(subtopicId)) theoriesBySubtopic.set(subtopicId, []);
+        theoriesBySubtopic.get(subtopicId)!.push(theory);
+      } else {
+        unmappedTheories.push(theory);
+      }
+    }
+
+    const tree = subjects.map((subject) => ({
+      subjectId: subject.subjectId,
+      name: subject.name,
+      code: subject.code,
+      chapters: chapters
+        .filter((chapter) => chapter.subjectId === subject.subjectId)
+        .map((chapter) => ({
+          chapterId: chapter.chapterId,
+          name: chapter.name,
+          topics: topics
+            .filter((topic) => topic.chapterId === chapter.chapterId)
+            .map((topic) => ({
+              topicId: topic.topicId,
+              name: topic.name,
+              subtopics: subtopics
+                .filter((subtopic) => subtopic.topicId === topic.topicId)
+                .map((subtopic) => ({
+                  subtopicId: subtopic.subtopicId,
+                  name: subtopic.name,
+                  problems: problemsBySubtopic.get(subtopic.subtopicId) || [],
+                  theories: theoriesBySubtopic.get(subtopic.subtopicId) || [],
+                })),
+            })),
+        })),
+    }));
+
+    res.json({ tree, unmappedProblems, unmappedTheories });
+  } catch (error) {
+    console.error("[exportAdminContent] Failed to build export tree:", error);
+    res.status(500).json({ message: "Failed to export admin content" });
   }
 };
 

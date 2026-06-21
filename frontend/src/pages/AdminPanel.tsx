@@ -13,6 +13,7 @@ import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
 import { SiteContainer, MainPanel } from "@/components/layout";
 import AdminProblemManager from "@/components/admin/AdminProblemManager";
 import AdminTheoryManager from "@/components/admin/AdminTheoryManager";
+import AdminExportManager from "@/components/admin/AdminExportManager";
 import AdminShell from "@/components/admin/AdminShell";
 import AdminPlatformLogs from "@/components/admin/AdminPlatformLogs";
 import { useTaxonomy } from "@/hooks/useTaxonomy";
@@ -365,6 +366,7 @@ type Section =
   | "Approval Dashboard"
   | "Content Inventory"
   | "Problem Bank"
+  | "Export Manager"
   | "Platform Logs";
 
 export default function AdminPanel() {
@@ -891,6 +893,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "User Analytics",
     "Content Management",
     "Problem Bank",
+    "Export Manager",
     "Content Inventory",
     "Contest Factory",
     "Contest Claims",
@@ -1948,6 +1951,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         )}
 
         {/* PLATFORM LOGS SECTION */}
+        {activeSection === "Export Manager" && <AdminExportManager />}
         {activeSection === "Platform Logs" && (
           <AdminPlatformLogs />
         )}
