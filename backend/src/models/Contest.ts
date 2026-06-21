@@ -46,6 +46,7 @@ export interface IContest extends Document {
   rules: string[];
   status: "draft" | "pending_review" | "approved" | "completed";
   showOnHome: boolean;
+  showInPastContests: boolean;
   createdBy: mongoose.Types.ObjectId;
   approvedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -124,6 +125,7 @@ const contestSchema = new Schema<IContest>(
       default: "draft",
     },
     showOnHome: { type: Boolean, default: true },
+    showInPastContests: { type: Boolean, default: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
@@ -131,7 +133,7 @@ const contestSchema = new Schema<IContest>(
 );
 
 contestSchema.index({ lifecycle: 1, startTime: 1 });
-contestSchema.index({ status: 1, showOnHome: 1, startTime: 1 });
+contestSchema.index({ status: 1, showOnHome: 1, showInPastContests: 1, startTime: 1 });
 
 contestSchema.pre("validate", function (next) {
   if (this.startTime && this.endTime) {

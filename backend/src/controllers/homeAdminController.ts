@@ -295,6 +295,7 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       startTime,
       endTime,
       showOnHome,
+      showInPastContests,
       status,
       contestType,
       visibility,
@@ -355,6 +356,7 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       instructions: instructions?.trim(),
       rules: Array.isArray(rules) ? rules.filter(Boolean).map((rule: string) => String(rule).trim()) : undefined,
       showOnHome: showOnHome !== false,
+      showInPastContests: showInPastContests !== false,
       status: status || "approved",
       questions: [],
       createdBy: req.currentUser!._id,
@@ -400,6 +402,7 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
       startTime,
       endTime,
       showOnHome,
+      showInPastContests,
       status,
       contestType,
       visibility,
@@ -473,6 +476,7 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
       contest.rules = rules.filter(Boolean).map((rule: string) => String(rule).trim());
     }
     if (showOnHome !== undefined) contest.showOnHome = Boolean(showOnHome);
+    if (showInPastContests !== undefined) contest.showInPastContests = Boolean(showInPastContests);
     if (status !== undefined) contest.status = status;
 
     await contest.save();

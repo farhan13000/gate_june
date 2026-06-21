@@ -97,13 +97,14 @@ function getClockedContestState(contest: any) {
 async function buildPublicContests(userId?: string) {
   await syncDueContestLifecycles();
   const now = new Date();
-  const contests = await Contest.find({
+    const contests = await Contest.find({
       status: { $in: ["approved", "completed"] },
       visibility: "public",
       lifecycle: { $ne: "draft" },
-  })
+      $or: [{ endTime: { $gte: now } }, { showInPastContests: { $ne: false } }],
+    })
     .select(
-      "title description meta questions contestType visibility scoringMode lifecycle registrationStartTime registrationEndTime startTime endTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome status"
+      "title description meta questions contestType visibility scoringMode lifecycle registrationStartTime registrationEndTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome showInPastContests status"
     )
     .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
     .sort({ startTime: -1 })

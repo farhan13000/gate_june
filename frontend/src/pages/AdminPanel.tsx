@@ -382,6 +382,10 @@ export default function AdminPanel() {
     () => buildTaxonomyPromptContext(selectedPromptSubject ? [selectedPromptSubject] : []),
     [selectedPromptSubject]
   );
+  const completeTaxonomyPromptContext = useMemo(
+    () => buildTaxonomyPromptContext(taxonomyTree, Number.MAX_SAFE_INTEGER),
+    [taxonomyTree]
+  );
   const taxonomyCounts = useMemo(() => {
     const scopedTree = selectedPromptSubject ? [selectedPromptSubject] : [];
     const chapters = scopedTree.flatMap((subject) => subject.chapters || []);
@@ -395,22 +399,41 @@ export default function AdminPanel() {
     };
   }, [selectedPromptSubject]);
 
-  const buildSyncedCreationPrompt = () => {
+  const completeTaxonomyCounts = useMemo(() => {
+    const chapters = taxonomyTree.flatMap((subject) => subject.chapters || []);
+    const topics = chapters.flatMap((chapter) => chapter.topics || []);
+    const subtopics = topics.flatMap((topic) => topic.subtopics || []);
+    return { subjects: taxonomyTree.length, chapters: chapters.length, topics: topics.length, subtopics: subtopics.length };
+  }, [taxonomyTree]);
+
+  const buildSyncedCreationPrompt = (scope: "subject" | "complete" = "subject") => {
     const isProblem = qForm.type === "Problem";
-    const subjectName = selectedPromptSubject
+    const isCompleteTaxonomy = scope === "complete";
+    const subjectName = isCompleteTaxonomy
+      ? "the complete currently available taxonomy"
+      : selectedPromptSubject
       ? `${selectedPromptSubject.name}${selectedPromptSubject.code ? ` (${selectedPromptSubject.code})` : ""}`
       : "the selected subject";
-    return `Create ${isProblem ? "GATE DA problems" : "GATE DA theory articles"} as valid JSON only for this exact subject taxonomy: ${subjectName}.
-
-CURRENT SUBJECT TAXONOMY
-Use only these IDs. Do not invent taxonomy, do not use IDs from any other subject, and do not leave taxonomy fields blank.
-${taxonomyPromptContext}
-
-SUBJECT-SCOPED COVERAGE
+    const activeTaxonomyContext = isCompleteTaxonomy ? completeTaxonomyPromptContext : taxonomyPromptContext;
+    const taxonomyHeading = isCompleteTaxonomy ? "COMPLETE AVAILABLE TAXONOMY" : "CURRENT SUBJECT TAXONOMY";
+    const coverageRules = isCompleteTaxonomy
+      ? `COMPLETE TAXONOMY COVERAGE
+- Use only IDs listed below, and keep every item's four taxonomy IDs on one valid subject-to-subtopic path.
+- Spread items across subjects and their available chapters, topics, and subtopics; do not invent or cross-link IDs.
+- For a requested subject, generate only within that subject. If no count is specified, create 10 high-quality items distributed sensibly across the available taxonomy.`
+      : `SUBJECT-SCOPED COVERAGE
 - Generate content only from the subject listed above.
 - Spread items across available chapters, topics, and subtopics instead of repeating one branch.
 - Prefer underused-looking subtopics and mix direct, conceptual, and synthesis-style items.
-- If a requested count is not specified, create 10 high-quality items.
+- If a requested count is not specified, create 10 high-quality items.`;
+    return `Create ${isProblem ? "GATE DA problems" : "GATE DA theory articles"} as valid JSON only for ${subjectName}.
+
+${taxonomyHeading}
+Use only these IDs. Do not invent taxonomy, do not use IDs from any other subject, and do not leave taxonomy fields blank.
+
+${activeTaxonomyContext}
+
+${coverageRules}
 
 OUTPUT MODE
 - Return a JSON array for bulk creation.
@@ -439,6 +462,7 @@ RENDERING AND LATEX CONTRACT
 - If a graph would help, include it inline as readable text: "Graph: <title>\\\\nHorizontal axis: ...\\\\nVertical axis: ...\\\\nShape/key points: ...".
 - For process/modeling explanations, use compact text flows such as "Inputs in \\\\(A\\\\) -> choices in \\\\(B\\\\) -> product rule".
 - Do not create a separate diagrams array for theory articles either. Put visual explanations directly inside content as readable text blocks using escaped newlines.
+- Links are optional: never invent a source or add unsupported link fields. If a verified reference is genuinely useful, put one canonical HTTPS URL in a plain "Reference: https://..." line inside solution.explanation or theory content; do not use HTML or Markdown link syntax.
 - Before returning, mentally run JSON.parse on the response and verify every math string renders with KaTeX.
 
 ${isProblem ? `PROBLEM ITEM SHAPE
@@ -1246,6 +1270,17 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       >
                         <Clipboard size={10} /> Copy Subject Prompt
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(buildSyncedCreationPrompt("complete"));
+                          toast.success("Complete taxonomy prompt copied!");
+                        }}
+                        disabled={taxonomyTree.length === 0}
+                        className="flex items-center justify-center gap-1.5 text-[10px] bg-background hover:bg-secondary text-foreground px-2.5 py-1.5 rounded-sm border border-border transition-all font-bold self-start sm:self-auto shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Clipboard size={10} /> Copy Complete Prompt
+                      </button>
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
@@ -1272,6 +1307,14 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                     </summary>
                     <pre className="max-h-72 overflow-auto border-t border-primary/10 p-3 whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground">
                       {buildSyncedCreationPrompt()}
+                    </pre>
+                  </details>
+                  <details className="mb-3 rounded-sm border border-border bg-background/70">
+                    <summary className="cursor-pointer px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-foreground">
+                      Preview complete taxonomy prompt ({completeTaxonomyCounts.subjects} subjects / {completeTaxonomyCounts.subtopics} subtopics)
+                    </summary>
+                    <pre className="max-h-72 overflow-auto border-t border-border p-3 whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      {buildSyncedCreationPrompt("complete")}
                     </pre>
                   </details>
                   <div className="space-y-1.5 border-t border-primary/10 pt-3">

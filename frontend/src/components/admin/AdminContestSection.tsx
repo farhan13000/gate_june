@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, FileQuestion, Flag, Gavel, KeyRound, List, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
+import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, EyeOff, FileQuestion, Flag, Gavel, KeyRound, List, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 
@@ -22,6 +22,7 @@ type Contest = {
   questions?: ProblemCandidate[];
   status: string;
   showOnHome: boolean;
+  showInPastContests: boolean;
   createdAt?: string;
 };
 
@@ -150,6 +151,7 @@ const emptyForm = {
   ratingEnabled: false,
   instantFeedback: false,
   showOnHome: true,
+  showInPastContests: true,
 };
 
 const contestTypes = [
@@ -562,6 +564,7 @@ export default function AdminContestSection() {
       lifecycle: form.lifecycle,
       status: "draft",
       showOnHome: form.showOnHome,
+      showInPastContests: form.showInPastContests,
       questions: selectedQuestionIds.map((id) => ({ _id: id } as ProblemCandidate)),
     };
     return buildContestReadiness(pseudo, []);
@@ -938,6 +941,7 @@ export default function AdminContestSection() {
       ratingEnabled: Boolean(contest.ratingEnabled),
       instantFeedback: Boolean(contest.instantFeedback),
       showOnHome: contest.showOnHome,
+      showInPastContests: contest.showInPastContests !== false,
     });
   };
 
@@ -977,6 +981,26 @@ export default function AdminContestSection() {
       }
     } catch {
       toast.error("Network error");
+    }
+  };
+
+  const setPastContestVisibility = async (contest: Contest) => {
+    const nextVisibility = contest.showInPastContests === false;
+    try {
+      const res = await fetch(`/api/admin/contests/${contest._id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showInPastContests: nextVisibility }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Unable to update past-contest visibility");
+      }
+      toast.success(nextVisibility ? "Contest is now visible in Past Contests" : "Contest is now hidden from Past Contests");
+      fetchContests();
+    } catch (error: any) {
+      toast.error(error.message || "Unable to update past-contest visibility");
     }
   };
 
@@ -1254,35 +1278,56 @@ export default function AdminContestSection() {
               <div className="space-y-2">
                 {visibleAdminContests.map((contest) => {
                   const selected = selectedContestId === contest._id;
+                  const isPast = isPastContest(contest);
+                  const isVisibleInPast = contest.showInPastContests !== false;
                   return (
-                    <button
+                    <div
                       key={contest._id}
-                      type="button"
-                      onClick={() => {
-                        selectContest(contest._id);
-                        setLibraryOpen(false);
-                      }}
                       className={`w-full rounded-sm border p-3 text-left transition-colors ${
                         selected ? "border-primary/40 bg-primary/10" : "border-border bg-background hover:bg-secondary/20"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-xs font-bold text-foreground">{contest.title}</div>
-                          <div className="mt-1 truncate text-[10px] text-muted-foreground">
-                            {new Date(contest.startTime).toLocaleString()}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectContest(contest._id);
+                          setLibraryOpen(false);
+                        }}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-bold text-foreground">{contest.title}</div>
+                            <div className="mt-1 truncate text-[10px] text-muted-foreground">
+                              {new Date(contest.startTime).toLocaleString()}
+                            </div>
                           </div>
+                          <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold ${lifecycleBadgeClass(contest.lifecycle || contest.status, selected)}`}>
+                            {labelize(contest.lifecycle || contest.status)}
+                          </span>
                         </div>
-                        <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold ${lifecycleBadgeClass(contest.lifecycle || contest.status, selected)}`}>
-                          {labelize(contest.lifecycle || contest.status)}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] text-muted-foreground">
-                        <span className="rounded-sm border border-border bg-card px-1.5 py-0.5">{getContestTypeLabel(contest.contestType)}</span>
-                        <span className="rounded-sm border border-border bg-card px-1.5 py-0.5">{(contest.questions || []).length} problems</span>
-                        {contest.ratingEnabled && <span className="rounded-sm border border-green-500/25 bg-green-500/10 px-1.5 py-0.5 text-green-700">Rated</span>}
-                      </div>
-                    </button>
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] text-muted-foreground">
+                          <span className="rounded-sm border border-border bg-card px-1.5 py-0.5">{getContestTypeLabel(contest.contestType)}</span>
+                          <span className="rounded-sm border border-border bg-card px-1.5 py-0.5">{(contest.questions || []).length} problems</span>
+                          {contest.ratingEnabled && <span className="rounded-sm border border-green-500/25 bg-green-500/10 px-1.5 py-0.5 text-green-700">Rated</span>}
+                        </div>
+                      </button>
+                      {isPast && (
+                        <button
+                          type="button"
+                          onClick={() => setPastContestVisibility(contest)}
+                          className={`mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+                            isVisibleInPast
+                              ? "border-green-500/25 bg-green-500/10 text-green-700 hover:bg-green-500/15 dark:text-green-300"
+                              : "border-border bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          }`}
+                          title={isVisibleInPast ? "Hide this contest from the public Past Contests list" : "Show this contest in the public Past Contests list"}
+                        >
+                          {isVisibleInPast ? <Eye size={13} /> : <EyeOff size={13} />}
+                          {isVisibleInPast ? "Visible in Past Contests — Hide" : "Hidden from Past Contests — Show"}
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1576,9 +1621,10 @@ export default function AdminContestSection() {
             <h3 className="text-sm font-bold text-foreground">Visibility & Features</h3>
             <p className="mt-0.5 text-xs text-muted-foreground">Optional contest behavior flags.</p>
           </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ["showOnHome", "Show on home"],
+            ["showInPastContests", "Show in past contests"],
             ["ratingEnabled", "Rated contest"],
             ["instantFeedback", "Instant feedback"],
           ].map(([key, label]) => (
