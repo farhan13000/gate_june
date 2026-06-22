@@ -737,14 +737,30 @@
     @apply flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-foreground mb-4 pb-2 border-b border-border/60;
   }
 
+  .problem-section-header h2 {
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+  }
+
   /* ── Problem Statement Body ───────────────────────────────────── */
   .problem-statement-body {
-    @apply text-foreground/85 leading-[1.85] text-sm;
+    @apply text-foreground/90 leading-[1.9] text-[0.9375rem];
     font-family: var(--font-serif);
   }
 
   .problem-statement-reading {
-    @apply mx-auto mt-5 w-full max-w-3xl rounded-sm border border-border/60 bg-background/40 p-4 sm:p-5;
+    @apply mx-auto mt-5 w-full max-w-3xl rounded-sm border border-border/70 bg-card p-5 sm:p-6;
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.035);
+  }
+
+  .problem-statement-figure {
+    @apply mb-5 flex min-h-28 items-center justify-center rounded-sm border border-border bg-secondary/20 p-3 sm:p-4;
+  }
+
+  .dark .problem-statement-reading {
+    background: hsl(0 0% 19%);
   }
 
   /* ── Submission Stat Cards ────────────────────────────────────── */
@@ -789,7 +805,7 @@
 
   /* ── Option Buttons ───────────────────────────────────────────── */
   .problem-option-btn {
-    @apply w-full flex items-center p-3 border rounded-sm text-left disabled:opacity-100 transition-all duration-150;
+    @apply w-full flex items-center gap-3 px-3.5 py-3 border rounded-sm text-left disabled:opacity-100 transition-all duration-150;
   }
 
   .problem-option-btn:not(:disabled):hover {
@@ -797,7 +813,17 @@
   }
 
   .problem-option-letter {
-    @apply w-5 h-5 rounded-full mr-3 border flex items-center justify-center shrink-0 transition-all duration-150;
+    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border font-mono text-[11px] font-bold leading-none transition-all duration-150;
+  }
+
+  .problem-option-letter .text-white,
+  .problem-option-letter .text-muted-foreground {
+    color: inherit;
+    font: inherit;
+  }
+
+  .problem-option-checkbox {
+    @apply rounded-sm;
   }
 
   /* ── Clear / Submit Buttons ───────────────────────────────────── */

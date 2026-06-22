@@ -582,15 +582,15 @@ export default function ProblemDetail() {
             {tab === "statement" && (
               <div className="space-y-6 animate-in fade-in duration-200">
                 {/* Problem Statement */}
-                <section>
+                <section aria-labelledby="problem-statement-heading">
                   <div className="problem-section-header">
                     <FileText size={14} className="text-primary" />
-                    <span>Problem Statement</span>
+                    <h2 id="problem-statement-heading">Problem Statement</h2>
                   </div>
                   <div className="problem-statement-reading">
                     {problem.imageUrl && (
-                      <div className="mb-4 border border-border bg-secondary/20 p-2 text-center">
-                        <img src={problem.imageUrl} alt="Problem Diagram" className="mx-auto max-h-64 max-w-full rounded-sm object-contain" />
+                      <div className="problem-statement-figure">
+                        <img src={problem.imageUrl} alt="Problem diagram" className="mx-auto max-h-72 max-w-full rounded-sm object-contain" />
                       </div>
                     )}
                     <div className="problem-statement-body">
@@ -856,7 +856,7 @@ export default function ProblemDetail() {
                   </p>
                   {(problem.options || []).map((opt: any, optIdx: number) => {
                     const selected = mcqSelected === opt._id;
-                    let optionStyle = "border-border bg-background hover:bg-secondary/20 hover:border-muted-foreground/30";
+                    let optionStyle = "border-border bg-card hover:bg-secondary/30 hover:border-primary/35";
                     if (submitted) {
                       if (opt.isCorrect) {
                         optionStyle = "border-green-500 bg-green-500/5 text-green-700 font-medium ring-1 ring-green-500/20";
@@ -869,14 +869,14 @@ export default function ProblemDetail() {
                       optionStyle = "border-primary bg-primary/5 ring-1 ring-primary/20";
                     }
 
-                    let dotStyle = "bg-secondary border-border";
+                    let dotStyle = "border-primary/40 bg-primary/5 text-primary";
                     if (selected) {
-                      dotStyle = "bg-primary border-primary";
+                      dotStyle = "bg-primary border-primary text-primary-foreground";
                     }
                     if (submitted && opt.isCorrect) {
-                      dotStyle = "bg-green-500 border-green-500";
+                      dotStyle = "bg-green-500 border-green-500 text-white";
                     } else if (submitted && selected && !opt.isCorrect) {
-                      dotStyle = "bg-red-500 border-red-500";
+                      dotStyle = "bg-red-500 border-red-500 text-white";
                     }
 
                     const optionLetter = String.fromCharCode(65 + optIdx);
@@ -908,7 +908,7 @@ export default function ProblemDetail() {
                   </p>
                   {(problem.options || []).map((opt: any, optIdx: number) => {
                     const selected = msqSelected.includes(opt._id);
-                    let optionStyle = "border-border bg-background hover:bg-secondary/20 hover:border-muted-foreground/30";
+                    let optionStyle = "border-border bg-card hover:bg-secondary/30 hover:border-primary/35";
                     if (submitted) {
                       if (opt.isCorrect) {
                         optionStyle = "border-green-500 bg-green-500/5 text-green-700 font-medium ring-1 ring-green-500/20";
@@ -921,7 +921,7 @@ export default function ProblemDetail() {
                       optionStyle = "border-primary bg-primary/5 ring-1 ring-primary/20";
                     }
 
-                    let checkStyle = "bg-background border-border text-transparent";
+                    let checkStyle = "border-primary/40 bg-primary/5 text-primary";
                     if (selected) {
                       checkStyle = "bg-primary border-primary text-white";
                     }
@@ -940,7 +940,7 @@ export default function ProblemDetail() {
                         disabled={submitted}
                         className={`problem-option-btn ${optionStyle}`}
                       >
-                        <span className={`w-4 h-4 rounded-sm mr-3 border flex items-center justify-center shrink-0 transition-all ${checkStyle}`}>
+                        <span className={`problem-option-letter problem-option-checkbox ${checkStyle}`}>
                           {selected && !submitted && <CheckCircle2 size={10} />}
                           {submitted && opt.isCorrect && <CheckCircle2 size={10} />}
                           {submitted && selected && !opt.isCorrect && <XCircle size={10} />}
