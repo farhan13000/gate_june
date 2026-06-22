@@ -14,15 +14,19 @@ export function getContestState(contest: any) {
   const regEnd = contest.registrationEndTime ? new Date(contest.registrationEndTime).getTime() : start;
   const lifecycle = contest.lifecycle;
 
+  if (lifecycle === "draft") return "upcoming";
   if ([...RELEASED_STATES, "ended"].includes(lifecycle)) return lifecycle;
   if (now >= end) return "ended";
-  if (["live", "frozen"].includes(lifecycle)) return lifecycle;
+  if (now >= start) return lifecycle === "frozen" ? "frozen" : "live";
   if (lifecycle === "registration_open" || (now >= regStart && now < regEnd)) return "registration_open";
   return "upcoming";
 }
 
 export function isContestOpenForArena(contest: any) {
-  return ["live", "frozen"].includes(contest.lifecycle) && Date.now() < new Date(contest.endTime).getTime();
+  const now = Date.now();
+  const start = new Date(contest.startTime).getTime();
+  const end = new Date(contest.endTime).getTime();
+  return ["live", "frozen"].includes(contest.lifecycle) && now >= start && now < end;
 }
 
 export function isContestOpenForRegistration(contest: any) {

@@ -332,6 +332,14 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({ message: timingError });
       return;
     }
+    if (lifecycle === "live" && Date.now() < parsedStartTime!.getTime()) {
+      res.status(400).json({ message: "Contest lifecycle is scheduled to become live at startTime" });
+      return;
+    }
+    if (lifecycle === "ended" && Date.now() < parsedEndTime!.getTime()) {
+      res.status(400).json({ message: "Contest lifecycle is scheduled to end at endTime" });
+      return;
+    }
 
     const contest = await Contest.create({
       title: title.trim(),
@@ -444,6 +452,15 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
         res.status(400).json({ message: timingError });
         return;
       }
+    }
+
+    if (lifecycle === "live" && Date.now() < parsedStartTime!.getTime()) {
+      res.status(400).json({ message: "Contest lifecycle is scheduled to become live at startTime" });
+      return;
+    }
+    if (lifecycle === "ended" && Date.now() < parsedEndTime!.getTime()) {
+      res.status(400).json({ message: "Contest lifecycle is scheduled to end at endTime" });
+      return;
     }
 
     if (title !== undefined) contest.title = title.trim();

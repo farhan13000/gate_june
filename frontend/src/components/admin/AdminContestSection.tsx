@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, EyeOff, FileQuestion, Flag, Gavel, KeyRound, List, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
+import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, EyeOff, FileQuestion, Gavel, KeyRound, List, Pencil, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 
@@ -182,11 +182,28 @@ const lifecycleHelp = [
 
 type ContestForm = typeof emptyForm;
 type AdminContestView = "draft" | "new" | "upcoming" | "live" | "past" | "all";
+type EndTimeMode = "end-time" | "duration";
+
+const MINUTE_MS = 60 * 1000;
 
 function getTimeValue(value?: string) {
   if (!value) return null;
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : NaN;
+}
+
+function toLocalInput(value: Date | number | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function getDurationMinutes(startTime?: string, endTime?: string) {
+  const start = getTimeValue(startTime);
+  const end = getTimeValue(endTime);
+  if (start === null || end === null || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return Math.max(1, Math.ceil((end - start) / MINUTE_MS));
 }
 
 function getContestTimingErrors(form: ContestForm) {
@@ -465,24 +482,10 @@ const lifecycleActions: LifecycleOperation[] = [
   },
   {
     stage: "Live",
-    title: "Start Contest",
-    description: "Open the contest arena and begin accepting submissions.",
-    lifecycle: "live",
-    Icon: PlayCircle,
-  },
-  {
-    stage: "Live",
     title: "Freeze Leaderboard",
     description: "Keep submissions open while limiting leaderboard visibility.",
     lifecycle: "frozen",
     Icon: ShieldCheck,
-  },
-  {
-    stage: "Closure",
-    title: "End Contest",
-    description: "Stop new contest submissions and prepare for answer key release.",
-    lifecycle: "ended",
-    Icon: Flag,
   },
   {
     stage: "Review",
@@ -522,6 +525,7 @@ const lifecycleActions: LifecycleOperation[] = [
 export default function AdminContestSection() {
   const [contests, setContests] = useState<Contest[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [endTimeMode, setEndTimeMode] = useState<EndTimeMode>("end-time");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedContestId, setSelectedContestId] = useState<string | null>(null);
@@ -643,6 +647,7 @@ export default function AdminContestSection() {
   );
   const timingErrors = useMemo(() => getContestTimingErrors(form), [form]);
   const hasTimingErrors = Object.keys(timingErrors).length > 0;
+  const contestDurationMinutes = useMemo(() => getDurationMinutes(form.startTime, form.endTime), [form.endTime, form.startTime]);
 
   const fetchContests = useCallback(async () => {
     try {
@@ -772,17 +777,11 @@ export default function AdminContestSection() {
 
   const visibleAdminContests = adminContestGroups[adminContestView];
 
-  const toLocalInput = (iso: string) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
-
   const beginNewContest = () => {
     composingNewRef.current = true;
     setComposingNewContest(true);
     setForm(emptyForm);
+    setEndTimeMode("end-time");
     setEditingId(null);
     setSelectedContestId(null);
     setSelectedQuestionIds([]);
@@ -798,6 +797,45 @@ export default function AdminContestSection() {
 
   const resetForm = () => {
     beginNewContest();
+  };
+
+  const updateStartTime = (startTime: string) => {
+    const previousDuration = endTimeMode === "duration" ? getDurationMinutes(form.startTime, form.endTime) : null;
+    const nextStart = getTimeValue(startTime);
+    setForm((current) => ({
+      ...current,
+      startTime,
+      endTime:
+        previousDuration && nextStart !== null && Number.isFinite(nextStart)
+          ? toLocalInput(nextStart + previousDuration * MINUTE_MS)
+          : current.endTime,
+    }));
+  };
+
+  const setContestDuration = (value: string) => {
+    if (value === "") {
+      setForm((current) => ({ ...current, endTime: "" }));
+      return;
+    }
+    const duration = Math.ceil(Number(value));
+    const start = getTimeValue(form.startTime);
+    if (!Number.isFinite(duration) || duration < 1) return;
+    if (start === null || !Number.isFinite(start)) {
+      toast.error("Set the contest start time before choosing a duration");
+      return;
+    }
+    setForm((current) => ({ ...current, endTime: toLocalInput(start + duration * MINUTE_MS) }));
+  };
+
+  const addMinutesToEndTime = (minutes: number) => {
+    const start = getTimeValue(form.startTime);
+    const end = getTimeValue(form.endTime);
+    const base = end !== null && Number.isFinite(end) ? end : start;
+    if (base === null || !Number.isFinite(base)) {
+      toast.error("Set the contest start time before adjusting the end time");
+      return;
+    }
+    setForm((current) => ({ ...current, endTime: toLocalInput(base + minutes * MINUTE_MS) }));
   };
 
   const selectContest = (contestId: string) => {
@@ -925,6 +963,7 @@ export default function AdminContestSection() {
     setComposingNewContest(false);
     setSelectedContestId(contest._id);
     setEditingId(contest._id);
+    setEndTimeMode("end-time");
     setForm({
       title: contest.title,
       description: contest.description,
@@ -1557,7 +1596,7 @@ export default function AdminContestSection() {
         <section className="space-y-4">
           <div className="border-b border-border pb-2">
             <h3 className="text-sm font-bold text-foreground">Schedule</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">Contest window and registration timing.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Set an exact end time or a duration. The contest opens and closes automatically on this schedule.</p>
           </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -1565,20 +1604,82 @@ export default function AdminContestSection() {
             <input
               type="datetime-local"
               value={form.startTime}
-              onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+              onChange={(e) => updateStartTime(e.target.value)}
               className={timingInputClass("startTime")}
             />
             {timingErrors.startTime && <p className="mt-1 text-[11px] text-destructive">{timingErrors.startTime}</p>}
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold">End Date & Time</label>
-            <input
-              type="datetime-local"
-              value={form.endTime}
-              onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-              className={timingInputClass("endTime")}
-            />
-            {timingErrors.endTime && <p className="mt-1 text-[11px] text-destructive">{timingErrors.endTime}</p>}
+          <div className="rounded-sm border border-border bg-background p-3 sm:p-4">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="End time input mode">
+              <button
+                type="button"
+                aria-pressed={endTimeMode === "end-time"}
+                onClick={() => setEndTimeMode("end-time")}
+                className={`rounded-sm border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  endTimeMode === "end-time" ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Exact end time
+              </button>
+              <button
+                type="button"
+                aria-pressed={endTimeMode === "duration"}
+                onClick={() => setEndTimeMode("duration")}
+                className={`rounded-sm border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  endTimeMode === "duration" ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Contest duration
+              </button>
+            </div>
+
+            {endTimeMode === "end-time" ? (
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-bold">End Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={form.endTime}
+                  onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                  className={timingInputClass("endTime")}
+                />
+              </div>
+            ) : (
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-bold" htmlFor="contest-duration-minutes">Duration (minutes)</label>
+                <input
+                  id="contest-duration-minutes"
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={contestDurationMinutes ?? ""}
+                  onChange={(e) => setContestDuration(e.target.value)}
+                  placeholder="e.g. 180"
+                  className={timingInputClass("endTime")}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">Changing the start time keeps this duration.</p>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-muted-foreground">Quick adjust</span>
+              {[15, 30].map((minutes) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  onClick={() => addMinutesToEndTime(minutes)}
+                  className="rounded-sm border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                >
+                  +{minutes} min
+                </button>
+              ))}
+              {contestDurationMinutes && (
+                <span className="ml-auto rounded-sm bg-secondary px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  {contestDurationMinutes} min total
+                </span>
+              )}
+            </div>
+            {timingErrors.endTime && <p className="mt-2 text-[11px] text-destructive">{timingErrors.endTime}</p>}
           </div>
         </div>
 
@@ -2045,14 +2146,22 @@ export default function AdminContestSection() {
         </div>
 
         <div className="academic-card overflow-hidden">
-          <div className="border-b border-border bg-secondary/30 p-4">
+          <div className="border-b border-border bg-secondary/30 p-3 sm:p-4">
             <h3 className="font-serif text-base font-bold text-foreground">Stage Operations</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Use these controls for contest operations. Setup fields stay separate from live-stage decisions.
+              Publishing and post-contest controls stay here. Live start and contest closure follow the saved schedule automatically.
             </p>
           </div>
-          <div className="border-b border-border bg-background p-4">
-            <div className="grid gap-3 lg:grid-cols-3">
+          <div className="border-b border-border bg-background p-3 sm:p-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-sm border border-sky-500/25 bg-sky-500/5 p-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Automatic schedule</div>
+                <p className="mt-1 text-xs leading-relaxed text-foreground">
+                  {selectedContest
+                    ? `${formatDateTime(selectedContest.startTime)} to ${formatDateTime(selectedContest.endTime)}`
+                    : "Save the contest schedule to enable automatic start and finish."}
+                </p>
+              </div>
               <div className="rounded-sm border border-border bg-card p-3">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rating Declaration</div>
                 <p className="mt-1 text-xs leading-relaxed text-foreground">

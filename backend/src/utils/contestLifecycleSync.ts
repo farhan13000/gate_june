@@ -26,6 +26,7 @@ export function getClockLifecycle(contest: any, now = Date.now()) {
   const current = contest.lifecycle || "published";
   if (TERMINAL_STATES.has(current)) return current;
 
+  const start = timeValue(contest.startTime);
   const end = timeValue(contest.endTime);
   const regStart = timeValue(contest.registrationStartTime);
   const regEnd = timeValue(contest.registrationEndTime);
@@ -35,11 +36,19 @@ export function getClockLifecycle(contest: any, now = Date.now()) {
   const claimsClose = timeValue(contest.claimsCloseTime);
 
   let target = current;
-  if (current === "published" && regStart !== null && now >= regStart && (regEnd === null || now < regEnd)) {
+
+  // The contest clock owns the live window. A published contest enters the
+  // arena at its scheduled start, and every non-terminal contest closes at
+  // its scheduled end even if nobody visits the contest page at that moment.
+  if (end !== null && now >= end && (ORDER[current] || 0) < ORDER.ended) {
+    target = "ended";
+  } else if (["published", "registration_open"].includes(current) && start !== null && now >= start) {
+    target = "live";
+  } else if (current === "published" && regStart !== null && now >= regStart && (regEnd === null || now < regEnd)) {
     target = "registration_open";
   }
-  if (current === "live" && freeze !== null && now >= freeze && end !== null && now < end) target = "frozen";
-  if (["live", "frozen"].includes(current) && end !== null && now >= end) target = "ended";
+
+  if (target === "live" && freeze !== null && now >= freeze && end !== null && now < end) target = "frozen";
   if ((ORDER[target] || 0) >= ORDER.ended && answerKey !== null && now >= answerKey) target = "answer_key_released";
   if ((ORDER[target] || 0) >= ORDER.answer_key_released && claimsOpen !== null && now >= claimsOpen) target = "claims_open";
   if ((ORDER[target] || 0) >= ORDER.claims_open && claimsClose !== null && now >= claimsClose) target = "claims_closed";
@@ -86,7 +95,7 @@ export async function syncDueContestLifecycles(now = Date.now()) {
   return { checked: contests.length, changed };
 }
 
-export function startContestLifecycleSync(intervalMs = 30000) {
+export function startContestLifecycleSync(intervalMs = 1000) {
   const run = () => {
     syncDueContestLifecycles().catch((error) => {
       console.error("Contest lifecycle sync failed:", error);
