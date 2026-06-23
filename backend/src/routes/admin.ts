@@ -50,6 +50,7 @@ import {
 } from "../controllers/contestTestController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 import {
+  adminGetTaxonomyTree,
   adminGetSubjects,
   adminCreateSubject,
   adminUpdateSubject,
@@ -77,6 +78,7 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 // Taxonomy managers
+router.get("/taxonomy/tree", adminGetTaxonomyTree);
 router.get("/taxonomy/subjects", adminGetSubjects);
 router.post("/taxonomy/subjects", adminCreateSubject);
 router.put("/taxonomy/subjects/:id", adminUpdateSubject);

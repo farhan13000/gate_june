@@ -10,6 +10,7 @@ import AdminContestGuide from "@/components/admin/AdminContestGuide";
 import AdminContestSection from "@/components/admin/AdminContestSection";
 import AdminContestClaimsPage from "@/components/admin/AdminContestClaimsPage";
 import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
+import AdminTaxonomyGuide from "@/components/admin/AdminTaxonomyGuide";
 import { SiteContainer, MainPanel } from "@/components/layout";
 import AdminProblemManager from "@/components/admin/AdminProblemManager";
 import AdminTheoryManager from "@/components/admin/AdminTheoryManager";
@@ -355,6 +356,7 @@ const getInitialApprovalTag = (item: any): ApprovalTag => {
 type Section =
   | "Overview"
   | "Taxonomy Manager"
+  | "Taxonomy Guide"
   | "Problem Manager"
   | "Theory Manager"
   | "Home Management"
@@ -911,6 +913,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const sections: Section[] = [
     "Overview",
     "Taxonomy Manager",
+    "Taxonomy Guide",
     "Problem Manager",
     "Theory Manager",
     "Home Management",
@@ -1113,6 +1116,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
         )}
 
         {activeSection === "Taxonomy Manager" && <AdminTaxonomyManager />}
+        {activeSection === "Taxonomy Guide" && <AdminTaxonomyGuide />}
         {activeSection === "Problem Manager" && <AdminProblemManager />}
         {activeSection === "Theory Manager" && <AdminTheoryManager />}
 

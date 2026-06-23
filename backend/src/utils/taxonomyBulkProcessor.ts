@@ -240,6 +240,37 @@ export async function processBulkTaxonomyJson(
     failed: 0,
   };
 
+  // Keep the parent path verified across this import. This matters for dry runs too:
+  // a nested parent may be valid even though it has not been written to Mongo yet.
+  const knownSubjects = new Set<string>();
+  const knownChapters = new Map<string, string>();
+  const knownTopics = new Map<string, { chapterId: string; subjectId: string }>();
+
+  const ensureSubjectExists = async (subjectId: string) => {
+    if (knownSubjects.has(subjectId)) return;
+    const subject = await Subject.findOne({ subjectId }).select("subjectId").lean();
+    if (!subject) throw new Error(`Parent subject "${subjectId}" does not exist in this import or the current taxonomy.`);
+    knownSubjects.add(subject.subjectId);
+  };
+
+  const resolveChapter = async (chapterId: string) => {
+    const known = knownChapters.get(chapterId);
+    if (known) return { chapterId, subjectId: known };
+    const chapter = await Chapter.findOne({ chapterId }).select("chapterId subjectId").lean();
+    if (!chapter) throw new Error(`Parent chapter "${chapterId}" does not exist in this import or the current taxonomy.`);
+    knownChapters.set(chapter.chapterId, chapter.subjectId);
+    return chapter;
+  };
+
+  const resolveTopic = async (topicId: string) => {
+    const known = knownTopics.get(topicId);
+    if (known) return { topicId, ...known };
+    const topic = await Topic.findOne({ topicId }).select("topicId chapterId subjectId").lean();
+    if (!topic) throw new Error(`Parent topic "${topicId}" does not exist in this import or the current taxonomy.`);
+    knownTopics.set(topic.topicId, { chapterId: topic.chapterId, subjectId: topic.subjectId });
+    return topic;
+  };
+
   const processSubject = async (subject: BulkSubject, subjectIndex: number, pathPrefix = "subjects") => {
     const subjectPath = `subjects[${subjectIndex}]`;
     try {
@@ -254,6 +285,7 @@ export async function processBulkTaxonomyJson(
         description: cleanString(subject.description),
       };
       await upsertDocument("subject", "subjectId", subjectId, name, subjectPayload, ctx, actions);
+      knownSubjects.add(subjectId);
       summary.subjects += 1;
 
       for (const [chapterIndex, chapter] of (subject.chapters || []).entries()) {
@@ -278,6 +310,7 @@ export async function processBulkTaxonomyJson(
       const chapterId = getId(chapter.chapterId, "chapterId", chapterPath);
       const subjectId = getId(chapter.subjectId, "subjectId", chapterPath);
       const chapterName = requireText(chapter.name, "name", chapterPath);
+      await ensureSubjectExists(subjectId);
       const chapterPayload = {
         chapterId,
         subjectId,
@@ -287,10 +320,19 @@ export async function processBulkTaxonomyJson(
         description: cleanString(chapter.description),
       };
       await upsertDocument("chapter", "chapterId", chapterId, chapterName, chapterPayload, ctx, actions);
+      knownChapters.delete(chapterId);
+      const effectiveChapter = ctx.dryRun
+        ? { chapterId, subjectId }
+        : await resolveChapter(chapterId);
+      knownChapters.set(chapterId, effectiveChapter.subjectId);
       summary.chapters += 1;
 
       for (const [topicIndex, topic] of (chapter.topics || []).entries()) {
-        await processTopic({ ...topic, subjectId, chapterId }, topicIndex, `${chapterPath}.topics`);
+        await processTopic(
+          { ...topic, subjectId: effectiveChapter.subjectId, chapterId },
+          topicIndex,
+          `${chapterPath}.topics`
+        );
       }
     } catch (error: any) {
       actions.push({
@@ -312,6 +354,10 @@ export async function processBulkTaxonomyJson(
       const chapterId = getId(topic.chapterId, "chapterId", topicPath);
       const subjectId = getId(topic.subjectId, "subjectId", topicPath);
       const topicName = requireText(topic.name, "name", topicPath);
+      const chapter = await resolveChapter(chapterId);
+      if (chapter.subjectId !== subjectId) {
+        throw new Error(`Chapter "${chapterId}" belongs to subject "${chapter.subjectId}", not "${subjectId}".`);
+      }
       const topicPayload = {
         topicId,
         chapterId,
@@ -323,10 +369,24 @@ export async function processBulkTaxonomyJson(
         description: cleanString(topic.description),
       };
       await upsertDocument("topic", "topicId", topicId, topicName, topicPayload, ctx, actions);
+      knownTopics.delete(topicId);
+      const effectiveTopic = ctx.dryRun
+        ? { topicId, chapterId, subjectId }
+        : await resolveTopic(topicId);
+      knownTopics.set(topicId, { chapterId: effectiveTopic.chapterId, subjectId: effectiveTopic.subjectId });
       summary.topics += 1;
 
       for (const [subtopicIndex, subtopic] of (topic.subtopics || []).entries()) {
-        await processSubtopic({ ...subtopic, subjectId, chapterId, topicId }, subtopicIndex, `${topicPath}.subtopics`);
+        await processSubtopic(
+          {
+            ...subtopic,
+            subjectId: effectiveTopic.subjectId,
+            chapterId: effectiveTopic.chapterId,
+            topicId,
+          },
+          subtopicIndex,
+          `${topicPath}.subtopics`
+        );
       }
     } catch (error: any) {
       actions.push({
@@ -349,6 +409,12 @@ export async function processBulkTaxonomyJson(
       const chapterId = getId(subtopic.chapterId, "chapterId", subtopicPath);
       const subjectId = getId(subtopic.subjectId, "subjectId", subtopicPath);
       const subtopicName = requireText(subtopic.name, "name", subtopicPath);
+      const topic = await resolveTopic(topicId);
+      if (topic.chapterId !== chapterId || topic.subjectId !== subjectId) {
+        throw new Error(
+          `Topic "${topicId}" belongs to chapter "${topic.chapterId}" and subject "${topic.subjectId}".`
+        );
+      }
       const subtopicPayload = {
         subtopicId,
         topicId,

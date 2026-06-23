@@ -1,812 +1,763 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BookOpen,
-  CheckSquare,
+  CheckCircle2,
+  ChevronRight,
+  CircleHelp,
+  FileJson,
   FolderTree,
   Layers,
   Plus,
   RefreshCw,
   Save,
   Search,
-  Square,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import type { SubjectNode } from "@/types/taxonomy";
 import TaxonomyBulkJsonManager from "./TaxonomyBulkJsonManager";
 
 type TaxLevel = "subjects" | "chapters" | "topics" | "subtopics";
-type DraftMap = Record<string, Record<string, string | number | boolean>>;
+type TaxonomyItem = Record<string, any>;
+type ParentOption = { id: string; name: string; enabled?: boolean; context?: string };
 
-const levelMeta = {
+type TaxonomyForm = {
+  id: string;
+  name: string;
+  code: string;
+  order: string;
+  description: string;
+  difficultyLevel: "Beginner" | "Intermediate" | "Advanced";
+  enabled: boolean;
+};
+
+const levelMeta: Record<TaxLevel, { label: string; singular: string; idField: string; icon: typeof BookOpen; description: string }> = {
   subjects: {
     label: "Subjects",
     singular: "subject",
+    idField: "subjectId",
     icon: BookOpen,
-    description: "Top-level syllabus areas used across problems and theory.",
+    description: "Top-level syllabus areas.",
   },
   chapters: {
     label: "Chapters",
     singular: "chapter",
+    idField: "chapterId",
     icon: FolderTree,
-    description: "Groups inside a selected subject.",
+    description: "Groups that belong to one subject.",
   },
   topics: {
     label: "Topics",
     singular: "topic",
+    idField: "topicId",
     icon: Layers,
-    description: "Concept-level sections inside chapters.",
+    description: "Concepts that belong to one chapter.",
   },
   subtopics: {
     label: "Subtopics",
     singular: "subtopic",
+    idField: "subtopicId",
     icon: FolderTree,
-    description: "Fine-grained lesson targets for mapping content.",
+    description: "The precise learning targets used for content mapping.",
   },
 };
 
-export default function AdminTaxonomyManager() {
-  const [level, setLevel] = useState<TaxLevel>("subjects");
-  const [items, setItems] = useState<any[]>([]);
-  const [parentSubjectId, setParentSubjectId] = useState("");
-  const [parentChapterId, setParentChapterId] = useState("");
-  const [parentTopicId, setParentTopicId] = useState("");
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [form, setForm] = useState<Record<string, string | number | boolean>>({});
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [drafts, setDrafts] = useState<DraftMap>({});
-  const [search, setSearch] = useState("");
+const emptyForm = (): TaxonomyForm => ({
+  id: "",
+  name: "",
+  code: "",
+  order: "",
+  description: "",
+  difficultyLevel: "Beginner",
+  enabled: true,
+});
 
-  const loadSubjects = useCallback(async () => {
-    const res = await fetch("/api/admin/taxonomy/subjects", { credentials: "include" });
-    if (res.ok) setSubjects(await res.json());
-  }, []);
+function labelFor(option?: ParentOption) {
+  return option ? `${option.name} · ${option.id}` : "";
+}
 
-  const loadItems = useCallback(async () => {
-    let url = `/api/admin/taxonomy/${level}`;
-    const params = new URLSearchParams();
-    if (level === "chapters" && parentSubjectId) params.set("subjectId", parentSubjectId);
-    if (level === "topics" && parentChapterId) params.set("chapterId", parentChapterId);
-    if (level === "subtopics" && parentTopicId) params.set("topicId", parentTopicId);
-    if (params.toString()) url += `?${params}`;
-    const res = await fetch(url, { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      setItems(data);
-      setSelectedIds([]);
-      setDrafts({});
-    }
-  }, [level, parentSubjectId, parentChapterId, parentTopicId]);
-
-  useEffect(() => {
-    loadSubjects();
-  }, [loadSubjects]);
+/** A small searchable selector that always persists the stable ID, never the typed label. */
+function ParentAutocomplete({
+  label,
+  placeholder,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  options: ParentOption[];
+  disabled?: boolean;
+  onChange: (id: string) => void;
+}) {
+  const selected = options.find((option) => option.id === value);
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+    setQuery(labelFor(selected));
+  }, [selected?.id, selected?.name]);
 
-  const idField =
-    level === "subjects"
-      ? "subjectId"
-      : level === "chapters"
-        ? "chapterId"
-        : level === "topics"
-          ? "topicId"
-          : "subtopicId";
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const sorted = [...options].sort((a, b) => a.name.localeCompare(b.name));
+    if (!needle) return sorted.slice(0, 8);
+    return sorted
+      .filter((option) => `${option.id} ${option.name} ${option.context || ""}`.toLowerCase().includes(needle))
+      .slice(0, 8);
+  }, [options, query]);
 
-  const currentMeta = levelMeta[level];
-  const ActiveLevelIcon = currentMeta.icon;
-  const filteredItems = items.filter((item) => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return true;
-    return [item[idField], item.name, item.code, item.difficultyLevel, item.subjectId, item.chapterId, item.topicId]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(needle);
-  });
-  const selectableIds = filteredItems.map((item) => String(item[idField]));
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
-
-  const setDraftValue = (id: string, key: string, value: string | number | boolean) => {
-    setDrafts((current) => ({
-      ...current,
-      [id]: {
-        ...(current[id] || {}),
-        [key]: value,
-      },
-    }));
-  };
-
-  const getDraftValue = (item: any, key: string) => {
-    const id = String(item[idField]);
-    return drafts[id]?.[key] ?? item[key] ?? "";
-  };
-
-  const parseOrder = (value: unknown, fallback: number) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-
-  const splitOrderPatch = (patch: Record<string, unknown>) => {
-    const { order, ...rest } = patch;
-    return {
-      hasOrder: Object.prototype.hasOwnProperty.call(patch, "order"),
-      order,
-      rest,
-    };
-  };
-
-  const toggleSelected = (id: string) => {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]
-    );
-  };
-
-  const toggleSelectAll = () => {
-    setSelectedIds(allSelected ? [] : selectableIds);
-  };
-
-  const handleCreate = async () => {
-    const body = { ...form, enabled: form.enabled !== false };
-    if (level === "chapters") body.subjectId = parentSubjectId;
-    if (level === "topics") {
-      body.chapterId = parentChapterId;
-      body.subjectId = parentSubjectId;
-    }
-    if (level === "subtopics") {
-      body.topicId = parentTopicId;
-      body.chapterId = parentChapterId;
-      body.subjectId = parentSubjectId;
-    }
-    const res = await fetch(`/api/admin/taxonomy/${level}`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (res.ok) {
-      toast.success("Created");
-      setForm({});
-      loadItems();
-    } else {
-      const d = await res.json();
-      toast.error(d.message || "Failed");
-    }
-  };
-
-  const persistReorder = async (orderDrafts: DraftMap) => {
-    const rankedItems = items
-      .map((item, index) => {
-        const id = String(item[idField]);
-        return {
-          id,
-          currentIndex: index,
-          desiredOrder: parseOrder(orderDrafts[id]?.order ?? item.order, index + 1),
-        };
-      })
-      .sort((a, b) => a.desiredOrder - b.desiredOrder || a.currentIndex - b.currentIndex)
-      .map((item, index) => ({
-        id: item.id,
-        order: index + 1,
-      }));
-
-    const res = await fetch("/api/admin/taxonomy/reorder", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level, items: rankedItems }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.message || "Failed to reorder");
-    }
-  };
-
-  const saveItemPatch = async (id: string, patch: Record<string, unknown>) => {
-    const { hasOrder, order, rest } = splitOrderPatch(patch);
-    const hasRegularFields = Object.keys(rest).length > 0;
-
-    if (hasRegularFields) {
-      const res = await fetch(`/api/admin/taxonomy/${level}/${id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(rest),
-      });
-      if (!res.ok) return false;
-    }
-
-    if (hasOrder) {
-      await persistReorder({ [id]: { order: order as string | number | boolean } });
-    }
-
-    return true;
-  };
-
-  const handleUpdate = async (id: string, patch: Record<string, unknown>) => {
-    if (Object.keys(patch).length === 0) return;
-    const ok = await saveItemPatch(id, patch);
-    if (ok) {
-      toast.success("Updated");
-      loadItems();
-    } else {
-      toast.error("Update failed");
-    }
-  };
-
-  const handleDirectUpdate = async (id: string, patch: Record<string, unknown>) => {
-    const res = await fetch(`/api/admin/taxonomy/${level}/${id}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    if (res.ok) {
-      toast.success("Updated");
-      loadItems();
-    } else {
-      toast.error("Update failed");
-    }
-  };
-
-  const handleBulkPatch = async (patch: Record<string, unknown>, successMessage: string) => {
-    if (selectedIds.length === 0) {
-      toast.error("Select at least one item");
-      return;
-    }
-
-    const results = await Promise.all(
-      selectedIds.map((id) =>
-        fetch(`/api/admin/taxonomy/${level}/${id}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
-        })
-      )
-    );
-
-    if (results.every((res) => res.ok)) {
-      toast.success(successMessage);
-      loadItems();
-    } else {
-      toast.error("Some items could not be updated");
-    }
-  };
-
-  const handleSaveSelected = async () => {
-    const editedIds = selectedIds.filter((id) => drafts[id]);
-    if (editedIds.length === 0) {
-      toast.error("Select edited rows before saving");
-      return;
-    }
-
-    const orderDrafts: DraftMap = {};
-    const regularUpdates = editedIds
-      .map((id) => {
-        const { hasOrder, rest } = splitOrderPatch(drafts[id] || {});
-        if (hasOrder) orderDrafts[id] = { order: drafts[id].order };
-        return Object.keys(rest).length > 0 ? { id, patch: rest } : null;
-      })
-      .filter((item): item is { id: string; patch: Record<string, unknown> } => Boolean(item));
-
-    const results = await Promise.all(
-      regularUpdates.map(({ id, patch }) =>
-        fetch(`/api/admin/taxonomy/${level}/${id}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
-        })
-      )
-    );
-
-    try {
-      if (Object.keys(orderDrafts).length > 0) {
-        await persistReorder(orderDrafts);
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to reorder");
-      return;
-    }
-
-    if (results.every((res) => res.ok)) {
-      toast.success(`Saved ${editedIds.length} ${level}`);
-      loadItems();
-    } else {
-      toast.error("Some selected edits could not be saved");
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) {
-      toast.error("Select at least one item");
-      return;
-    }
-    if (!confirm(`Delete ${selectedIds.length} selected ${level}? Descendants will also be removed where applicable.`)) {
-      return;
-    }
-
-    const results = await Promise.all(
-      selectedIds.map((id) =>
-        fetch(`/api/admin/taxonomy/${level}/${id}`, {
-          method: "DELETE",
-          credentials: "include",
-        })
-      )
-    );
-
-    if (results.every((res) => res.ok)) {
-      toast.success(`Deleted ${selectedIds.length} ${level}`);
-      loadItems();
-    } else {
-      toast.error("Some selected items could not be deleted");
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this item and descendants?")) return;
-    const res = await fetch(`/api/admin/taxonomy/${level}/${id}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (res.ok) {
-      toast.success("Deleted");
-      loadItems();
-    }
+  const clear = () => {
+    onChange("");
+    setQuery("");
+    setOpen(true);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-sm border border-border bg-card p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-sm border border-border bg-secondary/30 px-2.5 py-1 text-[11px] font-mono uppercase tracking-wide text-muted-foreground">
-              <ActiveLevelIcon size={13} />
-              Taxonomy Manager
-            </div>
-            <h2 className="font-serif text-xl font-bold text-foreground">{currentMeta.label}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{currentMeta.description}</p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center sm:flex">
-            <div className="rounded-sm border border-border bg-background px-3 py-2">
-              <div className="font-mono text-lg font-bold text-foreground">{items.length}</div>
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Loaded</div>
-            </div>
-            <div className="rounded-sm border border-border bg-background px-3 py-2">
-              <div className="font-mono text-lg font-bold text-primary">{selectedIds.length}</div>
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected</div>
-            </div>
-            <div className="rounded-sm border border-border bg-background px-3 py-2">
-              <div className="font-mono text-lg font-bold text-foreground">{Object.keys(drafts).length}</div>
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Edited</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <TaxonomyBulkJsonManager
-        onImported={() => {
-          loadSubjects();
-          loadItems();
-        }}
-      />
-
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {(["subjects", "chapters", "topics", "subtopics"] as TaxLevel[]).map((l) => (
-          (() => {
-            const Icon = levelMeta[l].icon;
-            const isActive = level === l;
-            return (
+    <label className="block min-w-0">
+      <span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">{label}</span>
+      <div className="relative">
+        <Search size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={query}
+          disabled={disabled}
+          placeholder={placeholder}
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onBlur={() => {
+            window.setTimeout(() => {
+              setOpen(false);
+              setQuery(labelFor(options.find((option) => option.id === value)));
+            }, 150);
+          }}
+          className="w-full rounded-sm border border-border bg-background py-2 pl-8 pr-8 text-xs outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+        />
+        {value && !disabled && (
           <button
-            key={l}
             type="button"
-            onClick={() => setLevel(l)}
-            className={`min-h-20 rounded-sm border p-3 text-left transition-colors ${
-              isActive
-                ? "bg-primary text-primary-foreground border-primary"
-                : "border-border bg-card hover:bg-secondary/40"
-            }`}
+            aria-label={`Clear ${label}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={clear}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <Icon size={16} />
-              <span className={`font-mono text-[11px] ${isActive ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                {l === level ? items.length : ""}
-              </span>
-            </div>
-            <div className="text-sm font-semibold">{levelMeta[l].label}</div>
-            <div className={`mt-1 text-[11px] ${isActive ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-              {levelMeta[l].singular} level
-            </div>
+            <X size={12} />
           </button>
-            );
-          })()
-        ))}
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={`Search ${currentMeta.label.toLowerCase()} by ID, name, or parent...`}
-            className="w-full rounded-sm border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none focus:border-primary"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={loadItems}
-          className="inline-flex w-full items-center justify-center gap-1 rounded-sm border border-border bg-card px-3 py-2.5 text-xs hover:bg-secondary lg:w-auto"
-        >
-          <RefreshCw size={12} /> Refresh
-        </button>
-      </div>
-
-      {level !== "subjects" && (
-        <div className="rounded-sm border border-border bg-card p-4">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Parent scope</div>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <select
-              value={parentSubjectId}
-              onChange={(e) => {
-                setParentSubjectId(e.target.value);
-                setParentChapterId("");
-                setParentTopicId("");
-              }}
-              className="w-full rounded-sm border border-border bg-background px-3 py-2 text-xs"
-            >
-              <option value="">Parent subject</option>
-              {subjects.map((s) => (
-                <option key={s.subjectId} value={s.subjectId}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            {level === "topics" || level === "subtopics" ? (
-              <input
-                placeholder="Parent chapter ID"
-                value={parentChapterId}
-                onChange={(e) => setParentChapterId(e.target.value)}
-                className="w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs"
-              />
-            ) : null}
-            {level === "subtopics" ? (
-              <input
-                placeholder="Parent topic ID"
-                value={parentTopicId}
-                onChange={(e) => setParentTopicId(e.target.value)}
-                className="w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs"
-              />
-            ) : null}
+        )}
+        {open && !disabled && (
+          <div className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-sm border border-border bg-popover p-1 shadow-lg">
+            {matches.length > 0 ? matches.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onChange(option.id);
+                  setQuery(labelFor(option));
+                  setOpen(false);
+                }}
+                className="flex w-full items-center justify-between gap-3 rounded-sm px-2.5 py-2 text-left text-xs hover:bg-secondary"
+              >
+                <span className="min-w-0 truncate text-foreground">{option.name}</span>
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{option.id}</span>
+              </button>
+            )) : (
+              <div className="px-2.5 py-3 text-xs text-muted-foreground">No matching {label.toLowerCase()}.</div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+      <span className="mt-1 block text-[10px] text-muted-foreground">Type a name or ID, then choose a result.</span>
+    </label>
+  );
+}
 
-      <div className="academic-card space-y-4 p-4">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-sm border border-border bg-background px-3 py-2 text-center">
+      <div className="font-mono text-lg font-bold text-foreground">{value}</div>
+      <div className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+export default function AdminTaxonomyManager() {
+  const [tree, setTree] = useState<SubjectNode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [level, setLevel] = useState<TaxLevel>("subjects");
+  const [parentSubjectId, setParentSubjectId] = useState("");
+  const [parentChapterId, setParentChapterId] = useState("");
+  const [parentTopicId, setParentTopicId] = useState("");
+  const [form, setForm] = useState<TaxonomyForm>(emptyForm);
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [editForm, setEditForm] = useState<TaxonomyForm>(emptyForm);
+  const [saving, setSaving] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin/taxonomy/tree", { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error("Could not load the taxonomy");
+      const data = await response.json();
+      setTree(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      setTree([]);
+      toast.error(error.message || "Could not load taxonomy");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const subjects = useMemo<ParentOption[]>(
+    () => tree.map((subject) => ({ id: subject.subjectId, name: subject.name, enabled: subject.enabled })),
+    [tree]
+  );
+  const selectedSubject = tree.find((subject) => subject.subjectId === parentSubjectId);
+  const allChapters = useMemo(() => tree.flatMap((subject) => subject.chapters || []), [tree]);
+  const chapterOptions = useMemo<ParentOption[]>(() => {
+    const chapters = selectedSubject ? selectedSubject.chapters : allChapters;
+    return chapters.map((chapter) => ({
+      id: chapter.chapterId,
+      name: chapter.name,
+      enabled: chapter.enabled,
+      context: selectedSubject ? undefined : tree.find((subject) => subject.subjectId === chapter.subjectId)?.name,
+    }));
+  }, [allChapters, selectedSubject, tree]);
+  const selectedChapter = allChapters.find((chapter) => chapter.chapterId === parentChapterId);
+  const allTopics = useMemo(() => allChapters.flatMap((chapter) => chapter.topics || []), [allChapters]);
+  const topicOptions = useMemo<ParentOption[]>(() => {
+    const topics = selectedChapter ? selectedChapter.topics : allTopics;
+    return topics.map((topic) => ({
+      id: topic.topicId,
+      name: topic.name,
+      enabled: topic.enabled,
+      context: selectedChapter ? undefined : allChapters.find((chapter) => chapter.chapterId === topic.chapterId)?.name,
+    }));
+  }, [allChapters, allTopics, selectedChapter]);
+  const selectedTopic = allTopics.find((topic) => topic.topicId === parentTopicId);
+  const allSubtopics = useMemo(() => allTopics.flatMap((topic) => topic.subtopics || []), [allTopics]);
+
+  const items = useMemo<TaxonomyItem[]>(() => {
+    if (level === "subjects") return tree as TaxonomyItem[];
+    if (level === "chapters") return allChapters as TaxonomyItem[];
+    if (level === "topics") return allTopics as TaxonomyItem[];
+    return allSubtopics as TaxonomyItem[];
+  }, [allChapters, allSubtopics, allTopics, level, tree]);
+
+  const scopedItems = useMemo(() => items.filter((item) => {
+    if (level === "chapters") return !parentSubjectId || item.subjectId === parentSubjectId;
+    if (level === "topics") return (!parentSubjectId || item.subjectId === parentSubjectId) && (!parentChapterId || item.chapterId === parentChapterId);
+    if (level === "subtopics") {
+      return (!parentSubjectId || item.subjectId === parentSubjectId)
+        && (!parentChapterId || item.chapterId === parentChapterId)
+        && (!parentTopicId || item.topicId === parentTopicId);
+    }
+    return true;
+  }), [items, level, parentChapterId, parentSubjectId, parentTopicId]);
+
+  const currentMeta = levelMeta[level];
+  const idField = currentMeta.idField;
+  const filteredItems = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return scopedItems;
+    return scopedItems.filter((item) => [item[idField], item.name, item.code, item.description]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(needle));
+  }, [idField, scopedItems, search]);
+  const selectedItem = items.find((item) => String(item[idField]) === selectedId);
+
+  const counts = useMemo(() => ({
+    subjects: tree.length,
+    chapters: allChapters.length,
+    topics: allTopics.length,
+    subtopics: allSubtopics.length,
+  }), [allChapters.length, allSubtopics.length, allTopics.length, tree.length]);
+
+  const setSubject = (subjectId: string) => {
+    setParentSubjectId(subjectId);
+    setParentChapterId("");
+    setParentTopicId("");
+  };
+  const setChapter = (chapterId: string) => {
+    const chapter = allChapters.find((entry) => entry.chapterId === chapterId);
+    if (chapter && chapter.subjectId !== parentSubjectId) setParentSubjectId(chapter.subjectId);
+    setParentChapterId(chapterId);
+    setParentTopicId("");
+  };
+  const setTopic = (topicId: string) => {
+    const topic = allTopics.find((entry) => entry.topicId === topicId);
+    if (topic) {
+      setParentSubjectId(topic.subjectId);
+      setParentChapterId(topic.chapterId);
+    }
+    setParentTopicId(topicId);
+  };
+
+  const changeLevel = (nextLevel: TaxLevel) => {
+    setLevel(nextLevel);
+    setForm(emptyForm());
+    setSelectedId("");
+    setEditForm(emptyForm());
+    setSearch("");
+  };
+
+  const openEditor = (item: TaxonomyItem) => {
+    setSelectedId(String(item[idField]));
+    setEditForm({
+      id: String(item[idField] || ""),
+      name: String(item.name || ""),
+      code: String(item.code || ""),
+      order: String(item.order ?? ""),
+      description: String(item.description || ""),
+      difficultyLevel: item.difficultyLevel || "Beginner",
+      enabled: item.enabled !== false,
+    });
+  };
+
+  const canCreate = Boolean(
+    form.id.trim()
+    && form.name.trim()
+    && (level !== "subjects" || form.code.trim())
+    && (level !== "chapters" || parentSubjectId)
+    && (level !== "topics" || parentChapterId)
+    && (level !== "subtopics" || parentTopicId)
+  );
+
+  const createItem = async () => {
+    if (!canCreate) {
+      toast.error("Complete the required ID, name, and parent selection first.");
+      return;
+    }
+    const body: TaxonomyItem = {
+      [idField]: form.id.trim(),
+      name: form.name.trim(),
+      order: form.order === "" ? scopedItems.length + 1 : Number(form.order),
+      enabled: form.enabled,
+      description: form.description.trim(),
+    };
+    if (level === "subjects") body.code = form.code.trim().toUpperCase();
+    if (level === "topics") body.difficultyLevel = form.difficultyLevel;
+    if (level === "chapters") body.subjectId = parentSubjectId;
+    if (level === "topics") {
+      body.subjectId = parentSubjectId;
+      body.chapterId = parentChapterId;
+    }
+    if (level === "subtopics") {
+      body.subjectId = parentSubjectId;
+      body.chapterId = parentChapterId;
+      body.topicId = parentTopicId;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/taxonomy/${level}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Could not create taxonomy item");
+      toast.success(`${currentMeta.label.slice(0, -1)} created`);
+      setForm(emptyForm());
+      await refresh();
+    } catch (error: any) {
+      toast.error(error.message || "Could not create taxonomy item");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveEditor = async () => {
+    if (!selectedItem || !editForm.name.trim()) {
+      toast.error("A display name is required.");
+      return;
+    }
+    const body: TaxonomyItem = {
+      name: editForm.name.trim(),
+      order: Number(editForm.order || 0),
+      enabled: editForm.enabled,
+      description: editForm.description.trim(),
+    };
+    if (level === "subjects") body.code = editForm.code.trim().toUpperCase();
+    if (level === "topics") body.difficultyLevel = editForm.difficultyLevel;
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/taxonomy/${level}/${encodeURIComponent(editForm.id)}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Could not save taxonomy item");
+      toast.success("Changes saved");
+      await refresh();
+    } catch (error: any) {
+      toast.error(error.message || "Could not save taxonomy item");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteItem = async () => {
+    if (!selectedItem) return;
+    const label = level === "subjects" || level === "chapters" || level === "topics"
+      ? " This also removes its descendants."
+      : "";
+    if (!window.confirm(`Delete “${selectedItem.name}”?${label}`)) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/taxonomy/${level}/${encodeURIComponent(editForm.id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Could not delete taxonomy item");
+      toast.success("Taxonomy item deleted");
+      setSelectedId("");
+      setEditForm(emptyForm());
+      await refresh();
+    } catch (error: any) {
+      toast.error(error.message || "Could not delete taxonomy item");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const parentTrail = (item: TaxonomyItem) => {
+    const labels: string[] = [];
+    const subject = tree.find((entry) => entry.subjectId === item.subjectId);
+    const chapter = allChapters.find((entry) => entry.chapterId === item.chapterId);
+    const topic = allTopics.find((entry) => entry.topicId === item.topicId);
+    if (subject && level !== "subjects") labels.push(subject.name);
+    if (chapter && (level === "topics" || level === "subtopics")) labels.push(chapter.name);
+    if (topic && level === "subtopics") labels.push(topic.name);
+    return labels.join(" › ");
+  };
+
+  const ActiveIcon = currentMeta.icon;
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-sm border border-border bg-card p-4 sm:p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <div className="text-sm font-semibold text-foreground">Create new {currentMeta.singular}</div>
-            <div className="text-xs text-muted-foreground">Use stable semantic IDs so existing content remains mapped.</div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-sm border border-primary/20 bg-primary/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide text-primary">
+              <FolderTree size={13} /> Taxonomy workspace
+            </div>
+            <h2 className="font-serif text-xl font-bold text-foreground">Build a clean syllabus hierarchy</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Create in order, choose parents by name or ID, then edit the selected item without touching its stable mapping ID.
+            </p>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <Stat label="Subjects" value={counts.subjects} />
+            <Stat label="Chapters" value={counts.chapters} />
+            <Stat label="Topics" value={counts.topics} />
+            <Stat label="Subtopics" value={counts.subtopics} />
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <input
-            placeholder={`${idField} e.g. SUBJECT_NEW`}
-            value={String(form[idField] || "")}
-            onChange={(e) => setForm({ ...form, [idField]: e.target.value })}
-            className="rounded-sm border border-border px-3 py-2 text-xs font-mono"
-          />
-          <input
-            placeholder="Display name"
-            value={String(form.name || "")}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="rounded-sm border border-border px-3 py-2 text-xs"
-          />
-          {level === "subjects" && (
-            <input
-              placeholder="Code e.g. DS"
-              value={String(form.code || "")}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              className="rounded-sm border border-border px-3 py-2 text-xs font-mono"
-            />
+      </section>
+
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Taxonomy level">
+        {(Object.keys(levelMeta) as TaxLevel[]).map((key) => {
+          const meta = levelMeta[key];
+          const Icon = meta.icon;
+          const active = level === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => changeLevel(key)}
+              className={`rounded-sm border p-3 text-left transition-colors ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-secondary"}`}
+            >
+              <Icon size={16} />
+              <div className="mt-3 text-sm font-semibold">{meta.label}</div>
+              <div className={`mt-1 text-[10px] ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{meta.description}</div>
+            </button>
+          );
+        })}
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(20rem,.9fr)_minmax(28rem,1.35fr)]">
+        <section className="space-y-4 rounded-sm border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="rounded-sm border border-primary/20 bg-primary/5 p-2 text-primary"><Plus size={17} /></div>
+            <div>
+              <h3 className="font-semibold text-foreground">Create a {currentMeta.singular}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Parent choices filter themselves as you work down the hierarchy.</p>
+            </div>
+          </div>
+
+          {level !== "subjects" && (
+            <div className="space-y-3 rounded-sm border border-border bg-secondary/15 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">1. Select the parent path</div>
+              <ParentAutocomplete
+                label="Subject"
+                placeholder="Type a subject name or subjectId"
+                value={parentSubjectId}
+                options={subjects}
+                onChange={setSubject}
+              />
+              {(level === "topics" || level === "subtopics") && (
+                <ParentAutocomplete
+                  label="Chapter"
+                  placeholder={parentSubjectId ? "Type a chapter name or chapterId" : "Select a subject first"}
+                  value={parentChapterId}
+                  options={chapterOptions}
+                  disabled={!parentSubjectId}
+                  onChange={setChapter}
+                />
+              )}
+              {level === "subtopics" && (
+                <ParentAutocomplete
+                  label="Topic"
+                  placeholder={parentChapterId ? "Type a topic name or topicId" : "Select a chapter first"}
+                  value={parentTopicId}
+                  options={topicOptions}
+                  disabled={!parentChapterId}
+                  onChange={setTopic}
+                />
+              )}
+            </div>
           )}
-          <input
-            type="number"
-            placeholder="Order"
-            value={String(form.order ?? "")}
-            onChange={(e) => setForm({ ...form, order: parseInt(e.target.value, 10) || 0 })}
-            className="rounded-sm border border-border px-3 py-2 text-xs"
-          />
-          {level === "topics" && (
-            <select
-              value={String(form.difficultyLevel || "Beginner")}
-              onChange={(e) => setForm({ ...form, difficultyLevel: e.target.value })}
-              className="rounded-sm border border-border px-3 py-2 text-xs"
-            >
-              <option value="Beginner">Beginner</option>
-              <option value="Intermediate">Intermediate</option>
-              <option value="Advanced">Advanced</option>
-            </select>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="btn-primary flex w-full items-center justify-center gap-1 px-4 py-2 text-xs sm:w-auto"
-        >
-          <Plus size={14} /> Create
-        </button>
-      </div>
 
-      <div className="academic-card overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-border bg-secondary/20 p-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 text-xs text-muted-foreground">
-            <span className="font-mono font-semibold text-foreground">{selectedIds.length}</span> selected
-            <span className="mx-2">-</span>
-            Showing <span className="font-mono text-foreground">{filteredItems.length}</span> of{" "}
-            <span className="font-mono text-foreground">{items.length}</span> {currentMeta.label.toLowerCase()}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:justify-end">
-            <button
-              type="button"
-              onClick={toggleSelectAll}
-              className="inline-flex items-center justify-center gap-1 rounded-sm border border-border px-2.5 py-1.5 text-xs hover:bg-secondary"
-            >
-              {allSelected ? <CheckSquare size={13} /> : <Square size={13} />}
-              {allSelected ? "Clear all" : "Select all"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveSelected}
-              disabled={selectedIds.length === 0}
-              className="inline-flex items-center justify-center gap-1 rounded-sm border border-border px-2.5 py-1.5 text-xs hover:bg-secondary disabled:opacity-40"
-            >
-              <Save size={13} /> Save edits
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBulkPatch({ enabled: true }, "Selected items enabled")}
-              disabled={selectedIds.length === 0}
-              className="rounded-sm border border-border px-2.5 py-1.5 text-xs hover:bg-secondary disabled:opacity-40"
-            >
-              Enable
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBulkPatch({ enabled: false }, "Selected items disabled")}
-              disabled={selectedIds.length === 0}
-              className="rounded-sm border border-border px-2.5 py-1.5 text-xs hover:bg-secondary disabled:opacity-40"
-            >
-              Disable
-            </button>
-            <button
-              type="button"
-              onClick={handleBulkDelete}
-              disabled={selectedIds.length === 0}
-              className="inline-flex items-center justify-center gap-1 rounded-sm border border-destructive/30 px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/5 disabled:opacity-40"
-            >
-              <Trash2 size={13} /> Delete
-            </button>
-          </div>
-        </div>
-
-        <div className="grid gap-3 p-3 md:hidden">
-          {filteredItems.map((item) => {
-            const id = String(item[idField]);
-            const isSelected = selectedIds.includes(id);
-            return (
-              <div key={id} className={`rounded-sm border p-3 ${isSelected ? "border-primary bg-primary/5" : "border-border bg-background"}`}>
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleSelected(id)}
-                    className="mt-0.5 text-muted-foreground hover:text-foreground"
-                  >
-                    {isSelected ? <CheckSquare size={15} /> : <Square size={15} />}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-mono text-[11px] text-muted-foreground">{id}</div>
-                    <input
-                      value={String(getDraftValue(item, "name"))}
-                      onChange={(e) => setDraftValue(id, "name", e.target.value)}
-                      className="mt-2 w-full rounded-sm border border-border bg-card px-2 py-1.5 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {level === "subjects" && (
-                    <label className="text-[11px] text-muted-foreground">
-                      Code
-                      <input
-                        value={String(getDraftValue(item, "code"))}
-                        onChange={(e) => setDraftValue(id, "code", e.target.value)}
-                        className="mt-1 w-full rounded-sm border border-border bg-card px-2 py-1.5 font-mono text-xs"
-                      />
-                    </label>
-                  )}
-                  {level === "topics" && (
-                    <label className="text-[11px] text-muted-foreground">
-                      Level
-                      <select
-                        value={String(getDraftValue(item, "difficultyLevel") || "Beginner")}
-                        onChange={(e) => setDraftValue(id, "difficultyLevel", e.target.value)}
-                        className="mt-1 w-full rounded-sm border border-border bg-card px-2 py-1.5 text-xs"
-                      >
-                        <option value="Beginner">Beginner</option>
-                        <option value="Intermediate">Intermediate</option>
-                        <option value="Advanced">Advanced</option>
-                      </select>
-                    </label>
-                  )}
-                  <label className="text-[11px] text-muted-foreground">
-                    Order
-                    <input
-                      type="number"
-                      value={String(getDraftValue(item, "order"))}
-                      onChange={(e) => setDraftValue(id, "order", parseInt(e.target.value, 10) || 0)}
-                      className="mt-1 w-full rounded-sm border border-border bg-card px-2 py-1.5 font-mono text-xs"
-                    />
-                  </label>
-                  <label className="text-[11px] text-muted-foreground">
-                    State
-                    <select
-                      value={String(getDraftValue(item, "enabled") !== false)}
-                      onChange={(e) => setDraftValue(id, "enabled", e.target.value === "true")}
-                      className="mt-1 w-full rounded-sm border border-border bg-card px-2 py-1.5 text-xs"
-                    >
-                      <option value="true">Enabled</option>
-                      <option value="false">Disabled</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="mt-3 flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleUpdate(id, drafts[id] || {})}
-                    disabled={!drafts[id]}
-                    className="inline-flex items-center gap-1 rounded-sm border border-border px-2 py-1 text-xs hover:bg-secondary disabled:opacity-40"
-                  >
-                    <Save size={12} /> Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDirectUpdate(id, { enabled: !item.enabled })}
-                    className="rounded-sm border border-border px-2 py-1 text-xs hover:bg-secondary"
-                  >
-                    {item.enabled ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(id)}
-                    className="inline-flex items-center gap-1 rounded-sm border border-destructive/30 px-2 py-1 text-xs text-destructive hover:bg-destructive/5"
-                  >
-                    <Trash2 size={12} /> Delete
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="hidden overflow-x-auto md:block">
-        <table className="min-w-[760px] w-full text-xs">
-          <thead>
-            <tr className="border-b border-border bg-secondary/40">
-              <th className="w-10 text-left py-2 px-3 font-normal text-muted-foreground">
-                <button type="button" onClick={toggleSelectAll} className="hover:text-foreground">
-                  {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                </button>
-              </th>
-              <th className="text-left py-2 px-3 font-normal text-muted-foreground">ID</th>
-              <th className="text-left py-2 px-3 font-normal text-muted-foreground">Name</th>
+          <div className="space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{level === "subjects" ? "1" : "2"}. Enter details</div>
+            <label className="block text-[11px] font-semibold text-muted-foreground">
+              Stable ID <span className="text-destructive">*</span>
+              <input
+                value={form.id}
+                onChange={(event) => setForm((current) => ({ ...current, id: event.target.value }))}
+                placeholder={`${idField} e.g. ${level === "subjects" ? "SUBJECT_AI" : level === "chapters" ? "CHAPTER_SEARCH" : level === "topics" ? "TOPIC_A_STAR" : "SUBTOPIC_HEURISTICS"}`}
+                className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus:border-primary"
+              />
+            </label>
+            <label className="block text-[11px] font-semibold text-muted-foreground">
+              Display name <span className="text-destructive">*</span>
+              <input
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder={`e.g. ${level === "subjects" ? "Artificial Intelligence" : level === "chapters" ? "Search and Planning" : level === "topics" ? "A* Search" : "Admissible Heuristics"}`}
+                className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
               {level === "subjects" && (
-                <th className="text-left py-2 px-3 font-normal text-muted-foreground">Code</th>
+                <label className="block text-[11px] font-semibold text-muted-foreground">
+                  Short code <span className="text-destructive">*</span>
+                  <input
+                    value={form.code}
+                    onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
+                    placeholder="e.g. AI"
+                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus:border-primary"
+                  />
+                </label>
               )}
               {level === "topics" && (
-                <th className="text-left py-2 px-3 font-normal text-muted-foreground">Level</th>
-              )}
-              <th className="text-left py-2 px-3 font-normal text-muted-foreground">Order</th>
-              <th className="text-left py-2 px-3 font-normal text-muted-foreground">State</th>
-              <th className="text-right py-2 px-3 font-normal text-muted-foreground">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.map((item) => (
-              <tr key={item[idField]} className="border-b border-border-faint">
-                <td className="py-2 px-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleSelected(String(item[idField]))}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    {selectedIds.includes(String(item[idField])) ? <CheckSquare size={14} /> : <Square size={14} />}
-                  </button>
-                </td>
-                <td className="py-2 px-3 font-mono text-muted-foreground">{item[idField]}</td>
-                <td className="py-2 px-3">
-                  <input
-                    value={String(getDraftValue(item, "name"))}
-                    onChange={(e) => setDraftValue(String(item[idField]), "name", e.target.value)}
-                    className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-xs"
-                  />
-                </td>
-                {level === "subjects" && (
-                  <td className="py-2 px-3">
-                    <input
-                      value={String(getDraftValue(item, "code"))}
-                      onChange={(e) => setDraftValue(String(item[idField]), "code", e.target.value)}
-                      className="w-24 rounded-sm border border-border bg-background px-2 py-1.5 font-mono text-xs"
-                    />
-                  </td>
-                )}
-                {level === "topics" && (
-                  <td className="py-2 px-3">
-                    <select
-                      value={String(getDraftValue(item, "difficultyLevel") || "Beginner")}
-                      onChange={(e) => setDraftValue(String(item[idField]), "difficultyLevel", e.target.value)}
-                      className="rounded-sm border border-border bg-background px-2 py-1.5 text-xs"
-                    >
-                      <option value="Beginner">Beginner</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                    </select>
-                  </td>
-                )}
-                <td className="py-2 px-3">
-                  <input
-                    type="number"
-                    value={String(getDraftValue(item, "order"))}
-                    onChange={(e) => setDraftValue(String(item[idField]), "order", parseInt(e.target.value, 10) || 0)}
-                    className="w-20 rounded-sm border border-border bg-background px-2 py-1.5 font-mono text-xs"
-                  />
-                </td>
-                <td className="py-2 px-3">
+                <label className="block text-[11px] font-semibold text-muted-foreground">
+                  Difficulty level
                   <select
-                    value={String(getDraftValue(item, "enabled") !== false)}
-                    onChange={(e) => setDraftValue(String(item[idField]), "enabled", e.target.value === "true")}
-                    className="rounded-sm border border-border bg-background px-2 py-1.5 text-xs"
+                    value={form.difficultyLevel}
+                    onChange={(event) => setForm((current) => ({ ...current, difficultyLevel: event.target.value as TaxonomyForm["difficultyLevel"] }))}
+                    className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
                   >
-                    <option value="true">Enabled</option>
-                    <option value="false">Disabled</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
                   </select>
-                </td>
-                <td className="py-2 px-3 text-right space-x-1">
-                  <button
-                    type="button"
-                    onClick={() => handleUpdate(item[idField], drafts[String(item[idField])] || {})}
-                    disabled={!drafts[String(item[idField])]}
-                    className="px-2 py-1 border border-border rounded-sm hover:bg-secondary disabled:opacity-40"
-                  >
-                    <Save size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleDirectUpdate(item[idField], { enabled: !item.enabled })
-                    }
-                    className="px-2 py-1 border border-border rounded-sm hover:bg-secondary"
-                  >
-                    {item.enabled ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(item[idField])}
-                    className="px-2 py-1 border border-destructive/30 text-destructive rounded-sm hover:bg-destructive/5"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+                </label>
+              )}
+              <label className="block text-[11px] font-semibold text-muted-foreground">
+                Display order
+                <input
+                  type="number"
+                  min="1"
+                  value={form.order}
+                  onChange={(event) => setForm((current) => ({ ...current, order: event.target.value }))}
+                  placeholder={`Default: ${scopedItems.length + 1}`}
+                  className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus:border-primary"
+                />
+              </label>
+            </div>
+            <label className="block text-[11px] font-semibold text-muted-foreground">
+              Description <span className="font-normal text-muted-foreground/80">(optional)</span>
+              <textarea
+                value={form.description}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                rows={2}
+                placeholder="A short note about this syllabus area."
+                className="mt-1.5 w-full resize-y rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+              />
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+              <input type="checkbox" checked={form.enabled} onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.checked }))} />
+              Enabled and visible to learners
+            </label>
+          </div>
+
+          <button
+            type="button"
+            disabled={!canCreate || saving}
+            onClick={createItem}
+            className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus size={14} /> Create {currentMeta.singular}
+          </button>
+        </section>
+
+        <section className="overflow-hidden rounded-sm border border-border bg-card">
+          <div className="border-b border-border p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <div className="rounded-sm border border-border bg-secondary/30 p-2 text-muted-foreground"><ActiveIcon size={16} /></div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Edit {currentMeta.label.toLowerCase()}</h3>
+                  <p className="text-xs text-muted-foreground">Choose an item from the organized list, then save its details.</p>
+                </div>
+              </div>
+              <button type="button" onClick={refresh} className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-border px-3 py-2 text-xs hover:bg-secondary">
+                <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+              </button>
+            </div>
+            {level !== "subjects" && (parentSubjectId || parentChapterId || parentTopicId) && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                <span>Scoped to:</span>
+                {[selectedSubject?.name, selectedChapter?.name, selectedTopic?.name].filter(Boolean).map((name) => (
+                  <span key={name} className="rounded-sm border border-border bg-background px-1.5 py-0.5 text-foreground">{name}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid min-h-[38rem] lg:grid-cols-[minmax(15rem,.85fr)_minmax(20rem,1.15fr)]">
+            <div className="border-b border-border lg:border-b-0 lg:border-r">
+              <div className="border-b border-border p-3">
+                <div className="relative">
+                  <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={`Search ${currentMeta.label.toLowerCase()}`}
+                    className="w-full rounded-sm border border-border bg-background py-2 pl-8 pr-3 text-xs outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="mt-2 text-[10px] text-muted-foreground">{filteredItems.length} of {scopedItems.length} items shown</div>
+              </div>
+              <div className="max-h-[32rem] overflow-auto p-2">
+                {loading ? (
+                  <div className="p-4 text-center text-xs text-muted-foreground">Loading taxonomy…</div>
+                ) : filteredItems.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-muted-foreground">No {currentMeta.label.toLowerCase()} found in this scope.</div>
+                ) : filteredItems.map((item) => {
+                  const itemId = String(item[idField]);
+                  const active = itemId === selectedId;
+                  return (
+                    <button
+                      key={itemId}
+                      type="button"
+                      onClick={() => openEditor(item)}
+                      className={`mb-1 w-full rounded-sm border p-3 text-left transition-colors ${active ? "border-primary bg-primary/5" : "border-transparent hover:border-border hover:bg-secondary/30"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 truncate text-xs font-semibold text-foreground">{item.name}</span>
+                        {item.enabled === false && <span className="shrink-0 rounded-sm border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[9px] text-amber-700">Hidden</span>}
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{itemId}</div>
+                      {parentTrail(item) && <div className="mt-1 truncate text-[10px] text-muted-foreground">{parentTrail(item)}</div>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-5">
+              {selectedItem ? (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Editing</div>
+                      <div className="mt-1 font-mono text-xs text-foreground">{editForm.id}</div>
+                    </div>
+                    <button type="button" onClick={() => { setSelectedId(""); setEditForm(emptyForm()); }} className="rounded-sm p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close editor"><X size={15} /></button>
+                  </div>
+                  {parentTrail(selectedItem) && (
+                    <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                      <span>Parent path:</span><span className="font-medium text-foreground">{parentTrail(selectedItem)}</span>
+                    </div>
+                  )}
+                  <label className="block text-[11px] font-semibold text-muted-foreground">
+                    Display name
+                    <input value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary" />
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {level === "subjects" && (
+                      <label className="block text-[11px] font-semibold text-muted-foreground">
+                        Short code
+                        <input value={editForm.code} onChange={(event) => setEditForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus:border-primary" />
+                      </label>
+                    )}
+                    {level === "topics" && (
+                      <label className="block text-[11px] font-semibold text-muted-foreground">
+                        Difficulty level
+                        <select value={editForm.difficultyLevel} onChange={(event) => setEditForm((current) => ({ ...current, difficultyLevel: event.target.value as TaxonomyForm["difficultyLevel"] }))} className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary">
+                          <option value="Beginner">Beginner</option><option value="Intermediate">Intermediate</option><option value="Advanced">Advanced</option>
+                        </select>
+                      </label>
+                    )}
+                    <label className="block text-[11px] font-semibold text-muted-foreground">
+                      Display order
+                      <input type="number" min="1" value={editForm.order} onChange={(event) => setEditForm((current) => ({ ...current, order: event.target.value }))} className="mt-1.5 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus:border-primary" />
+                    </label>
+                  </div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground">
+                    Description
+                    <textarea value={editForm.description} onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))} rows={4} className="mt-1.5 w-full resize-y rounded-sm border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary" />
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+                    <input type="checkbox" checked={editForm.enabled} onChange={(event) => setEditForm((current) => ({ ...current, enabled: event.target.checked }))} />
+                    Enabled and visible to learners
+                  </label>
+                  <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between">
+                    <button type="button" disabled={saving} onClick={deleteItem} className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-destructive/30 px-3 py-2 text-xs text-destructive hover:bg-destructive/5 disabled:opacity-50"><Trash2 size={13} /> Delete</button>
+                    <button type="button" disabled={saving} onClick={saveEditor} className="btn-primary inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs disabled:opacity-50"><Save size={13} /> Save changes</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-64 flex-col items-center justify-center text-center">
+                  <div className="rounded-full border border-border bg-secondary/30 p-3 text-muted-foreground"><ChevronRight size={20} /></div>
+                  <div className="mt-3 text-sm font-semibold text-foreground">Select an item to edit</div>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">Stable IDs and parent paths stay locked so existing questions and theory remain correctly mapped.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
+
+      <section className="rounded-sm border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-muted-foreground">
+        <div className="flex items-start gap-2"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-600" /><span>Creation now validates the full parent path on the server. A topic inherits its subject from the chosen chapter, and a subtopic inherits its chapter and subject from the chosen topic.</span></div>
+      </section>
+
+      <details className="rounded-sm border border-border bg-card">
+        <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-semibold text-foreground"><FileJson size={16} /> Advanced: bulk JSON import <CircleHelp size={14} className="text-muted-foreground" /></summary>
+        <div className="border-t border-border"><TaxonomyBulkJsonManager onImported={refresh} /></div>
+      </details>
     </div>
   );
 }

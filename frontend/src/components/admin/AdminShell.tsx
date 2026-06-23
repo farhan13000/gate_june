@@ -19,6 +19,7 @@ import type { LucideIcon } from "lucide-react";
 export type AdminSectionId =
   | "Overview"
   | "Taxonomy Manager"
+  | "Taxonomy Guide"
   | "Problem Manager"
   | "Theory Manager"
   | "Home Management"
@@ -48,6 +49,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Syllabus & Content",
     items: [
       { id: "Taxonomy Manager", label: "Taxonomy", icon: FolderTree },
+      { id: "Taxonomy Guide", label: "Taxonomy Guide", icon: BookOpenCheck },
       { id: "Problem Manager", label: "Add Problems", icon: FileQuestion },
       { id: "Theory Manager", label: "Add Theory", icon: BookOpen },
       { id: "Content Management", label: "Create / Bulk", icon: PenLine },
