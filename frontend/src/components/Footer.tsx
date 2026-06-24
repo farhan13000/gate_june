@@ -7,8 +7,12 @@ export default function Footer() {
       <div className="mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-8 lg:px-12 xl:px-16">
         <div className="flex flex-col gap-5 border-b border-[#dbe4ee] pb-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <Link to="/" className="inline-flex text-lg font-bold uppercase tracking-[0.1em] text-[#10213f]">
-              GATE <span className="text-[#0b6fe8]">DA</span>
+            <Link to="/" className="inline-flex" aria-label="GATE DA Scholar home">
+              <img
+                src="/gate-da-logo.png"
+                alt="GATE DA Scholar"
+                className="h-12 w-12 object-contain"
+              />
             </Link>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#64748b]">
               Focused preparation for GATE Data Science and AI with practice, PYQ, theory, contests, and performance analytics.

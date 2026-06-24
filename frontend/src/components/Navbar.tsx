@@ -55,8 +55,12 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white shadow-sm">
       <SiteContainer className="flex h-16 w-full items-center justify-between gap-3 lg:h-[72px]">
-        <Link to="/" className="shrink-0 text-base font-bold uppercase tracking-[0.1em] text-[#10213f] sm:text-xl">
-          GATE <span className="text-[#0b6fe8]">DA</span>
+        <Link to="/" className="shrink-0" aria-label="GATE DA Scholar home">
+          <img
+            src="/gate-da-logo.png"
+            alt="GATE DA Scholar"
+            className="h-11 w-11 object-contain sm:h-12 sm:w-12"
+          />
         </Link>
 
         <nav className="hidden h-full flex-1 items-center justify-center gap-4 lg:flex xl:gap-7 2xl:gap-9">
