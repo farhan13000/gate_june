@@ -29,6 +29,13 @@ function toEmbeddableMediaUrl(value: string): string {
 /** Public remote images are fetched through the app's validated, cacheable media endpoint. */
 function getRenderableMediaUrl(value: string): string {
   if (!/^https?:\/\//i.test(value)) return value;
+  // Cloudinary already delivers through its own global CDN. Sending these URLs
+  // back through our proxy would remove its caching/optimization benefit.
+  try {
+    if (new URL(value).hostname.toLowerCase() === "res.cloudinary.com") return value;
+  } catch {
+    // The URL was already checked by normalizeContentMedia; retain the safe fallback.
+  }
   const apiBase = import.meta.env.VITE_API_BASE || "";
   return `${apiBase}/api/media/image?src=${encodeURIComponent(value)}`;
 }

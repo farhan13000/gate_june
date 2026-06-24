@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Copy, Plus } from "lucide-react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { Copy, ImageUp, LoaderCircle, Plus } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 import LatexRenderer from "@/components/LatexRenderer";
@@ -12,9 +12,24 @@ const emptyHierarchy: HierarchyPickerValue = {
   subtopicId: "",
 };
 
+type UploadedMedia = {
+  url: string;
+  publicId?: string;
+  alt?: string;
+  caption?: string;
+  kind?: "image" | "diagram";
+  placement?: "inline" | "left" | "right" | "full";
+};
+
 export default function AdminProblemManager() {
   const [hierarchy, setHierarchy] = useState<HierarchyPickerValue>(emptyHierarchy);
   const [labels, setLabels] = useState<Record<string, string | undefined>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [mediaAlt, setMediaAlt] = useState("");
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [mediaKind, setMediaKind] = useState<"image" | "diagram">("diagram");
+  const [mediaPlacement, setMediaPlacement] = useState<"inline" | "left" | "right" | "full">("inline");
   const [form, setForm] = useState({
     title: "",
     statement: "",
@@ -91,6 +106,62 @@ OUTPUT SHAPE
   const copyPrompt = () => {
     navigator.clipboard.writeText(buildPrompt());
     toast.success("Prompt copied");
+  };
+
+  const appendStatementMedia = (media: UploadedMedia) => {
+    try {
+      const current = form.images.trim() ? JSON.parse(form.images) : [];
+      const images = Array.isArray(current) ? current : [current];
+      setForm((currentForm) => ({
+        ...currentForm,
+        images: JSON.stringify([...images, media], null, 2),
+      }));
+      toast.success("Diagram uploaded and added to statement media");
+    } catch {
+      toast.error("Fix the existing Statement media JSON before adding another diagram.");
+    }
+  };
+
+  const handleMediaUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const supportedTypes = ["image/png", "image/jpeg", "image/webp"];
+    if (!supportedTypes.includes(file.type)) {
+      toast.error("Choose a PNG, JPEG, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Images must be 5 MB or smaller.");
+      return;
+    }
+
+    const data = new FormData();
+    data.append("file", file);
+    data.append("alt", mediaAlt.trim() || file.name.replace(/\.[^.]+$/, ""));
+    data.append("caption", mediaCaption.trim());
+    data.append("kind", mediaKind);
+    data.append("placement", mediaPlacement);
+
+    setIsUploadingMedia(true);
+    try {
+      const response = await fetch("/api/admin/media/question-image", {
+        method: "POST",
+        credentials: "include",
+        body: data,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.media) {
+        toast.error(payload.message || "Could not upload the diagram.");
+        return;
+      }
+      appendStatementMedia(payload.media as UploadedMedia);
+    } catch {
+      toast.error("Network error while uploading the diagram.");
+    } finally {
+      setIsUploadingMedia(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -264,11 +335,69 @@ OUTPUT SHAPE
           <span className="font-semibold text-foreground">Place visuals exactly where they belong.</span>{" "}
           Add <code className="rounded bg-background px-1 font-mono text-foreground">{"{{media:0}}"}</code> in the statement or solution explanation. The first image in each section uses index <code className="rounded bg-background px-1 font-mono text-foreground">0</code>. Use <code className="rounded bg-background px-1 font-mono text-foreground">left</code> or <code className="rounded bg-background px-1 font-mono text-foreground">right</code> for desktop side-by-side placement; it stacks naturally on mobile.
         </div>
+        <div className="space-y-3 rounded-sm border border-border bg-secondary/20 p-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold text-foreground">Upload a statement visual</div>
+              <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">PNG, JPEG, or WebP up to 5 MB. It is stored privately through the server and delivered from Cloudinary's CDN.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingMedia}
+              className="flex shrink-0 items-center justify-center gap-1 rounded-sm border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isUploadingMedia ? <LoaderCircle size={14} className="animate-spin" /> : <ImageUp size={14} />}
+              {isUploadingMedia ? "Uploading…" : "Upload diagram"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleMediaUpload}
+              className="hidden"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <input
+              placeholder="Alt text (recommended)"
+              value={mediaAlt}
+              onChange={(e) => setMediaAlt(e.target.value)}
+              className="rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            />
+            <input
+              placeholder="Caption (optional)"
+              value={mediaCaption}
+              onChange={(e) => setMediaCaption(e.target.value)}
+              className="rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            />
+            <select
+              aria-label="Media type"
+              value={mediaKind}
+              onChange={(e) => setMediaKind(e.target.value as "image" | "diagram")}
+              className="rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            >
+              <option value="diagram">Diagram</option>
+              <option value="image">Image</option>
+            </select>
+            <select
+              aria-label="Media placement"
+              value={mediaPlacement}
+              onChange={(e) => setMediaPlacement(e.target.value as "inline" | "left" | "right" | "full")}
+              className="rounded-sm border border-border bg-card px-3 py-2 text-xs"
+            >
+              <option value="inline">Inline placement</option>
+              <option value="full">Full-width placement</option>
+              <option value="left">Left placement</option>
+              <option value="right">Right placement</option>
+            </select>
+          </div>
+        </div>
         <textarea
           placeholder={'Statement media JSON (optional), e.g. [{"url":"https://example.com/figure.png","alt":"Search graph","caption":"Figure 1","kind":"diagram","placement":"right"}]'}
           value={form.images}
           onChange={(e) => setForm({ ...form, images: e.target.value })}
-          rows={3}
+          rows={4}
           className="w-full rounded-sm border border-border px-3 py-2 font-mono text-xs"
         />
         {!["NAT", "PROOF"].includes(form.questionType) &&

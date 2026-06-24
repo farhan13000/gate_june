@@ -26,6 +26,7 @@ const addApprovalTag = (tags: string[] | undefined, tag: ApprovalTag): string[] 
 
 type ContentMedia = {
   url: string;
+  publicId?: string;
   alt?: string;
   caption?: string;
   kind?: "image" | "diagram";
@@ -90,6 +91,7 @@ function normalizeMediaCollection(value: unknown, field: string, strict = true):
       : "inline";
     media.push({
       url: normalizeMediaUrl(url, `${itemField}.url`),
+      ...(typeof raw.publicId === "string" && raw.publicId.trim() ? { publicId: raw.publicId.trim() } : {}),
       ...(typeof raw.alt === "string" && raw.alt.trim() ? { alt: raw.alt.trim() } : {}),
       ...(typeof raw.caption === "string" && raw.caption.trim() ? { caption: raw.caption.trim() } : {}),
       kind,

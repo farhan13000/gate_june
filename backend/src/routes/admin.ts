@@ -1,4 +1,5 @@
 import express from "express";
+import multer from "multer";
 import {
   getAllUsers,
   createQuestion,
@@ -71,8 +72,48 @@ import {
   adminBulkTaxonomyJson,
 } from "../controllers/taxonomyAdminController";
 import { getPlatformLogs } from "../controllers/platformLogController";
+import { uploadQuestionMedia } from "../controllers/mediaController";
+import { isCloudinaryConfigured } from "../config/cloudinary";
 
 const router = express.Router();
+const MAX_MEDIA_UPLOAD_BYTES = 5 * 1024 * 1024;
+const allowedMediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_MEDIA_UPLOAD_BYTES, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (allowedMediaTypes.has(file.mimetype)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error("Only PNG, JPEG, and WebP images are supported."));
+  },
+});
+
+const handleQuestionMediaUpload: express.RequestHandler = (req, res, next) => {
+  uploadMedia.single("file")(req, res, (error: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+    const message = error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE"
+      ? "Images must be 5 MB or smaller."
+      : error instanceof Error
+        ? error.message
+        : "The image upload could not be processed.";
+    res.status(400).json({ message });
+  });
+};
+
+const requireCloudinaryUploadConfig: express.RequestHandler = (_req, res, next) => {
+  if (!isCloudinaryConfigured()) {
+    res.status(503).json({
+      message: "Image uploads are not configured. Add the Cloudinary variables to the backend environment.",
+    });
+    return;
+  }
+  next();
+};
 
 // All admin routes are protected
 router.use(requireAuth, requireAdmin);
@@ -110,6 +151,7 @@ router.get("/users", getAllUsers);
 
 // Questions - Full CRUD
 router.get("/questions", getQuestions);
+router.post("/media/question-image", requireCloudinaryUploadConfig, handleQuestionMediaUpload, uploadQuestionMedia);
 router.post("/questions", createQuestion);
 router.put("/questions/:id/approve", approveQuestion);
 router.put("/questions/:id", updateQuestion);

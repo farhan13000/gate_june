@@ -9,6 +9,8 @@ export interface IAuditEntry {
 
 export interface IContentMedia {
   url: string;
+  /** Cloudinary asset ID. Stored so the asset can be managed without parsing a URL. */
+  publicId?: string;
   alt?: string;
   caption?: string;
   kind?: "image" | "diagram";
@@ -61,6 +63,7 @@ const auditEntrySchema = new Schema<IAuditEntry>(
 const contentMediaSchema = new Schema<IContentMedia>(
   {
     url: { type: String, required: true, trim: true },
+    publicId: { type: String, trim: true },
     alt: { type: String, trim: true, default: "" },
     caption: { type: String, trim: true, default: "" },
     kind: { type: String, enum: ["image", "diagram"], default: "image" },
