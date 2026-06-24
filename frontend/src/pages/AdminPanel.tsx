@@ -12,6 +12,7 @@ import AdminContestSection from "@/components/admin/AdminContestSection";
 import AdminContestClaimsPage from "@/components/admin/AdminContestClaimsPage";
 import AdminTaxonomyManager from "@/components/admin/AdminTaxonomyManager";
 import AdminTaxonomyGuide from "@/components/admin/AdminTaxonomyGuide";
+import AdminProblemCreationGuide from "@/components/admin/AdminProblemCreationGuide";
 import { SiteContainer, MainPanel } from "@/components/layout";
 import AdminProblemManager from "@/components/admin/AdminProblemManager";
 import AdminTheoryManager from "@/components/admin/AdminTheoryManager";
@@ -371,6 +372,7 @@ type Section =
   | "Overview"
   | "Taxonomy Manager"
   | "Taxonomy Guide"
+  | "Problem Creation Guide"
   | "Problem Manager"
   | "Theory Manager"
   | "Home Management"
@@ -951,6 +953,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "Overview",
     "Taxonomy Manager",
     "Taxonomy Guide",
+    "Problem Creation Guide",
     "Problem Manager",
     "Theory Manager",
     "Home Management",
@@ -1154,6 +1157,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
         {activeSection === "Taxonomy Manager" && <AdminTaxonomyManager />}
         {activeSection === "Taxonomy Guide" && <AdminTaxonomyGuide />}
+        {activeSection === "Problem Creation Guide" && <AdminProblemCreationGuide />}
         {activeSection === "Problem Manager" && <AdminProblemManager />}
         {activeSection === "Theory Manager" && <AdminTheoryManager />}
 

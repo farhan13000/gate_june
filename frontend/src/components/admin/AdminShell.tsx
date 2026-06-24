@@ -20,6 +20,7 @@ export type AdminSectionId =
   | "Overview"
   | "Taxonomy Manager"
   | "Taxonomy Guide"
+  | "Problem Creation Guide"
   | "Problem Manager"
   | "Theory Manager"
   | "Home Management"
@@ -51,6 +52,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: "Taxonomy Manager", label: "Taxonomy", icon: FolderTree },
       { id: "Taxonomy Guide", label: "Taxonomy Guide", icon: BookOpenCheck },
       { id: "Problem Manager", label: "Add Problems", icon: FileQuestion },
+      { id: "Problem Creation Guide", label: "Problem Guide", icon: BookOpenCheck },
       { id: "Theory Manager", label: "Add Theory", icon: BookOpen },
       { id: "Content Management", label: "Create / Bulk", icon: PenLine },
       { id: "Content Inventory", label: "Inventory", icon: Archive },
