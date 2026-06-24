@@ -158,6 +158,7 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
   const totalProblems = slices.reduce((sum, item) => sum + item.total, 0);
   const totalSolved = slices.reduce((sum, item) => sum + item.solved, 0);
   const totalAttempting = slices.reduce((sum, item) => sum + item.attempting, 0);
+  const completionRate = totalProblems ? Math.round((totalSolved / totalProblems) * 100) : 0;
   const arcCenterX = 160;
   const arcCenterY = 145;
   const arcRadius = 104;
@@ -176,21 +177,40 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
     return { ...item, ...visual, segmentStart, segmentEnd, solvedEnd };
   });
 
-  const activeSegment = active ? slices.find((item) => item.level === active) : null;
+  const activeSegment = active ? segments.find((item) => item.level === active) : null;
+  const summaryLabel = activeSegment ? `${activeSegment.level} progress` : "Overall progress";
+  const summarySolved = activeSegment ? activeSegment.solved : totalSolved;
+  const summaryTotal = activeSegment ? activeSegment.total : totalProblems;
+  const summaryAttempting = activeSegment ? activeSegment.attempting : totalAttempting;
+  const summaryRate = summaryTotal ? Math.round((summarySolved / summaryTotal) * 100) : 0;
 
   return (
-    <div className="flex h-full flex-col border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold text-[#10213f]">Problems Solved</h2>
-        <span className="flex h-6 w-6 items-center justify-center border border-[#e4e7ec] text-[#94a3b8]">
+    <section className="flex h-full min-h-[28rem] flex-col border border-[#e4e7ec] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:p-5" aria-labelledby="problems-solved-heading">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="problems-solved-heading" className="text-base font-bold text-[#10213f]">Problems Solved</h2>
+          <p className="mt-1 text-xs font-medium text-[#64748b]">Completion across your current practice set</p>
+        </div>
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center border border-[#e4e7ec] bg-[#f8fafc] text-[#94a3b8]" title="Hover or tap a difficulty to inspect its progress">
           <Info size={13} />
         </span>
       </div>
 
-      <div className="mt-4 flex flex-1 flex-col items-center justify-center gap-4">
-        <div className="relative flex min-h-[16.5rem] w-full items-center justify-center">
-          <svg viewBox="0 0 320 270" className="h-full max-h-[17.5rem] w-full max-w-[22rem]" role="img" aria-label="Problems solved by difficulty">
-            {segments.map((segment) => {
+      <div className="mt-4 grid grid-cols-2 gap-2 border-y border-[#edf0f4] py-3">
+        <div className="min-w-0 px-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64748b]">Completion</p>
+          <p className="mt-1 font-mono text-xl font-bold leading-none text-[#10213f]">{completionRate}%</p>
+        </div>
+        <div className="min-w-0 border-l border-[#edf0f4] px-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64748b]">In progress</p>
+          <p className="mt-1 font-mono text-xl font-bold leading-none text-[#10213f]">{totalAttempting}</p>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-1 flex-col justify-between gap-4">
+        <div className="relative mx-auto flex min-h-[13.5rem] w-full max-w-[22rem] items-center justify-center">
+          <svg viewBox="0 0 320 270" className="h-[14.5rem] w-full" role="img" aria-label={`${totalSolved} of ${totalProblems} problems solved`}>
+            {segments.map((segment, index) => {
               const isActive = active === segment.level;
               return (
                 <g
@@ -198,24 +218,29 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
                   className="cursor-pointer transition-opacity duration-200"
                   onMouseEnter={() => setActive(segment.level)}
                   onMouseLeave={() => setActive(null)}
-                  >
+                  onClick={() => setActive((current) => current === segment.level ? null : segment.level)}
+                >
                   <path
                     d={describeArc(arcCenterX, arcCenterY, arcRadius, segment.segmentStart, segment.segmentEnd)}
                     fill="none"
                     stroke={segment.light}
-                    strokeWidth={18}
+                    strokeWidth={17}
                     strokeLinecap="round"
-                    opacity={active && !isActive ? 0.42 : 1}
+                    opacity={active && !isActive ? 0.34 : 1}
                   />
-                  <path
-                    d={describeArc(arcCenterX, arcCenterY, arcRadius, segment.segmentStart, segment.solvedEnd)}
-                    fill="none"
-                    stroke={segment.dark}
-                    strokeWidth={18}
-                    strokeLinecap="round"
-                    opacity={active && !isActive ? 0.5 : 1}
-                    className="dashboard-arc-draw"
-                  />
+                  {segment.solved > 0 && (
+                    <path
+                      d={describeArc(arcCenterX, arcCenterY, arcRadius, segment.segmentStart, segment.solvedEnd)}
+                      fill="none"
+                      stroke={segment.dark}
+                      strokeWidth={17}
+                      strokeLinecap="round"
+                      opacity={active && !isActive ? 0.46 : 1}
+                      pathLength="100"
+                      className="dashboard-arc-draw"
+                      style={{ animationDelay: `${index * 110}ms` }}
+                    />
+                  )}
                 </g>
               );
             })}
@@ -223,47 +248,52 @@ function ProblemSolvedArc({ slices }: { slices: DifficultySlice[] }) {
 
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="font-mono text-3xl font-bold text-[#111827]">
-                {totalSolved}
-                <span className="text-xs font-semibold text-[#475569]">/{totalProblems}</span>
+              <div className="font-mono text-[2.1rem] font-bold leading-none text-[#111827]">
+                {summarySolved}
+                <span className="text-sm font-semibold text-[#475569]">/{summaryTotal}</span>
               </div>
               <div className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-[#16a34a]">
                 <CheckCircle2 size={13} />
-                Solved
+                {activeSegment ? activeSegment.level : "Solved"}
               </div>
-              <div className="mt-5 text-xs font-medium text-[#64748b]">{totalAttempting} Attempting</div>
+              <div className="mt-3 text-[11px] font-medium text-[#64748b]">{summaryRate}% complete</div>
             </div>
           </div>
-
-          {activeSegment && (
-            <div className="absolute left-1/2 top-2 w-44 -translate-x-1/2 border border-[#e4e7ec] bg-white px-3 py-2 text-xs shadow-lg">
-              <div className="font-semibold text-[#10213f]">{activeSegment.level}</div>
-              <div className="mt-1 text-[#64748b]">{activeSegment.solved} solved of {activeSegment.total}</div>
-              <div className="text-[#64748b]">{activeSegment.total ? Math.round((activeSegment.solved / activeSegment.total) * 100) : 0}% solved</div>
-              <div className="text-[#64748b]">{activeSegment.attempting} attempting</div>
-            </div>
-          )}
         </div>
 
-        <div className="grid w-full max-w-[24rem] grid-cols-3 gap-2">
-          {slices.map((item) => {
-            const visual = difficultyVisuals[item.level];
+        <div className="grid grid-cols-3 gap-2" aria-live="polite">
+          {segments.map((item) => {
+            const isActive = active === item.level;
+            const percentage = item.total ? Math.round((item.solved / item.total) * 100) : 0;
             return (
               <button
                 type="button"
                 key={item.level}
                 onMouseEnter={() => setActive(item.level)}
                 onMouseLeave={() => setActive(null)}
-                className="border border-transparent bg-[#f8fafc] px-3 py-4 text-center transition hover:border-[#bfdbfe] hover:bg-white hover:shadow-sm"
+                onFocus={() => setActive(item.level)}
+                onBlur={() => setActive(null)}
+                onClick={() => setActive((current) => current === item.level ? null : item.level)}
+                aria-pressed={isActive}
+                className={`min-w-0 border px-2 py-3 text-left transition duration-200 sm:px-3 ${
+                  isActive ? "border-[#93c5fd] bg-[#f8fbff] shadow-sm" : "border-[#edf0f4] bg-[#fbfcfe] hover:border-[#bfdbfe] hover:bg-white"
+                }`}
               >
-                <div className="text-xs font-bold" style={{ color: visual.dark }}>{item.level}</div>
-                <div className="mt-2 font-mono text-sm font-bold text-[#10213f]">{item.solved}/{item.total}</div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="truncate text-[11px] font-bold" style={{ color: item.dark }}>{item.level}</span>
+                  <span className="font-mono text-[10px] font-semibold text-[#64748b]">{percentage}%</span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden bg-white">
+                  <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${percentage}%`, background: item.dark }} />
+                </div>
+                <div className="mt-2 font-mono text-xs font-bold text-[#10213f]">{item.solved}<span className="text-[#94a3b8]">/{item.total}</span></div>
               </button>
             );
           })}
         </div>
+        <p className="text-center text-[11px] font-medium text-[#64748b]">{summaryLabel} / {summaryAttempting} currently attempting</p>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -297,9 +327,14 @@ function ProfileCard({
     ["Institution", institution || "Not specified"],
     ["Member Since", memberSince],
   ];
+  const getProfileItemBorder = (index: number) => {
+    if (index === 0) return "";
+    if (index === 1) return "border-t border-[#e2e8f0] sm:border-l sm:border-t-0";
+    return index % 2 === 0 ? "border-t border-[#e2e8f0]" : "border-l border-t border-[#e2e8f0]";
+  };
 
   return (
-    <div className="border border-[#e2e8f0] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+    <section className="flex h-full flex-col overflow-hidden border border-[#e2e8f0] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.04)]" aria-labelledby="learner-profile-heading">
       <div className="border-b border-[#e2e8f0] bg-white px-4 py-3 sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -307,7 +342,7 @@ function ProfileCard({
               <CircleUserRound size={18} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-base font-bold text-[#10213f]">Learner Profile</h2>
+              <h2 id="learner-profile-heading" className="text-base font-bold text-[#10213f]">Learner Profile</h2>
               <p className="mt-0.5 text-xs font-semibold text-[#64748b]">Preparation identity and live progress</p>
             </div>
           </div>
@@ -318,9 +353,9 @@ function ProfileCard({
         </div>
       </div>
 
-      <div className="grid items-stretch gap-0 md:grid-cols-[minmax(12rem,0.42fr)_minmax(0,1fr)]">
-        <div className="flex flex-col items-center border-b border-[#e2e8f0] bg-white p-5 text-center md:border-b-0 md:border-r">
-          <div className="flex h-[6.4rem] w-[6.4rem] shrink-0 items-center justify-center overflow-hidden border border-[#e2e8f0] bg-[#f1f5f9] text-[#94a3b8] shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
+      <div className="grid flex-1 items-stretch gap-0 lg:grid-cols-[minmax(13rem,0.4fr)_minmax(0,1fr)]">
+        <div className="flex flex-col items-center border-b border-[#e2e8f0] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-4 text-center sm:flex-row sm:items-center sm:gap-4 sm:text-left lg:flex-col lg:justify-between lg:border-b-0 lg:border-r lg:p-5 lg:text-center">
+          <div className="flex h-[5.5rem] w-[5.5rem] shrink-0 items-center justify-center overflow-hidden border border-[#d9e3ef] bg-[#f1f5f9] text-[#94a3b8] shadow-[0_8px_18px_rgba(15,23,42,0.08)] lg:h-[6.25rem] lg:w-[6.25rem]">
             {avatarUrl && !avatarFailed ? (
               <img
                 src={avatarUrl}
@@ -337,35 +372,43 @@ function ProfileCard({
               </div>
             )}
           </div>
-          <h3 className="mt-4 max-w-full truncate text-xl font-bold text-[#10213f]">{userName}</h3>
-          <p className="mt-1 max-w-full truncate text-xs font-medium text-[#64748b]">{fullName || email || "GATE DA learner"}</p>
-          <div className="mt-2 inline-flex border border-[#bfdbfe] bg-[#eaf4ff] px-2 py-1 text-[11px] font-bold text-[#0b6fe8]">
-            Student
+          <div className="min-w-0 sm:flex-1 lg:mt-4 lg:flex-none">
+            <h3 className="max-w-full truncate text-lg font-bold text-[#10213f] lg:text-xl">{userName}</h3>
+            <p className="mt-1 max-w-full truncate text-xs font-medium text-[#64748b]">{fullName || email || "GATE DA learner"}</p>
+            <div className="mt-2 inline-flex border border-[#bfdbfe] bg-[#eaf4ff] px-2 py-1 text-[11px] font-bold text-[#0b6fe8]">
+              Student
+            </div>
           </div>
-          <div className="mt-5 w-full border-t border-[#e2e8f0] pt-4">
-            <p className="text-xs font-semibold text-[#64748b]">Current Rating</p>
-            <p className="font-mono text-4xl font-bold leading-tight text-[#0b6fe8]">{rating}</p>
-            <p className="mt-1 text-[11px] font-medium text-[#64748b]">Keep practicing to improve!</p>
+          <div className="mt-4 grid w-full grid-cols-[1fr_auto] items-center gap-3 border-t border-[#e2e8f0] pt-3 text-left sm:mt-0 sm:w-auto sm:min-w-[9rem] sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 lg:mt-5 lg:w-full lg:grid-cols-1 lg:border-l-0 lg:border-t lg:pt-4 lg:text-center">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#64748b]">Current rating</p>
+              <p className="mt-1 font-mono text-3xl font-bold leading-none text-[#0b6fe8]">{rating}</p>
+            </div>
+            <p className="text-right text-[11px] font-medium text-[#64748b] lg:text-center">Keep practicing to improve</p>
           </div>
         </div>
 
-        <div className="flex min-w-0 p-4 sm:p-5">
-          <div className="grid min-h-[18rem] w-full content-stretch border border-[#e2e8f0] bg-[#fcfdfd]">
+        <div className="min-w-0 p-4 sm:flex sm:flex-col sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64748b]">Profile details</p>
+            <p className="hidden text-[11px] font-medium text-[#94a3b8] sm:block">Manage details from account settings</p>
+          </div>
+          <dl className="grid overflow-hidden border border-[#e2e8f0] bg-[#fcfdfd] sm:min-h-0 sm:flex-1 sm:grid-cols-2 sm:grid-rows-3">
             {profileItems.map(([label, value], index) => (
               <div
                 key={label}
-                className={`grid min-h-[3.4rem] grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3 px-4 py-3 transition hover:bg-white sm:grid-cols-[9rem_minmax(0,1fr)] ${
-                  index === 0 ? "" : "border-t border-[#e2e8f0]"
+                className={`min-w-0 px-4 py-3.5 transition hover:bg-white ${getProfileItemBorder(index)} ${
+                  index === profileItems.length - 1 ? "sm:col-span-2" : ""
                 }`}
               >
-                <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#64748b]">{label}</span>
-                <span className="min-w-0 break-words text-sm font-bold text-[#10213f]">{value}</span>
+                <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#64748b]">{label}</dt>
+                <dd className="mt-1.5 min-w-0 break-words text-sm font-bold leading-snug text-[#10213f]">{value}</dd>
               </div>
             ))}
-          </div>
+          </dl>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -876,7 +919,7 @@ export default function DashboardOverview() {
         {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
+      <section className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.88fr)]">
         <ProfileCard
           userName={userName}
           rating={rating}
