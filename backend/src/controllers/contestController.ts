@@ -397,6 +397,7 @@ export const getContestRoom = async (req: Request, res: Response): Promise<void>
       statement: question.statement,
       questionType: question.questionType,
       imageUrl: question.imageUrl,
+      images: question.images,
       markingScheme: question.markingScheme,
       options: (question.options || []).map((option: any) => ({
         _id: option._id,
@@ -474,6 +475,7 @@ export const getContestPracticeRoom = async (req: Request, res: Response): Promi
         statement: question.statement,
         questionType: question.questionType,
         imageUrl: question.imageUrl,
+        images: question.images,
         markingScheme: question.markingScheme,
         options: (question.options || []).map((option: any) => ({
           _id: option._id,

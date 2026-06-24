@@ -19,6 +19,7 @@ import leaderboardRoutes from "./routes/leaderboard";
 import homeRoutes from "./routes/home";
 import taxonomyRoutes from "./routes/taxonomy";
 import contestRoutes from "./routes/contests";
+import mediaRoutes from "./routes/media";
 import { startContestLifecycleSync } from "./utils/contestLifecycleSync";
 
 const app = express();
@@ -52,6 +53,7 @@ app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/home", homeRoutes);
 app.use("/api/taxonomy", taxonomyRoutes);
 app.use("/api/contests", contestRoutes);
+app.use("/api/media", mediaRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

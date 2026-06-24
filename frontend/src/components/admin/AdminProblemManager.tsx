@@ -19,6 +19,7 @@ export default function AdminProblemManager() {
     title: "",
     statement: "",
     solution: "",
+    images: "",
     difficulty: "Medium",
     questionType: "MCQ",
     positiveMarks: 2,
@@ -51,12 +52,11 @@ RULES
 - Return only parsable JSON, no markdown wrapper.
 - Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
 - Keep the solution simple: one detailed explanation string plus finalAnswer.
-- Do not use solution.blocks, overview, keyInsight, whyThisWorks, commonTraps, diagram, or diagrams fields.
 - In solution.explanation, write clear paragraphs like a textbook solution. Include equations exactly where they are needed using display LaTeX.
-- If a diagram or graph would help, describe it inline inside solution.explanation as text, not as a JSON object.
-- Diagram format inside explanation: "Diagram: <title>\\n<node/step> -> <node/step> -> <node/step>".
-- Graph format inside explanation: "Graph: <title>\\nHorizontal axis: ...\\nVertical axis: ...\\nShape/key points: ...".
-- For counting/process/modeling problems, use compact ASCII flow such as "A elements -> choices in B -> product rule".
+- MEDIA / DIAGRAM CONTRACT: Use "images" for statement visuals and "solution.images" for solution visuals. Each item is { "url": "https://...", "alt": "accessible description", "caption": "optional caption", "kind": "image" | "diagram", "placement": "inline" | "left" | "right" | "full" }.
+- Embed an asset at an exact point by adding {{media:0}} to the statement or solution.explanation. The number is its zero-based index in that section's images array. "left" and "right" place it beside the following text on desktop and stack safely on phones; "inline" and "full" show it between paragraphs.
+- Add media only when an exact, verified image URL has been supplied in the request or source material. Never invent or guess an image URL. Use [] when no visual is available.
+- A diagram is an image with "kind": "diagram". Do not include HTML, SVG markup, Mermaid syntax, base64 blobs, or image-generation prompts in JSON.
 
 OUTPUT SHAPE
 {
@@ -69,9 +69,11 @@ OUTPUT SHAPE
   "subtopic": "${labels.subtopic || hierarchy.subtopicId}",
   "difficulty": "${form.difficulty}",
   "questionType": "${form.questionType}",
-  "statement": "Clear statement with double-escaped LaTeX.",
+  "statement": "Clear statement with double-escaped LaTeX. {{media:0}} Continue the question after the figure.",
+  "images": [],
   "solution": {
-    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\]. If useful, include an inline Diagram: or Graph: text block with escaped newlines.",
+    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\].",
+    "images": [],
     "finalAnswer": "Final answer with units/precision if needed."
   },
   "options": [
@@ -96,6 +98,16 @@ OUTPUT SHAPE
       toast.error("Select full hierarchy down to subtopic");
       return;
     }
+    let images: unknown[] = [];
+    try {
+      if (form.images.trim()) {
+        const parsed = JSON.parse(form.images);
+        images = Array.isArray(parsed) ? parsed : [parsed];
+      }
+    } catch {
+      toast.error("Media JSON must be a valid object or array.");
+      return;
+    }
     const body = {
       subjectId: hierarchy.subjectId,
       chapterId: hierarchy.chapterId,
@@ -105,6 +117,7 @@ OUTPUT SHAPE
       title: form.title,
       statement: form.statement,
       solution: form.solution,
+      images,
       difficulty: form.difficulty,
       questionType: form.questionType,
       options: ["NAT", "PROOF"].includes(form.questionType) ? [] : form.options,
@@ -123,7 +136,7 @@ OUTPUT SHAPE
     });
     if (res.ok) {
       toast.success("Problem submitted for review");
-      setForm((f) => ({ ...f, title: "", statement: "", solution: "" }));
+      setForm((f) => ({ ...f, title: "", statement: "", solution: "", images: "" }));
     } else {
       const d = await res.json();
       toast.error(d.message || "Failed to create");
@@ -247,6 +260,17 @@ OUTPUT SHAPE
           rows={4}
           className="w-full rounded-sm border border-border px-3 py-2 font-mono text-xs"
         />
+        <div className="rounded-sm border border-primary/20 bg-primary/5 p-3 text-[11px] leading-5 text-muted-foreground">
+          <span className="font-semibold text-foreground">Place visuals exactly where they belong.</span>{" "}
+          Add <code className="rounded bg-background px-1 font-mono text-foreground">{"{{media:0}}"}</code> in the statement or solution explanation. The first image in each section uses index <code className="rounded bg-background px-1 font-mono text-foreground">0</code>. Use <code className="rounded bg-background px-1 font-mono text-foreground">left</code> or <code className="rounded bg-background px-1 font-mono text-foreground">right</code> for desktop side-by-side placement; it stacks naturally on mobile.
+        </div>
+        <textarea
+          placeholder={'Statement media JSON (optional), e.g. [{"url":"https://example.com/figure.png","alt":"Search graph","caption":"Figure 1","kind":"diagram","placement":"right"}]'}
+          value={form.images}
+          onChange={(e) => setForm({ ...form, images: e.target.value })}
+          rows={3}
+          className="w-full rounded-sm border border-border px-3 py-2 font-mono text-xs"
+        />
         {!["NAT", "PROOF"].includes(form.questionType) &&
           form.options.map((opt, i) => (
             <div key={i} className="flex min-w-0 items-center gap-2">
@@ -272,7 +296,7 @@ OUTPUT SHAPE
             </div>
           ))}
         <textarea
-          placeholder='Solution JSON, e.g. {"explanation":"Detailed solution with \\\\[...\\\\] where needed.","finalAnswer":"..."}'
+          placeholder='Solution JSON. Embed image 0 with {{media:0}}, e.g. {"explanation":"Derive. {{media:0}} Therefore...","images":[{"url":"https://...","alt":"Derivation diagram","kind":"diagram","placement":"left"}],"finalAnswer":"..."}'
           value={form.solution}
           onChange={(e) => setForm({ ...form, solution: e.target.value })}
           rows={4}

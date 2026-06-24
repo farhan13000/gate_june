@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, CheckCircle2, Clock3, Eye, FileText, Flag, Gavel, 
 import { toast } from "sonner";
 import LatexRenderer from "@/components/LatexRenderer";
 import EditorialRenderer from "@/components/EditorialRenderer";
+import EmbeddedMediaContent from "@/components/EmbeddedMediaContent";
 import { useAuth } from "@/contexts/AuthContext";
 
 type ContestQuestion = {
@@ -15,6 +16,7 @@ type ContestQuestion = {
   statement: string;
   questionType: "MCQ" | "MSQ" | "NAT";
   imageUrl?: string;
+  images?: unknown[];
   markingScheme?: { positive: number; negative: number };
   options?: Array<{ _id: string; text: string; isCorrect?: boolean }>;
   solution?: any;
@@ -614,11 +616,13 @@ export default function ContestRoom() {
               <span>Problem Statement</span>
             </div>
           )}
-          {activeQuestion.imageUrl && (
-            <img src={activeQuestion.imageUrl} alt={activeQuestion.title} className="mb-5 max-h-80 w-full rounded-sm border border-border object-contain bg-secondary/10 p-2" />
-          )}
           <div className="prose prose-sm max-w-none text-sm text-foreground/85 leading-[1.85] font-serif">
-            <LatexRenderer latex={activeQuestion.statement} />
+            <EmbeddedMediaContent
+              content={activeQuestion.statement}
+              media={activeQuestion.images}
+              imageUrl={activeQuestion.imageUrl}
+              label="Problem visual"
+            />
           </div>
 
           {answerReviewVisible && (

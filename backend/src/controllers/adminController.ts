@@ -24,6 +24,132 @@ const addApprovalTag = (tags: string[] | undefined, tag: ApprovalTag): string[] 
   return currentTags.includes(tag) ? currentTags : [...currentTags, tag];
 };
 
+type ContentMedia = {
+  url: string;
+  alt?: string;
+  caption?: string;
+  kind?: "image" | "diagram";
+  placement?: "inline" | "left" | "right" | "full";
+};
+
+function isAllowedMediaUrl(value: string): boolean {
+  return /^(https?:\/\/|\/(?!\/)|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,)/i.test(value);
+}
+
+/** Google Drive's /file/d/.../view pages are HTML, not image assets. */
+function toEmbeddableMediaUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    if (parsed.hostname !== "drive.google.com") return value;
+    const fileId = parsed.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || parsed.searchParams.get("id");
+    return fileId ? `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}` : value;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeMediaUrl(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${field} must contain a URL.`);
+  const url = toEmbeddableMediaUrl(value.trim());
+  if (!isAllowedMediaUrl(url)) {
+    throw new Error(`${field} must use an http(s), local (/...), or image data URL.`);
+  }
+  return url;
+}
+
+function normalizeMediaCollection(value: unknown, field: string, strict = true): ContentMedia[] {
+  if (value === undefined || value === null || value === "") return [];
+  const entries = Array.isArray(value) ? value : [value];
+  const media: ContentMedia[] = [];
+
+  for (const [index, entry] of entries.entries()) {
+    const itemField = `${field}[${index}]`;
+    if (typeof entry === "string") {
+      if (!isAllowedMediaUrl(entry.trim())) {
+        if (!strict) continue;
+        throw new Error(`${itemField} must be a media URL or an object with a url.`);
+      }
+      media.push({ url: normalizeMediaUrl(entry, itemField), kind: "image" });
+      continue;
+    }
+
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      if (!strict) continue;
+      throw new Error(`${itemField} must be a media URL or an object with a url.`);
+    }
+
+    const raw = entry as Record<string, unknown>;
+    const url = raw.url ?? raw.src ?? raw.imageUrl;
+    if (typeof url !== "string" || !isAllowedMediaUrl(url.trim())) {
+      if (!strict) continue;
+      throw new Error(`${itemField}.url must be a valid media URL.`);
+    }
+    const kind = raw.kind === "diagram" ? "diagram" : "image";
+    const placement = ["left", "right", "full"].includes(String(raw.placement))
+      ? raw.placement as ContentMedia["placement"]
+      : "inline";
+    media.push({
+      url: normalizeMediaUrl(url, `${itemField}.url`),
+      ...(typeof raw.alt === "string" && raw.alt.trim() ? { alt: raw.alt.trim() } : {}),
+      ...(typeof raw.caption === "string" && raw.caption.trim() ? { caption: raw.caption.trim() } : {}),
+      kind,
+      placement,
+    });
+  }
+
+  return media.filter((asset, index, list) => list.findIndex((candidate) => candidate.url === asset.url) === index);
+}
+
+function normalizeSolutionMedia(value: unknown): unknown {
+  if (typeof value === "string") {
+    try {
+      return normalizeSolutionMedia(JSON.parse(value));
+    } catch {
+      return value;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+
+  const solution = { ...(value as Record<string, unknown>) };
+  const hasMediaField = ["images", "figures", "diagrams", "imageUrl", "diagramUrl"].some((field) => field in solution);
+  if (!hasMediaField) return solution;
+
+  const media = [
+    ...normalizeMediaCollection(solution.images, "solution.images"),
+    ...normalizeMediaCollection(solution.figures, "solution.figures"),
+    ...normalizeMediaCollection(solution.diagrams, "solution.diagrams", false).map((asset) => ({ ...asset, kind: "diagram" as const })),
+    ...normalizeMediaCollection(solution.imageUrl, "solution.imageUrl"),
+    ...normalizeMediaCollection(solution.diagramUrl, "solution.diagramUrl").map((asset) => ({ ...asset, kind: "diagram" as const })),
+  ].filter((asset, index, list) => list.findIndex((candidate) => candidate.url === asset.url) === index);
+
+  solution.images = media;
+  delete solution.figures;
+  delete solution.imageUrl;
+  delete solution.diagramUrl;
+  // Keep legacy textual diagrams untouched, but image URLs have been moved to images.
+  if (Array.isArray(solution.diagrams)) {
+    solution.diagrams = solution.diagrams.filter((item) => typeof item === "string" && !isAllowedMediaUrl(item.trim()));
+  }
+  return solution;
+}
+
+function normalizeQuestionPayload(body: Record<string, any>): Record<string, any> {
+  const payload = { ...body };
+  if (payload.images !== undefined) payload.images = normalizeMediaCollection(payload.images, "images");
+  if (payload.imageUrl !== undefined && payload.imageUrl !== "") payload.imageUrl = normalizeMediaUrl(payload.imageUrl, "imageUrl");
+  if (payload.imageUrl === "") delete payload.imageUrl;
+  if (payload.solution !== undefined) payload.solution = normalizeSolutionMedia(payload.solution);
+  return payload;
+}
+
+function normalizeTheoryPayload(body: Record<string, any>): Record<string, any> {
+  const payload = { ...body };
+  if (payload.images !== undefined) payload.images = normalizeMediaCollection(payload.images, "images");
+  if (payload.imageUrl !== undefined && payload.imageUrl !== "") payload.imageUrl = normalizeMediaUrl(payload.imageUrl, "imageUrl");
+  if (payload.imageUrl === "") delete payload.imageUrl;
+  return payload;
+}
+
 // --- Users ---
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -38,7 +164,7 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
 export const createQuestion = async (req: Request, res: Response): Promise<void> => {
   try {
     const question = new Question({
-      ...req.body,
+      ...normalizeQuestionPayload(req.body),
       createdBy: req.currentUser!._id,
       status: "pending_review",
       auditLog: [{ action: "Created", performedBy: req.currentUser!._id }],
@@ -67,7 +193,7 @@ export const getQuestions = async (req: Request, res: Response): Promise<void> =
 export const updateQuestion = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { note, ...updateData } = req.body;
+    const { note, ...updateData } = normalizeQuestionPayload(req.body);
 
     const question = await Question.findById(id);
     if (!question) {
@@ -145,7 +271,7 @@ export const approveQuestion = async (req: Request, res: Response): Promise<void
 export const createTheory = async (req: Request, res: Response): Promise<void> => {
   try {
     const theory = new Theory({
-      ...req.body,
+      ...normalizeTheoryPayload(req.body),
       createdBy: req.currentUser!._id,
       status: "pending_review",
       auditLog: [{ action: "Created", performedBy: req.currentUser!._id }],
@@ -174,7 +300,7 @@ export const getTheories = async (req: Request, res: Response): Promise<void> =>
 export const updateTheory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { note, ...updateData } = req.body;
+    const { note, ...updateData } = normalizeTheoryPayload(req.body);
 
     const theory = await Theory.findById(id);
     if (!theory) {
@@ -346,7 +472,7 @@ export const bulkUpload = async (req: Request, res: Response): Promise<void> => 
       }
 
       return {
-        ...item,
+        ...(type === "Problem" ? normalizeQuestionPayload(item) : normalizeTheoryPayload(item)),
         contentId: generatedId,
         createdBy: userId,
         status: "pending_review",

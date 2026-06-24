@@ -7,6 +7,14 @@ export interface IAuditEntry {
   timestamp: Date;
 }
 
+export interface IContentMedia {
+  url: string;
+  alt?: string;
+  caption?: string;
+  kind?: "image" | "diagram";
+  placement?: "inline" | "left" | "right" | "full";
+}
+
 export interface IQuestion extends Document {
   contentId: string;
   problemId?: string;
@@ -20,7 +28,9 @@ export interface IQuestion extends Document {
   statement: string;
   options?: { text: string; isCorrect: boolean }[];
   questionType: "MCQ" | "MSQ" | "NAT" | "PROOF";
+  /** Legacy single-image field. New content should use images. */
   imageUrl?: string;
+  images: IContentMedia[];
   solution: any;
   markingScheme: { positive: number; negative: number };
   tags: string[];
@@ -48,6 +58,17 @@ const auditEntrySchema = new Schema<IAuditEntry>(
   { _id: false }
 );
 
+const contentMediaSchema = new Schema<IContentMedia>(
+  {
+    url: { type: String, required: true, trim: true },
+    alt: { type: String, trim: true, default: "" },
+    caption: { type: String, trim: true, default: "" },
+    kind: { type: String, enum: ["image", "diagram"], default: "image" },
+    placement: { type: String, enum: ["inline", "left", "right", "full"], default: "inline" },
+  },
+  { _id: false }
+);
+
 const questionSchema = new Schema<IQuestion>(
   {
     contentId: { type: String, unique: true, sparse: true },
@@ -68,6 +89,7 @@ const questionSchema = new Schema<IQuestion>(
     ],
     questionType: { type: String, enum: ["MCQ", "MSQ", "NAT", "PROOF"], required: true },
     imageUrl: { type: String },
+    images: { type: [contentMediaSchema], default: [] },
     solution: { type: Schema.Types.Mixed, required: true },
     markingScheme: {
       positive: { type: Number, required: true, default: 1 },

@@ -3,6 +3,7 @@ import { Search, ChevronDown, Trash2, Edit2, Clock, X, CheckCircle, XCircle, Inf
 import { useAuth } from "../contexts/AuthContext";
 import LatexRenderer from "../components/LatexRenderer";
 import EditorialRenderer from "../components/EditorialRenderer";
+import EmbeddedMediaContent from "@/components/EmbeddedMediaContent";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import AdminHomeSection from "@/components/admin/AdminHomeSection";
@@ -163,8 +164,9 @@ OUTPUT MUST BE:
   "subtopic": "Specific Subtopic",
   "difficulty": "Foundational|Advanced|Elite Hard",
   "concepts": ["Concept1", "Concept2", "..."],
-  "problem_type": "MCQ",
-  "problem_statement": "Statement with LaTeX using only \\\\frac, \\\\sigma, \\\\lambda, etc.",
+   "problem_type": "MCQ",
+   "problem_statement": "Statement with LaTeX using only \\\\frac, \\\\sigma, \\\\lambda, etc.",
+   "images": [],
   "options": {
     "A": "Option A with \\\\LaTeX",
     "B": "Option B with \\\\LaTeX",
@@ -172,8 +174,9 @@ OUTPUT MUST BE:
     "D": "Option D with \\\\LaTeX"
   },
   "correct_answer": "A",
-  "solution": {
-    "explanation": "Detailed solution in simple textbook-style paragraphs. Include equations exactly where needed. If useful, include inline Diagram: or Graph: text blocks inside this same string using escaped newlines.",
+   "solution": {
+     "explanation": "Detailed solution in simple textbook-style paragraphs. Include equations exactly where needed.",
+     "images": [],
     "finalAnswer": "Final answer exactly as it should appear in the final answer card."
   },
   "metadata": {
@@ -274,7 +277,7 @@ RETURN ONLY VALID JSON (NO PREAMBLE)
       "Enforce elite-level academic standards: IIT/IISc/TIFR rigor with concept fusion and mathematical depth.",
       "LaTeX SAFETY: Use ONLY double-escaped backslashes (\\\\frac, \\\\sigma). NO dollar signs, NO single backslash, NO markdown.",
       "JSON SAFETY: All quotes escaped, all braces matched, no trailing commas, parsable by JSON.parse().",
-      "SOLUTION FORMAT: Use only solution.explanation and solution.finalAnswer. Do not use solution.blocks or separate diagram fields.",
+      "MEDIA FORMAT: Use images for statement visuals and solution.images for solution visuals. Each item is { url, alt, caption?, kind: image|diagram, placement: inline|left|right|full }. Place an asset exactly with {{media:0}} in the statement or solution.explanation; left/right become a stacked reading flow on small screens. Only use exact, verified image URLs; never invent URLs, and use [] if none are available.",
       "CONCEPT FUSION: Problems MUST combine 2+ GATE DA domains (e.g., Linear Algebra + Probability + Optimization).",
       "MATHEMATICAL DEPTH: Include asymptotic reasoning, hidden invariants, optimization insights, or proof intuition.",
       "QUALITY: No formula substitution shortcuts, no memory-based questions, no coaching institute templates.",
@@ -283,7 +286,7 @@ RETURN ONLY VALID JSON (NO PREAMBLE)
   },
   "Theory Article": {
     title: "GATE DA Comprehensive Theory Article Protocol",
-    description: "Use this protocol to generate syllabus-aligned, conceptually deep theory notes with LaTeX equations and inline diagram/graph descriptions when useful.",
+    description: "Use this protocol to generate syllabus-aligned, conceptually deep theory notes with LaTeX equations and verified image/diagram support when useful.",
     promptTemplate: `You are an academic textbook author designing study materials for the GATE Data Science and AI syllabus.
 Your goal is to generate extremely detailed, textbook-quality study notes in standard JSON format.
 
@@ -296,10 +299,10 @@ STRUCTURAL COMPONENTS:
    - "Theorem: <Title>" followed by the mathematical theorem statement.
    - "Example: <Title>" followed by a detailed illustrative example.
    - "GATE Example: <Title>" followed by historical GATE problems with analytical solutions.
-3. INLINE VISUAL EXPLANATIONS:
-   - To illustrate data flows, decision boundaries, neural network layers, search trees, database relationships, or algorithmic steps, embed readable text diagrams directly inside the content string.
-   - Use escaped newlines and simple arrows so the reader page displays the diagram cleanly, e.g. "Diagram: PCA pipeline\\nRaw data -> Centering -> Covariance matrix -> Eigenvectors -> Projection".
-   - Do not create a separate diagrams array.
+3. VISUALS:
+   - Use an optional top-level "images" array for real figures and diagrams: [{ "url": "https://...", "alt": "accessible description", "caption": "optional caption", "kind": "image" | "diagram", "placement": "inline" | "left" | "right" | "full" }]. Place one inside content with {{media:0}}; side placements stack on small screens.
+   - Include a visual only when its exact, verified URL is already available. Never fabricate URLs. Use [] when no visual is available.
+   - Do not use HTML, SVG markup, Mermaid syntax, base64 blobs, or image-generation prompts in JSON.
 
 CRITICAL LATEX FORMATTING RULES:
 1. NEVER write any mathematical variable, constant, equation, fraction, subscript, superscript, matrix, parameter, or math symbol as plain text!
@@ -331,12 +334,13 @@ JSON SCHEME REFERENCE:
     "chapterId": "4",
     "chapterTitle": "Dimensionality Reduction",
     "sectionId": "4.1",
-  "content": "Core Concept of PCA\\n\\nPrincipal Component Analysis is a linear dimensionality reduction technique that finds the directions of maximum variance...\\n\\n\\\\[ \\\\frac{1}{n} X^T X \\\\]\\n\\nDiagram: PCA pipeline\\nData -> Centering -> Covariance matrix -> Eigenvalue decomposition -> Principal components\\n\\nTheorem: Maximum Variance Projection\\nLet \\\\( u_1 \\\\) be the first principal direction...\\n\\nExample: 2D Data Projection\\nConsider a dataset of 3 points..."
+  "content": "Core Concept of PCA\\n\\nPrincipal Component Analysis is a linear dimensionality reduction technique that finds the directions of maximum variance...\\n\\n\\\\[ \\\\frac{1}{n} X^T X \\\\]\\n\\nTheorem: Maximum Variance Projection\\nLet \\\\( u_1 \\\\) be the first principal direction...\\n\\nExample: 2D Data Projection\\nConsider a dataset of 3 points...",
+  "images": []
   }
 ]`,
     rules: [
       "The response must be a 100% valid JSON array containing double-escaped LaTeX equations.",
-      "Embed visual explanations directly inside the content string as readable Diagram: or Process flow: blocks with escaped newlines.",
+      "Use images only when a verified URL is supplied; each image needs url, alt, optional caption, kind (image or diagram), and optional placement (inline, left, right, full). Insert {{media:0}} in content to place the first image.",
       "Use custom block prefixes ('Theorem: [Title]', 'Example: [Title]', 'GATE Example: [Title]') to structure the layout of the notes."
     ]
   }
@@ -345,6 +349,16 @@ JSON SCHEME REFERENCE:
 const APPROVAL_TAGS = ["GATE", "GATE DA", "Olympiad", "Advanced"] as const;
 type ApprovalTag = (typeof APPROVAL_TAGS)[number];
 const REVIEWABLE_STATUSES = ["pending_review", "draft", "rejected"];
+
+const parseMediaForPreview = (raw: string): unknown[] => {
+  try {
+    if (!raw.trim()) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? [parsed] : [];
+  } catch {
+    return [];
+  }
+};
 
 const getInitialApprovalTag = (item: any): ApprovalTag => {
   const existingTag = Array.isArray(item?.tags)
@@ -457,14 +471,14 @@ RENDERING AND LATEX CONTRACT
 - For MCQ/MSQ options, each option text can contain inline LaTeX and must be a JSON string.
 - For NAT final answers, put the exact answer in solution.finalAnswer and keep options as [] or omit options.
 - For PROOF questions, write a proof-style statement and solution; keep options as [] or omit options.
-- Keep each problem solution simple: use only solution.explanation and solution.finalAnswer.
-- Do not create solution.blocks, overview, narrative, equations, keyInsight, whyThisWorks, commonTraps, diagram, or diagrams fields for new problem JSON.
-- Put all reasoning, equations, checks, warnings, diagrams, and graphs directly inside solution.explanation as one well-written explanation string.
+- Keep each problem solution simple: use solution.explanation, solution.finalAnswer, and optional solution.images.
+- MEDIA CONTRACT: use a top-level images array for statement visuals and solution.images for solution visuals. Every asset is { "url": "https://...", "alt": "accessible description", "caption": "optional caption", "kind": "image" | "diagram", "placement": "inline" | "left" | "right" | "full" }. Put {{media:0}} directly inside statement or solution.explanation to embed an image at that point; side placements stack on small screens.
+- Use media only when a real, verified URL is already supplied by the request or source material. Never invent a URL. Use [] when no visual is available.
 - If a diagram would help, include it inline as readable text: "Diagram: <title>\\\\nStep 1 -> Step 2 -> Step 3".
 - If a graph would help, include it inline as readable text: "Graph: <title>\\\\nHorizontal axis: ...\\\\nVertical axis: ...\\\\nShape/key points: ...".
 - For process/modeling explanations, use compact text flows such as "Inputs in \\\\(A\\\\) -> choices in \\\\(B\\\\) -> product rule".
-- Do not create a separate diagrams array for theory articles either. Put visual explanations directly inside content as readable text blocks using escaped newlines.
-- Links are optional: never invent a source or add unsupported link fields. If a verified reference is genuinely useful, put one canonical HTTPS URL in a plain "Reference: https://..." line inside solution.explanation or theory content; do not use HTML or Markdown link syntax.
+- For images and diagrams, use only the supported images arrays. Do not include HTML, SVG markup, Mermaid syntax, base64 blobs, or image-generation prompts in JSON.
+- A URL is allowed only in a media asset with a verified source. Do not invent a source or an image URL.
 - Before returning, mentally run JSON.parse on the response and verify every math string renders with KaTeX.
 
 ${isProblem ? `PROBLEM ITEM SHAPE
@@ -479,8 +493,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "difficulty": "Easy|Medium|Hard",
   "questionType": "MCQ|MSQ|NAT|PROOF",
   "statement": "Problem statement with inline math like \\\\( x^T A x \\\\) and display math like \\\\[ A = U\\\\Sigma V^T \\\\].",
+  "images": [],
   "solution": {
-    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\]. If useful, include an inline Diagram: or Graph: text block with escaped newlines, not a JSON object.",
+    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\].",
+    "images": [],
     "finalAnswer": "Final answer with valid LaTeX if mathematical, e.g. \\\\( \\\\frac{3}{2} \\\\)."
   },
   "options": [
@@ -498,6 +514,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "topic": "Exact topic name",
   "chapterTitle": "Exact chapter name",
   "sectionId": "SUBTOPIC_ID",
+  "images": [],
   "content": "Well-structured article. Use headings as plain text, inline math as \\\\( ... \\\\), display equations as \\\\[ ... \\\\], and escaped newlines as \\\\n. Put any visual explanation inline as a readable block such as Diagram: Title\\\\nStep 1 -> Step 2 -> Step 3.",
   "formulas": ["\\\\[ \\\\mathbb{E}[X] = \\\\int_{-\\\\infty}^{\\\\infty} x f_X(x)\\\\,dx \\\\]"],
   "examples": ["Worked example paragraph with valid inline LaTeX like \\\\( \\\\nabla f(x) = 0 \\\\)."],
@@ -536,7 +553,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     type: "Problem", title: "", topic: "", difficulty: "Medium", 
     statement: "Problem Statement -> full LaTeX live-rendering support.", 
     solution: "Authentic Solution --> full LaTeX live-rendering support.", 
-    imageUrl: "", questionType: "MCQ", approvalLevel: "Level 1: Draft",
+    imageUrl: "", images: "", solutionImages: "", questionType: "MCQ", approvalLevel: "Level 1: Draft",
     options: [{ text: "Full LaTeX live-rendering", isCorrect: true }, { text: "Full LaTeX live-rendering", isCorrect: false }],
     positiveMarks: 2, negativeMarks: 0.5,
     chapterId: "1", chapterTitle: "Introduction", sectionId: "1.1"
@@ -613,9 +630,26 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     e.preventDefault();
     try {
       const isTheory = qForm.type === "Theory Article";
-      const payload = isTheory 
-        ? { title: qForm.title, topic: qForm.topic, chapterId: qForm.chapterId, chapterTitle: qForm.chapterTitle, sectionId: qForm.sectionId, content: qForm.statement, imageUrl: qForm.imageUrl }
-        : { ...qForm, options: ["NAT", "PROOF"].includes(qForm.questionType) ? [] : qForm.options, markingScheme: { positive: qForm.positiveMarks, negative: qForm.negativeMarks } };
+      const parseMedia = (raw: string, field: string) => {
+        if (!raw.trim()) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) && (!parsed || typeof parsed !== "object")) {
+          throw new Error(`${field} must be a media object or array.`);
+        }
+        return Array.isArray(parsed) ? parsed : [parsed];
+      };
+      const images = parseMedia(qForm.images, "Statement media");
+      const solutionImages = isTheory ? [] : parseMedia(qForm.solutionImages, "Solution media");
+      const payload = isTheory
+        ? { title: qForm.title, topic: qForm.topic, chapterId: qForm.chapterId, chapterTitle: qForm.chapterTitle, sectionId: qForm.sectionId, content: qForm.statement, imageUrl: qForm.imageUrl, images }
+        : {
+            ...qForm,
+            images,
+            solution: solutionImages.length ? { explanation: qForm.solution, images: solutionImages } : qForm.solution,
+            options: ["NAT", "PROOF"].includes(qForm.questionType) ? [] : qForm.options,
+            markingScheme: { positive: qForm.positiveMarks, negative: qForm.negativeMarks },
+          };
+      delete (payload as Record<string, unknown>).solutionImages;
       
       const endpoint = isTheory ? "/api/admin/theories" : "/api/admin/questions";
       
@@ -632,7 +666,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
       } else {
         toast.error("Submission failed");
       }
-    } catch (error) { toast.error("Network error"); }
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Network error"); }
   };
 
   const robustJsonParse = (str: string) => {
@@ -735,8 +769,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
       questionType: String(item.problem_type || item.questionType || "MCQ").toUpperCase() === "PROOF"
         ? "PROOF"
         : item.problem_type || item.questionType || "MCQ",
-      statement: item.problem_statement || item.statement || "",
-      tags: item.concepts || item.tags || [],
+       statement: item.problem_statement || item.statement || "",
+       images: item.images ?? item.figures ?? item.visuals ?? item.diagrams ?? [],
+       imageUrl: item.imageUrl || "",
+       tags: item.concepts || item.tags || [],
       solution: normalizedSolution,
       estimatedTime: item.estimatedTime || ((item.metadata?.estimated_time_minutes || 3) * 60),
       markingScheme: {
@@ -777,6 +813,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     formulas: Array.isArray(item.formulas) ? item.formulas : String(item.formulas || "").split("\n").filter(Boolean),
     examples: Array.isArray(item.examples) ? item.examples : String(item.examples || "").split("\n").filter(Boolean),
     highlights: Array.isArray(item.highlights) ? item.highlights : String(item.highlights || "").split("\n").filter(Boolean),
+    images: item.images ?? item.figures ?? item.visuals ?? item.diagrams ?? [],
     imageUrl: item.imageUrl || "",
   });
 
@@ -1432,7 +1469,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                               <div className="text-xs text-foreground space-y-1">
                                 <div className="font-semibold text-muted-foreground">Problem:</div>
                                 <div className="pl-3 border-l-2 border-primary/30 text-xs leading-relaxed">
-                                  <LatexRenderer latex={item.statement || item.content || "No content"} />
+                                  <EmbeddedMediaContent content={item.statement || item.content || "No content"} media={item.images} imageUrl={item.imageUrl} label="Problem visual" />
                                 </div>
                               </div>
                               
@@ -1490,17 +1527,26 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                   </div>
                 </div>
 
-                {/* Image URL */}
-                <div>
-                  <label className="block text-xs font-bold text-foreground mb-1.5">Image URL (Optional)</label>
-                  <input placeholder="https://..." value={qForm.imageUrl} onChange={e=>setQForm({...qForm, imageUrl: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary" />
+                {/* Media */}
+                <div className="space-y-3 rounded-sm border border-border bg-secondary/10 p-3 sm:p-4">
+                  <div>
+                    <label className="block text-xs font-bold text-foreground mb-1.5">Image URL (Optional, legacy)</label>
+                    <input placeholder="https://..." value={qForm.imageUrl} onChange={e=>setQForm({...qForm, imageUrl: e.target.value})} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none font-mono focus:border-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-foreground mb-1.5">Statement Media (Optional JSON)</label>
+                    <textarea rows={3} value={qForm.images} onChange={e=>setQForm({...qForm, images: e.target.value})} placeholder={'[{"url":"https://.../figure.png","alt":"Search graph","caption":"Figure 1","kind":"diagram","placement":"right"}]'} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none resize-y font-mono focus:border-primary leading-relaxed" />
+                  </div>
+                  <p className="text-[11px] leading-5 text-muted-foreground">
+                    Put <code className="rounded bg-background px-1 font-mono text-foreground">{"{{media:0}}"}</code> exactly where the first image should appear. Choose <code className="rounded bg-background px-1 font-mono text-foreground">inline</code>, <code className="rounded bg-background px-1 font-mono text-foreground">full</code>, <code className="rounded bg-background px-1 font-mono text-foreground">left</code>, or <code className="rounded bg-background px-1 font-mono text-foreground">right</code>. Side images stack into the reading flow on small screens.
+                  </p>
                 </div>
 
                 {/* Problem Statement */}
                 <div>
                   <label className="block text-xs font-bold text-foreground mb-1.5">Statement (LaTeX Supported)</label>
                   <textarea rows={5} value={qForm.statement} onChange={e=>setQForm({...qForm, statement: e.target.value})} className="w-full px-3 py-3 text-xs bg-background border border-border rounded-sm outline-none resize-y font-mono focus:border-primary leading-relaxed" />
-                  {qForm.statement && <div className="mt-2 p-3 bg-secondary/20 border border-border rounded-sm text-sm"><LatexRenderer latex={qForm.statement}/></div>}
+                  {qForm.statement && <div className="mt-2 p-3 bg-secondary/20 border border-border rounded-sm text-sm"><EmbeddedMediaContent content={qForm.statement} media={parseMediaForPreview(qForm.images)} imageUrl={qForm.imageUrl} label="Problem visual" /></div>}
                 </div>
 
                     {/* Theory Specific Fields */}
@@ -1528,6 +1574,11 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                         <div>
                           <label className="block text-xs font-bold text-foreground mb-1.5">Authentic Solution (LaTeX Supported)</label>
                           <textarea rows={4} value={qForm.solution} onChange={e=>setQForm({...qForm, solution: e.target.value})} className="w-full px-3 py-3 text-xs bg-background border border-border rounded-sm outline-none resize-y font-mono focus:border-primary leading-relaxed" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-foreground mb-1.5">Solution Media (Optional JSON)</label>
+                          <textarea rows={3} value={qForm.solutionImages} onChange={e=>setQForm({...qForm, solutionImages: e.target.value})} placeholder={'[{"url":"https://.../derivation.png","alt":"Derivation","kind":"diagram","placement":"left"}]'} className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none resize-y font-mono focus:border-primary leading-relaxed" />
+                          <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">Use the same marker in the solution text: <code className="rounded bg-secondary px-1 font-mono text-foreground">{"{{media:0}}"}</code>. Solution image indexes start from 0 independently.</p>
                         </div>
 
                         <div className="grid grid-cols-12 gap-6 border-t border-border pt-6 mt-6">
@@ -1619,7 +1670,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                           )}
                           {qForm.statement && (
                             <div className="rounded-sm border border-border bg-card p-3 text-sm">
-                              <LatexRenderer latex={qForm.statement} />
+                              <EmbeddedMediaContent content={qForm.statement} media={parseMediaForPreview(qForm.images)} imageUrl={qForm.imageUrl} label="Problem visual" />
                             </div>
                           )}
                           {qForm.type === "Problem" && !["NAT", "PROOF"].includes(qForm.questionType) && (
@@ -1643,7 +1694,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                           {qForm.solution && (
                             <div className="rounded-sm border border-amber-500/20 bg-amber-500/5 p-3 text-sm">
                               <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-amber-700">Solution preview</div>
-                              <EditorialRenderer solution={qForm.solution} />
+                              <EditorialRenderer solution={parseMediaForPreview(qForm.solutionImages).length ? { explanation: qForm.solution, images: parseMediaForPreview(qForm.solutionImages) } : qForm.solution} />
                             </div>
                           )}
                         </div>
@@ -2359,20 +2410,18 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 <span className="text-[10px] text-muted-foreground block">Created by {previewItem.createdBy?.fullName || "Admin"} · {new Date(previewItem.createdAt).toLocaleDateString()}</span>
               </div>
 
-              {/* Image if any */}
-              {previewItem.imageUrl && (
-                <div className="border border-border rounded-sm overflow-hidden bg-secondary/15 max-w-md mx-auto p-2">
-                  <img src={previewItem.imageUrl} alt={previewItem.title} className="max-h-60 object-contain rounded-sm w-full" />
-                </div>
-              )}
-
               {/* Main Content / Statement */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                   {previewItem.questionType ? "Question Statement" : "Article Content"}
                 </h4>
                 <div className="p-4 bg-secondary/20 border border-border rounded-sm text-sm overflow-x-auto leading-relaxed">
-                  <LatexRenderer latex={previewItem.statement || previewItem.content || ""} />
+                  <EmbeddedMediaContent
+                    content={previewItem.statement || previewItem.content || ""}
+                    media={previewItem.images}
+                    imageUrl={previewItem.imageUrl}
+                    label="Content visual"
+                  />
                 </div>
               </div>
 

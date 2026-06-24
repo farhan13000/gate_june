@@ -21,6 +21,7 @@ export default function AdminTheoryManager() {
     formulas: "",
     examples: "",
     highlights: "",
+    images: "",
   });
 
   const buildPrompt = () => `Create GATE DA theory notes for the exact current taxonomy target below.
@@ -29,14 +30,16 @@ TAXONOMY TARGET:
 ${buildSelectedTaxonomyPrompt({ ...hierarchy, ...labels })}
 
 Requirements:
-- Return JSON matching this mapping exactly: subjectId, chapterId, topicId, subtopicId, topic, chapterTitle, sectionId, title, content, formulas, examples, highlights.
+- Return JSON matching this mapping exactly: subjectId, chapterId, topicId, subtopicId, topic, chapterTitle, sectionId, title, content, formulas, examples, highlights, images.
 - Do not invent taxonomy IDs or use old/free-text syllabus names.
 - Set sectionId to the selected subtopicId.
 - Textbook-quality explanations with double-escaped LaTeX
 - Include key formulas and worked examples
 - Use Theorem:, Example:, GATE Example: block prefixes where appropriate
 - Use clear plain-text headings inside content.
-- Do not create a separate diagrams array. Put any visual explanation directly inside content as a readable block, e.g. "Diagram: Title\\nStep 1 -> Step 2 -> Step 3".
+- Use an optional top-level "images" array for real images and diagrams. Each item is { "url": "https://...", "alt": "accessible description", "caption": "optional caption", "kind": "image" | "diagram", "placement": "inline" | "left" | "right" | "full" }. Place an image at the exact point in content with {{media:0}}.
+- Only include an image when its exact, verified URL is available in the source material. Never invent URLs. Use [] when no visual is available.
+- A diagram is an image with "kind": "diagram". Do not embed HTML, SVG markup, Mermaid syntax, or image-generation prompts in JSON.
 
 Return only valid JSON, no markdown wrapper.`;
 
@@ -48,6 +51,16 @@ Return only valid JSON, no markdown wrapper.`;
   const handleSubmit = async () => {
     if (!hierarchy.subtopicId) {
       toast.error("Select full hierarchy down to subtopic");
+      return;
+    }
+    let images: unknown[] = [];
+    try {
+      if (form.images.trim()) {
+        const parsed = JSON.parse(form.images);
+        images = Array.isArray(parsed) ? parsed : [parsed];
+      }
+    } catch {
+      toast.error("Media JSON must be a valid object or array.");
       return;
     }
     const body = {
@@ -63,6 +76,7 @@ Return only valid JSON, no markdown wrapper.`;
       formulas: form.formulas.split("\n").filter(Boolean),
       examples: form.examples.split("\n").filter(Boolean),
       highlights: form.highlights.split("\n").filter(Boolean),
+      images,
     };
     const res = await fetch("/api/admin/theories", {
       method: "POST",
@@ -72,7 +86,7 @@ Return only valid JSON, no markdown wrapper.`;
     });
     if (res.ok) {
       toast.success("Theory submitted for review");
-      setForm({ title: "", content: "", formulas: "", examples: "", highlights: "" });
+      setForm({ title: "", content: "", formulas: "", examples: "", highlights: "", images: "" });
     } else {
       const d = await res.json();
       toast.error(d.message || "Failed to create");
@@ -141,6 +155,13 @@ Return only valid JSON, no markdown wrapper.`;
           onChange={(e) => setForm({ ...form, highlights: e.target.value })}
           rows={2}
           className="w-full px-3 py-2 text-xs border border-border rounded-sm"
+        />
+        <textarea
+          placeholder={'Media JSON (optional), e.g. [{"url":"https://example.com/pca.png","alt":"PCA projection","caption":"Projection onto the first component","kind":"diagram"}]'}
+          value={form.images}
+          onChange={(e) => setForm({ ...form, images: e.target.value })}
+          rows={3}
+          className="w-full px-3 py-2 text-xs border border-border rounded-sm font-mono"
         />
         {form.title && (
           <div className="border-t border-border pt-3">

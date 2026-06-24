@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import ContentExplorerLayout from "@/components/hierarchy/ContentExplorerLayout";
 import LatexRenderer from "@/components/LatexRenderer";
+import EmbeddedMediaContent from "@/components/EmbeddedMediaContent";
 import { resolveHierarchyLabels, useTaxonomy, useTaxonomyStats } from "@/hooks/useTaxonomy";
 import type { HierarchySelection } from "@/types/taxonomy";
 
@@ -26,6 +27,9 @@ type TheoryArticle = {
   chapterTitle?: string;
   sectionId?: string;
   content?: string;
+  imageUrl?: string;
+  images?: unknown[];
+  diagrams?: unknown[];
   formulas?: string[];
   examples?: string[];
   highlights?: string[];
@@ -314,7 +318,13 @@ export default function Theory() {
             <div className="min-w-0 px-5 py-7">
               {readerTab === "theory" && (
                 <div className="prose prose-sm max-w-none text-foreground/90">
-                  <LatexRenderer latex={activeTheory.content || ""} />
+                  <EmbeddedMediaContent
+                    content={activeTheory.content || ""}
+                    media={[activeTheory.images, activeTheory.diagrams]}
+                    imageUrl={activeTheory.imageUrl}
+                    label="Theory visual"
+                    className="not-prose mb-5"
+                  />
                 </div>
               )}
 

@@ -26,6 +26,7 @@ import LatexRenderer from "@/components/LatexRenderer";
 import EditorialRenderer from "@/components/EditorialRenderer";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import EmbeddedMediaContent from "@/components/EmbeddedMediaContent";
 
 type Tab = "statement" | "editorial" | "submissions";
 
@@ -588,13 +589,13 @@ export default function ProblemDetail() {
                     <h2 id="problem-statement-heading">Problem Statement</h2>
                   </div>
                   <div className="problem-statement-reading">
-                    {problem.imageUrl && (
-                      <div className="problem-statement-figure">
-                        <img src={problem.imageUrl} alt="Problem diagram" className="mx-auto max-h-72 max-w-full rounded-sm object-contain" />
-                      </div>
-                    )}
                     <div className="problem-statement-body">
-                      <LatexRenderer latex={problem.statement} />
+                      <EmbeddedMediaContent
+                        content={problem.statement}
+                        media={problem.images}
+                        imageUrl={problem.imageUrl}
+                        label="Problem visual"
+                      />
                     </div>
                   </div>
                 </section>

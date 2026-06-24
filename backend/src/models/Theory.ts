@@ -7,6 +7,14 @@ export interface IAuditEntry {
   timestamp: Date;
 }
 
+export interface IContentMedia {
+  url: string;
+  alt?: string;
+  caption?: string;
+  kind?: "image" | "diagram";
+  placement?: "inline" | "left" | "right" | "full";
+}
+
 export interface ITheory extends Document {
   contentId: string;
   theoryId?: string;
@@ -19,7 +27,9 @@ export interface ITheory extends Document {
   chapterTitle: string;
   sectionId: string;
   content: string;
+  /** Legacy single-image field. New content should use images. */
   imageUrl?: string;
+  images: IContentMedia[];
   examples: string[];
   formulas: string[];
   diagrams: string[];
@@ -43,6 +53,17 @@ const auditEntrySchema = new Schema<IAuditEntry>(
   { _id: false }
 );
 
+const contentMediaSchema = new Schema<IContentMedia>(
+  {
+    url: { type: String, required: true, trim: true },
+    alt: { type: String, trim: true, default: "" },
+    caption: { type: String, trim: true, default: "" },
+    kind: { type: String, enum: ["image", "diagram"], default: "image" },
+    placement: { type: String, enum: ["inline", "left", "right", "full"], default: "inline" },
+  },
+  { _id: false }
+);
+
 const theorySchema = new Schema<ITheory>(
   {
     contentId: { type: String, unique: true, sparse: true },
@@ -57,6 +78,7 @@ const theorySchema = new Schema<ITheory>(
     sectionId: { type: String, trim: true, default: "" },
     content: { type: String, required: true },
     imageUrl: { type: String },
+    images: { type: [contentMediaSchema], default: [] },
     examples: [{ type: String }],
     formulas: [{ type: String }],
     diagrams: [{ type: String }],

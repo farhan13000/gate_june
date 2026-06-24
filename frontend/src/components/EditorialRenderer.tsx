@@ -1,5 +1,7 @@
 import React from "react";
 import LatexRenderer from "./LatexRenderer";
+import ContentMediaGallery, { normalizeContentMedia } from "./ContentMediaGallery";
+import EmbeddedMediaContent from "./EmbeddedMediaContent";
 import {
   AlertTriangle,
   BookOpen,
@@ -27,6 +29,12 @@ interface Block {
   diagram?: unknown;
   prompt?: string;
   expectedObservation?: string;
+  url?: string;
+  src?: string;
+  imageUrl?: string;
+  alt?: string;
+  caption?: string;
+  kind?: "image" | "diagram";
 }
 
 interface EditorialData {
@@ -276,7 +284,7 @@ function formatFlowBlocks(value: unknown): string {
       if (!block || typeof block !== "object") return asText(block);
       const item = block as Block;
       const type = (item.type || "").toLowerCase();
-      if (["diagram", "visual", "figure"].includes(type)) return "";
+      if (["diagram", "visual", "figure", "image"].includes(type)) return "";
       if (["interactive", "interactivesolution", "check", "question"].includes(type)) {
         return formatInteractiveItems(item.prompt || item.expectedObservation ? [{ prompt: item.prompt, expectedObservation: item.expectedObservation }] : item.content);
       }
@@ -284,6 +292,18 @@ function formatFlowBlocks(value: unknown): string {
     })
     .filter(Boolean)
     .join("\n\n");
+}
+
+function getSolutionMedia(solution: GenericSolution): unknown[] {
+  return [
+    solution.images,
+    solution.figures,
+    solution.diagrams,
+    solution.imageUrl,
+    solution.diagramUrl,
+    solution.diagram,
+    solution.blocks,
+  ];
 }
 
 function buildSimpleSolutionText(solution: GenericSolution): string {
@@ -308,6 +328,8 @@ function buildSimpleSolutionText(solution: GenericSolution): string {
 function renderSimpleSolution(solution: GenericSolution) {
   const solutionText = buildSimpleSolutionText(solution);
   const finalAnswer = getFirstDefined(solution, ["final_answer", "finalAnswer", "answer"]);
+  const media = getSolutionMedia(solution);
+  const hasMedia = normalizeContentMedia(media).length > 0;
   const unknownText = Object.entries(solution)
     .filter(([key, value]) =>
       ![
@@ -330,6 +352,10 @@ function renderSimpleSolution(solution: GenericSolution) {
         "equations",
         "diagram",
         "diagrams",
+        "images",
+        "figures",
+        "imageUrl",
+        "diagramUrl",
         "interactiveSolution",
         "interactive_solution",
         "key_observation",
@@ -355,7 +381,7 @@ function renderSimpleSolution(solution: GenericSolution) {
     .join("\n\n");
   const combinedText = [solutionText, unknownText].filter(Boolean).join("\n\n");
 
-  if (!combinedText && !finalAnswer) {
+  if (!combinedText && !finalAnswer && !hasMedia) {
     return (
       <div className="rounded-md border border-border bg-card p-4 text-sm leading-[1.9] text-foreground/85 shadow-sm">
         <LatexRenderer latex={asText(solution)} />
@@ -372,10 +398,11 @@ function renderSimpleSolution(solution: GenericSolution) {
             <span>Solution</span>
           </div>
           <div className="text-sm leading-[1.9] text-foreground/85">
-            <LatexRenderer latex={combinedText} />
+            <EmbeddedMediaContent content={combinedText} media={media} label="Solution visual" />
           </div>
         </section>
       )}
+      {!combinedText && <ContentMediaGallery media={media} label="Solution visual" />}
       {renderFinalAnswer(finalAnswer)}
     </div>
   );
@@ -408,8 +435,8 @@ function renderStructuredFlowBlock(block: Block, idx: number) {
     return renderEquationCard(block.content || block.equation || block.math, blockKey);
   }
 
-  if (["diagram", "visual", "figure"].includes(blockType)) {
-    return null;
+  if (["diagram", "visual", "figure", "image"].includes(blockType)) {
+    return <ContentMediaGallery key={blockKey} media={[block, block.diagram]} label="Solution diagram" />;
   }
 
   if (["interactive", "interactivesolution", "check", "question"].includes(blockType)) {
@@ -538,7 +565,8 @@ function renderStructuredBlock(block: Block, idx: number) {
     case "diagram":
     case "visual":
     case "figure":
-      return null;
+    case "image":
+      return <ContentMediaGallery key={idx} media={[block, block.diagram]} label="Solution diagram" />;
 
     case "interactive":
     case "interactiveSolution":
