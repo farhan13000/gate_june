@@ -71,7 +71,7 @@ export function normalizeContentMedia(value: unknown, legacyImageUrl?: unknown):
   return assets.filter((asset, index, list) => list.findIndex((candidate) => candidate.url === asset.url) === index);
 }
 
-/** A single accessible media card. Exported so embedded content can position it precisely. */
+/** A book-style accessible figure. Exported so embedded content can position it precisely. */
 export function ContentMediaFigure({
   asset,
   label = "Visual",
@@ -86,7 +86,7 @@ export function ContentMediaFigure({
   const [hasLoadError, setHasLoadError] = useState(false);
 
   return (
-    <figure className={`overflow-hidden rounded-sm border border-border bg-secondary/15 p-2 ${className}`.trim()}>
+    <figure className={`content-media-figure ${className}`.trim()}>
       {hasLoadError ? (
         <div className="flex min-h-28 flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-amber-500/30 bg-amber-500/5 p-4 text-center text-xs text-muted-foreground">
           <span className="font-semibold text-foreground">This image is unavailable</span>
@@ -98,11 +98,11 @@ export function ContentMediaFigure({
           alt={asset.alt || `${asset.kind === "diagram" ? "Diagram" : label} ${index + 1}`}
           loading="lazy"
           onError={() => setHasLoadError(true)}
-          className="mx-auto max-h-[32rem] max-w-full rounded-sm object-contain"
+          className="content-media-image"
         />
       )}
       {(asset.caption || asset.kind === "diagram") && (
-        <figcaption className="px-1 pt-2 text-center text-xs leading-relaxed text-muted-foreground">
+        <figcaption className="content-media-caption">
           {asset.caption || `Diagram ${index + 1}`}
         </figcaption>
       )}

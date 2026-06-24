@@ -42,11 +42,13 @@ function SideBySideMedia({
   index,
   followingText,
   label,
+  textClassName,
 }: {
   asset: ContentMedia;
   index: number;
   followingText: string;
   label: string;
+  textClassName?: string;
 }) {
   const figure = (
     <ContentMediaFigure
@@ -61,7 +63,7 @@ function SideBySideMedia({
     <div className="my-4 flex flex-col gap-4 md:flex-row md:items-start">
       {asset.placement === "left" && figure}
       <div className="min-w-0 flex-1">
-        <LatexRenderer latex={followingText} />
+        <LatexRenderer latex={followingText} className={textClassName} />
       </div>
       {asset.placement === "right" && figure}
     </div>
@@ -78,26 +80,30 @@ export default function EmbeddedMediaContent({
   imageUrl,
   label = "Visual",
   className = "",
+  textClassName = "",
 }: {
   content?: unknown;
   media?: unknown;
   imageUrl?: unknown;
   label?: string;
   className?: string;
+  /** Applied to each text segment when a host needs denser reading typography. */
+  textClassName?: string;
 }) {
   const text = typeof content === "string" ? content : content == null ? "" : String(content);
   const assets = normalizeContentMedia(media, imageUrl);
   const hasMarker = mediaMarker.test(text);
   mediaMarker.lastIndex = 0;
 
-  if (!assets.length) return text ? <div className={className}><LatexRenderer latex={text} /></div> : null;
+  if (!assets.length) return text ? <div className={className}><LatexRenderer latex={text} className={textClassName} /></div> : null;
 
-  // Existing content without a marker keeps its old, predictable visual-before-text layout.
+  // A visual without an explicit marker belongs after the statement, like a
+  // textbook figure. Markers still place diagrams exactly within the text.
   if (!hasMarker) {
     return (
       <div className={`space-y-4 ${className}`.trim()}>
+        {text && <LatexRenderer latex={text} className={textClassName} />}
         <ContentMediaGallery media={assets} label={label} />
-        {text && <LatexRenderer latex={text} />}
       </div>
     );
   }
@@ -109,7 +115,7 @@ export default function EmbeddedMediaContent({
   for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
     const part = parts[partIndex];
     if (part.type === "text") {
-      if (part.value) rendered.push(<LatexRenderer key={`text-${partIndex}`} latex={part.value} />);
+      if (part.value) rendered.push(<LatexRenderer key={`text-${partIndex}`} latex={part.value} className={textClassName} />);
       continue;
     }
 
@@ -126,6 +132,7 @@ export default function EmbeddedMediaContent({
           index={part.index}
           followingText={next.value}
           label={label}
+          textClassName={textClassName}
         />
       );
       partIndex += 1;

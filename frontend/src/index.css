@@ -729,7 +729,7 @@
 
   /* ── Tab Content ──────────────────────────────────────────────── */
   .problem-tab-content {
-    @apply border border-t-0 border-border bg-card p-5 rounded-b-sm flex-1;
+    @apply border border-t-0 border-border bg-card p-4 sm:p-5 rounded-b-sm flex-1;
   }
 
   /* ── Section Headers ──────────────────────────────────────────── */
@@ -746,13 +746,46 @@
 
   /* ── Problem Statement Body ───────────────────────────────────── */
   .problem-statement-body {
-    @apply text-foreground/90 leading-[1.9] text-[0.9375rem];
+    @apply text-foreground/90 leading-[1.72] text-[0.875rem];
     font-family: var(--font-serif);
   }
 
   .problem-statement-reading {
-    @apply mx-auto mt-5 w-full max-w-3xl rounded-sm border border-border/70 bg-card p-5 sm:p-6;
+    @apply mx-auto mt-4 w-full max-w-3xl rounded-sm border border-border/70 bg-card p-4 sm:p-5;
     box-shadow: 0 1px 2px hsl(0 0% 0% / 0.035);
+  }
+
+  .problem-statement-text.space-y-4 {
+    gap: 0.8rem;
+  }
+
+  .problem-statement-body .katex {
+    font-size: 1.06em;
+  }
+
+  /* Figures deliberately stay part of the reading flow rather than becoming cards. */
+  .content-media-figure {
+    width: min(100%, 42rem);
+    margin-inline: auto;
+  }
+
+  .content-media-image {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: min(52vh, 26rem);
+    margin-inline: auto;
+    object-fit: contain;
+  }
+
+  .content-media-caption {
+    margin-top: 0.45rem;
+    text-align: center;
+    font-family: var(--font-serif);
+    font-size: 0.75rem;
+    font-style: italic;
+    line-height: 1.45;
+    color: hsl(var(--muted-foreground));
   }
 
   .problem-statement-figure {

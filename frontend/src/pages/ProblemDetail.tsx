@@ -491,7 +491,7 @@ export default function ProblemDetail() {
                   </div>
                 )}
                 {/* Title */}
-                <h1 className="font-serif text-xl sm:text-2xl font-bold text-foreground mb-3 leading-tight">
+                <h1 className="font-serif text-lg sm:text-xl font-bold text-foreground mb-2 leading-snug">
                   <LatexRenderer latex={problem.title} />
                 </h1>
                 {/* Tags row */}
@@ -581,13 +581,9 @@ export default function ProblemDetail() {
           {/* ── Tab Content ───────────────────────────────────────── */}
           <div className="problem-tab-content">
             {tab === "statement" && (
-              <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="space-y-4 animate-in fade-in duration-200">
                 {/* Problem Statement */}
-                <section aria-labelledby="problem-statement-heading">
-                  <div className="problem-section-header">
-                    <FileText size={14} className="text-primary" />
-                    <h2 id="problem-statement-heading">Problem Statement</h2>
-                  </div>
+                <section aria-label="Problem statement">
                   <div className="problem-statement-reading">
                     <div className="problem-statement-body">
                       <EmbeddedMediaContent
@@ -595,6 +591,7 @@ export default function ProblemDetail() {
                         media={problem.images}
                         imageUrl={problem.imageUrl}
                         label="Problem visual"
+                        textClassName="problem-statement-text"
                       />
                     </div>
                   </div>

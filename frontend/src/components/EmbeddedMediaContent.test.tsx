@@ -44,4 +44,17 @@ describe("content media", () => {
     expect(screen.getByText(/\{\{media:3\}\}/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Only visual" })).toBeInTheDocument();
   });
+
+  it("renders an unmarked visual after the complete statement", () => {
+    render(
+      <EmbeddedMediaContent
+        content="Read this statement before looking at the visual."
+        media={[{ url: "/images/after-statement.png", alt: "Visual after statement" }]}
+      />
+    );
+
+    const statement = screen.getByText("Read this statement before looking at the visual.");
+    const image = screen.getByRole("img", { name: "Visual after statement" });
+    expect(statement.compareDocumentPosition(image) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
