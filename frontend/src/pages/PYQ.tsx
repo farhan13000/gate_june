@@ -59,15 +59,20 @@ export default function PYQ() {
 
   return (
     <div className="w-full">
-      <header className="page-header">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <header className="mb-5 rounded-sm border border-border bg-card p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1>PYQ</h1>
-            <p>Choose a subject and practice previous-year questions in the same problem-solving workspace.</p>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Previous Year Questions
+            </div>
+            <h1 className="font-serif text-2xl font-bold text-foreground sm:text-3xl">PYQ Practice</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Pick a subject and start solving exam-style questions with the regular practice workspace.
+            </p>
           </div>
           <Link
             to="/pyq/all"
-            className="inline-flex items-center justify-center gap-2 self-start rounded-sm border border-border bg-card px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary"
+            className="inline-flex items-center justify-center gap-2 self-start rounded-sm border border-primary bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-red-hover"
           >
             <FileQuestion size={14} />
             All PYQ
@@ -75,23 +80,19 @@ export default function PYQ() {
         </div>
       </header>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="bg-card border border-border border-l-4 border-l-primary rounded-sm p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">PYQ Problems</div>
-          <div className="mt-1 font-mono text-2xl font-bold text-primary">
-            {countsLoading ? "..." : totalPyq}
-          </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Tagged previous-year questions</p>
-        </div>
-        <div className="bg-card border border-border border-l-4 border-l-foreground/30 rounded-sm p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Subjects</div>
-          <div className="mt-1 font-mono text-2xl font-bold text-foreground">{tree.length}</div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Available syllabus sections</p>
-        </div>
-        <div className="bg-card border border-border border-l-4 border-l-muted-foreground rounded-sm p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Chapters</div>
-          <div className="mt-1 font-mono text-2xl font-bold text-foreground">{totalChapters}</div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Mapped for focused practice</p>
+      <div className="mb-5 flex flex-col gap-2 rounded-sm border border-border bg-secondary/15 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="font-semibold text-foreground">Choose a subject to begin</div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["PYQ", countsLoading ? "..." : totalPyq],
+            ["Subjects", tree.length],
+            ["Chapters", totalChapters],
+          ].map(([label, value]) => (
+            <span key={label as string} className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-2 py-1">
+              <span className="text-muted-foreground">{label as string}</span>
+              <span className="font-mono text-[11px] font-medium text-foreground">{String(value)}</span>
+            </span>
+          ))}
         </div>
       </div>
 
@@ -117,7 +118,7 @@ export default function PYQ() {
           No subjects are available yet.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {tree.map((subject) => {
             const topicCount = subject.chapters.reduce(
               (sum, chapter) => sum + chapter.topics.length,
@@ -134,42 +135,42 @@ export default function PYQ() {
               <Link
                 key={subject.subjectId}
                 to={`/pyq/${encodeURIComponent(subject.subjectId)}`}
-                className="group academic-card block p-4 transition-colors hover:border-primary/35 hover:bg-secondary/20"
+                className="group block rounded-sm border border-border bg-card p-4 transition-colors hover:border-primary/35 hover:bg-secondary/20"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <div className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
                       {subject.code || subject.subjectId}
                     </div>
-                    <h2 className="mt-1 line-clamp-2 text-lg font-bold text-foreground">{subject.name}</h2>
+                    <h2 className="mt-1 line-clamp-2 font-serif text-base font-bold text-foreground">{subject.name}</h2>
                   </div>
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-primary/20 bg-primary/10 text-primary">
-                    <BookOpenCheck size={18} />
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-secondary/25 text-primary">
+                    <BookOpenCheck size={16} />
                   </span>
                 </div>
 
-                <div className="mt-5 grid grid-cols-3 gap-2 text-xs">
-                  <div className="rounded-sm border border-border bg-card px-2 py-2">
-                    <div className="font-mono text-base font-bold text-foreground">
-                      {countsLoading ? "..." : pyqCount}
-                    </div>
-                    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">PYQ</div>
-                  </div>
-                  <div className="rounded-sm border border-border bg-card px-2 py-2">
-                    <div className="font-mono text-base font-bold text-foreground">{subject.chapters.length}</div>
-                    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">Chapters</div>
-                  </div>
-                  <div className="rounded-sm border border-border bg-card px-2 py-2">
-                    <div className="font-mono text-base font-bold text-foreground">{topicCount}</div>
-                    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">Topics</div>
-                  </div>
+                <div className="mt-4 flex items-baseline gap-2">
+                  <span className="font-mono text-xl font-semibold text-foreground">
+                    {countsLoading ? "..." : pyqCount}
+                  </span>
+                  <span className="text-xs text-muted-foreground">questions available</span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-sm border border-border bg-secondary/20 px-2 py-1">
+                    <Layers size={13} />
+                    {subject.chapters.length} chapters
+                  </span>
+                  <span className="rounded-sm border border-border bg-secondary/20 px-2 py-1">
+                    {topicCount} topics
+                  </span>
+                  <span className="rounded-sm border border-border bg-secondary/20 px-2 py-1">
+                    {subtopicCount} subtopics
+                  </span>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3 text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                    <Layers size={13} />
-                    {subtopicCount} subtopics
-                  </span>
+                  <span className="text-muted-foreground">Subject practice set</span>
                   <span className="inline-flex items-center gap-1.5 font-medium text-primary">
                     Practice
                     <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
