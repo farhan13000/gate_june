@@ -75,6 +75,14 @@ function formatTimestamp(value: number) {
   return formatDate(new Date(value).toISOString());
 }
 
+function formatDuration(value: number) {
+  const diff = Math.max(0, value);
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function isContestRegistrationOpen(contest: Contest) {
   const now = Date.now();
   const registrationStart = getRegistrationStartTime(contest);
@@ -85,6 +93,17 @@ function isContestRegistrationOpen(contest: Contest) {
     now < registrationEnd &&
     (contest.contestState === "registration_open" || now >= registrationStart)
   );
+}
+
+function getContestCountdown(contest: Contest) {
+  if (postContestStates.includes(contest.contestState) || contest.contestState === "ended") {
+    return { label: "Contest Closed", value: "Closed" };
+  }
+  const now = Date.now();
+  if (["live", "frozen"].includes(contest.contestState)) {
+    return { label: "Contest Running", value: formatDuration(new Date(contest.endTime).getTime() - now) };
+  }
+  return { label: "Contest Starts In", value: formatDuration(new Date(contest.startTime).getTime() - now) };
 }
 
 function resultActionLabel(state: string) {
@@ -101,6 +120,7 @@ export default function ContestDetails() {
   const [contest, setContest] = useState<Contest | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
 
   const fetchContest = useCallback(async () => {
     if (!id) return;
@@ -121,6 +141,11 @@ export default function ContestDetails() {
   useEffect(() => {
     fetchContest();
   }, [fetchContest]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!id) return undefined;
@@ -306,16 +331,17 @@ export default function ContestDetails() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
+          [getContestCountdown(contest).label, getContestCountdown(contest).value, Clock3, nowTick],
           ["Starts", formatDate(contest.startTime), CalendarClock],
           ["Registration Opens", formatTimestamp(getRegistrationStartTime(contest)), CalendarClock],
           ["Registration Closes", formatTimestamp(getRegistrationEndTime(contest)), Clock3],
           ["Duration", `${contest.durationMinutes} min`, Clock3],
           ["Participants", String(contest.registrationCount), Users],
           ["Scoring", labelize(contest.scoringMode), ShieldCheck],
-        ].map(([label, value, Icon]) => {
+        ].map(([label, value, Icon, tick]) => {
           const DetailIcon = Icon as typeof CalendarClock;
           return (
-            <div key={label as string} className="rounded-sm border border-border bg-card p-4">
+            <div key={`${label as string}-${tick || ""}`} className="rounded-sm border border-border bg-card p-4">
               <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
                 <DetailIcon size={16} />
               </div>

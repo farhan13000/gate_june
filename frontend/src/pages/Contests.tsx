@@ -215,16 +215,9 @@ function getContestCountdown(contest: Contest) {
   }
   const now = Date.now();
   if (["live", "frozen"].includes(contest.contestState)) {
-    return { label: "Ends In", value: formatDuration(new Date(contest.endTime).getTime() - now) };
+    return { label: "Contest Running", value: formatDuration(new Date(contest.endTime).getTime() - now) };
   }
-  if (contest.contestState === "registration_open") {
-    return { label: "Registration Closes In", value: formatDuration(getRegistrationEndTime(contest) - now) };
-  }
-  const registrationStart = getRegistrationStartTime(contest);
-  if (now < registrationStart) {
-    return { label: "Registration Opens In", value: formatDuration(registrationStart - now) };
-  }
-  return { label: "Starts In", value: formatDuration(new Date(contest.startTime).getTime() - now) };
+  return { label: "Contest Starts In", value: formatDuration(new Date(contest.startTime).getTime() - now) };
 }
 
 function resultActionLabel(state: Contest["contestState"]) {

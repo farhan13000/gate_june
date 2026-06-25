@@ -513,6 +513,13 @@ const lifecycleActions: LifecycleOperation[] = [
     Icon: ShieldCheck,
   },
   {
+    stage: "Closure",
+    title: "End Contest Now",
+    description: "Close submissions immediately. Scheduled contests still auto-close at the saved end time.",
+    lifecycle: "ended",
+    Icon: Clock3,
+  },
+  {
     stage: "Review",
     title: "Release Answer Key",
     description: "Show official answers and solutions to participants.",
