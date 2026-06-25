@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { getDefaultRegistrationEndTime, getDefaultRegistrationStartTime } from "../utils/contestLifecycle";
 
 export interface IContest extends Document {
   title: string;
@@ -140,10 +141,10 @@ contestSchema.pre("validate", function (next) {
     this.durationMinutes = Math.max(1, Math.ceil((this.endTime.getTime() - this.startTime.getTime()) / 60000));
   }
   if (!this.registrationStartTime && this.startTime) {
-    this.registrationStartTime = new Date(this.startTime.getTime() - 7 * 24 * 60 * 60 * 1000);
+    this.registrationStartTime = getDefaultRegistrationStartTime(this.startTime);
   }
-  if (!this.registrationEndTime && this.startTime) {
-    this.registrationEndTime = this.startTime;
+  if (!this.registrationEndTime && this.endTime) {
+    this.registrationEndTime = getDefaultRegistrationEndTime(this.endTime);
   }
   if (!this.rules?.length) {
     this.rules = [

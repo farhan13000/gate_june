@@ -8,6 +8,11 @@ import ContestSubmission from "../models/ContestSubmission";
 import Question from "../models/Question";
 import { getOrCreateSettings } from "../models/PlatformSettings";
 import { applyContestRatings, previewContestRatings } from "../utils/contestRating";
+import {
+  REGISTRATION_CLOSE_BUFFER_MS,
+  getDefaultRegistrationEndTime,
+  getDefaultRegistrationStartTime,
+} from "../utils/contestLifecycle";
 import { recomputeContestStandings } from "../utils/contestScoring";
 import { syncContestLifecycleById, syncDueContestLifecycles } from "../utils/contestLifecycleSync";
 import { invalidateHomeCache } from "../utils/homeCache";
@@ -93,6 +98,57 @@ function parseOptionalDate(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+const CONTEST_LIFECYCLE_ORDER = [
+  "draft",
+  "published",
+  "registration_open",
+  "live",
+  "frozen",
+  "ended",
+  "answer_key_released",
+  "claims_open",
+  "claims_closed",
+  "finalized",
+  "ratings_applied",
+];
+
+const FINAL_CONTEST_STATES = new Set(["finalized", "ratings_applied"]);
+
+function getContestLifecycleTransitionError(current: string, target?: string) {
+  if (!target || current === target) return null;
+  const currentIndex = CONTEST_LIFECYCLE_ORDER.indexOf(current);
+  const targetIndex = CONTEST_LIFECYCLE_ORDER.indexOf(target);
+  if (targetIndex === -1) return "Invalid contest lifecycle";
+  if (FINAL_CONTEST_STATES.has(current)) return "Finalized contests cannot be moved back to earlier stages";
+  if (current === "draft" && target !== "published") {
+    return "Publish a draft contest before opening registration or starting it";
+  }
+  if (target === "published" && current !== "draft") return "Contest is already past the publish stage";
+  if (target === "registration_open" && !["published", "registration_open"].includes(current)) {
+    return "Registration can be opened only after publishing the contest";
+  }
+  if (target === "live" && !["published", "registration_open", "live"].includes(current)) {
+    return "Contest can be started only after it is published";
+  }
+  if (target === "frozen" && !["live", "frozen"].includes(current)) {
+    return "Leaderboard can be frozen only while the contest is live";
+  }
+  if (target === "ended" && !["live", "frozen", "ended"].includes(current)) {
+    return "Contest can be ended only after it is live";
+  }
+  if (target === "answer_key_released" && !["ended", "answer_key_released"].includes(current)) {
+    return "Answer key can be released only after the contest has ended";
+  }
+  if (target === "claims_open" && !["answer_key_released", "claims_open"].includes(current)) {
+    return "Claims can be opened only after the answer key is released";
+  }
+  if (target === "claims_closed" && !["claims_open", "claims_closed"].includes(current)) {
+    return "Claims can be closed only after the claims window opens";
+  }
+  if (currentIndex !== -1 && targetIndex < currentIndex) return "Contest lifecycle cannot move backward";
+  return null;
+}
+
 function validateContestTiming({
   startTime,
   endTime,
@@ -113,17 +169,14 @@ function validateContestTiming({
   if (registrationEndTime && Number.isNaN(registrationEndTime.getTime())) {
     return "registrationEndTime must be a valid date";
   }
-  const effectiveRegistrationStartTime =
-    registrationStartTime || new Date(startTime.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const effectiveRegistrationEndTime = registrationEndTime || startTime;
+  const effectiveRegistrationStartTime = registrationStartTime || getDefaultRegistrationStartTime(startTime);
+  const effectiveRegistrationEndTime = registrationEndTime || getDefaultRegistrationEndTime(endTime);
+  const latestRegistrationEndTime = endTime.getTime() - REGISTRATION_CLOSE_BUFFER_MS;
   if (effectiveRegistrationEndTime.getTime() <= effectiveRegistrationStartTime.getTime()) {
     return "registrationEndTime must be after registrationStartTime";
   }
-  if (registrationStartTime && registrationStartTime.getTime() >= startTime.getTime()) {
-    return "registrationStartTime must be before startTime";
-  }
-  if (registrationEndTime && registrationEndTime.getTime() > startTime.getTime()) {
-    return "registrationEndTime must be before or equal to startTime";
+  if (effectiveRegistrationEndTime.getTime() > latestRegistrationEndTime) {
+    return "registrationEndTime must be at least 5 minutes before endTime";
   }
   return null;
 }
@@ -332,15 +385,6 @@ export const createContest = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({ message: timingError });
       return;
     }
-    if (lifecycle === "live" && Date.now() < parsedStartTime!.getTime()) {
-      res.status(400).json({ message: "Contest lifecycle is scheduled to become live at startTime" });
-      return;
-    }
-    if (lifecycle === "ended" && Date.now() < parsedEndTime!.getTime()) {
-      res.status(400).json({ message: "Contest lifecycle is scheduled to end at endTime" });
-      return;
-    }
-
     const contest = await Contest.create({
       title: title.trim(),
       description: description.trim(),
@@ -454,12 +498,9 @@ export const updateContest = async (req: Request, res: Response): Promise<void> 
       }
     }
 
-    if (lifecycle === "live" && Date.now() < parsedStartTime!.getTime()) {
-      res.status(400).json({ message: "Contest lifecycle is scheduled to become live at startTime" });
-      return;
-    }
-    if (lifecycle === "ended" && Date.now() < parsedEndTime!.getTime()) {
-      res.status(400).json({ message: "Contest lifecycle is scheduled to end at endTime" });
+    const lifecycleTransitionError = getContestLifecycleTransitionError(previousLifecycle, lifecycle);
+    if (lifecycleTransitionError) {
+      res.status(400).json({ message: lifecycleTransitionError });
       return;
     }
 
@@ -1018,9 +1059,14 @@ export const updateContestClaim = async (req: Request, res: Response): Promise<v
 
 export const releaseContestAnswerKey = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    const transitionError = getContestLifecycleTransitionError(contest.lifecycle, "answer_key_released");
+    if (transitionError) {
+      res.status(400).json({ message: transitionError });
       return;
     }
     contest.lifecycle = "answer_key_released";
@@ -1046,9 +1092,14 @@ export const releaseContestAnswerKey = async (req: Request, res: Response): Prom
 
 export const openContestClaims = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    const transitionError = getContestLifecycleTransitionError(contest.lifecycle, "claims_open");
+    if (transitionError) {
+      res.status(400).json({ message: transitionError });
       return;
     }
     contest.lifecycle = "claims_open";
@@ -1076,9 +1127,14 @@ export const openContestClaims = async (req: Request, res: Response): Promise<vo
 
 export const closeContestClaims = async (req: Request, res: Response): Promise<void> => {
   try {
-    const contest = await Contest.findById(req.params.id);
+    const contest = await syncContestLifecycleById(req.params.id);
     if (!contest) {
       res.status(404).json({ message: "Contest not found" });
+      return;
+    }
+    const transitionError = getContestLifecycleTransitionError(contest.lifecycle, "claims_closed");
+    if (transitionError) {
+      res.status(400).json({ message: transitionError });
       return;
     }
     contest.lifecycle = "claims_closed";

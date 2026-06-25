@@ -25,6 +25,8 @@ type Contest = {
   contestState: string;
   startTime: string;
   endTime: string;
+  registrationStartTime?: string;
+  registrationEndTime?: string;
   durationMinutes: number;
   wrongPenaltyMinutes: number;
   ratingEnabled: boolean;
@@ -37,6 +39,7 @@ type Contest = {
 };
 
 const postContestStates = ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"];
+const REGISTRATION_CLOSE_BUFFER_MS = 5 * 60 * 1000;
 
 function labelize(value?: string) {
   return String(value || "")
@@ -52,6 +55,36 @@ function formatDate(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function getTimeValue(value?: string) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function getRegistrationStartTime(contest: Contest) {
+  return getTimeValue(contest.registrationStartTime) ?? new Date(contest.startTime).getTime() - 7 * 24 * 60 * 60 * 1000;
+}
+
+function getRegistrationEndTime(contest: Contest) {
+  return getTimeValue(contest.registrationEndTime) ?? new Date(contest.endTime).getTime() - REGISTRATION_CLOSE_BUFFER_MS;
+}
+
+function formatTimestamp(value: number) {
+  return formatDate(new Date(value).toISOString());
+}
+
+function isContestRegistrationOpen(contest: Contest) {
+  const now = Date.now();
+  const registrationStart = getRegistrationStartTime(contest);
+  const registrationEnd = getRegistrationEndTime(contest);
+  return (
+    !postContestStates.includes(contest.contestState) &&
+    contest.contestState !== "ended" &&
+    now < registrationEnd &&
+    (contest.contestState === "registration_open" || now >= registrationStart)
+  );
 }
 
 function resultActionLabel(state: string) {
@@ -157,14 +190,14 @@ export default function ContestDetails() {
           <Trophy size={13} />
           Enter Arena
         </button>
-      ) : contest.contestState === "live" ? (
+      ) : contest.contestState === "live" && isContestRegistrationOpen(contest) ? (
         <button type="button" disabled={busy} onClick={() => updateRegistration("register")} className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50">
           Register
         </button>
       ) : (
         <button type="button" disabled className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60">
           <Lock size={13} />
-          Registration Closed
+          {Date.now() < getRegistrationStartTime(contest) ? "Registration Not Open" : "Registration Closed"}
         </button>
       );
     }
@@ -203,7 +236,7 @@ export default function ContestDetails() {
         </div>
       );
     }
-    if (contest.contestState === "registration_open") {
+    if (contest.contestState === "registration_open" && isContestRegistrationOpen(contest)) {
       return (
         <button type="button" disabled={busy} onClick={() => updateRegistration("register")} className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50">
           Register
@@ -274,6 +307,8 @@ export default function ContestDetails() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           ["Starts", formatDate(contest.startTime), CalendarClock],
+          ["Registration Opens", formatTimestamp(getRegistrationStartTime(contest)), CalendarClock],
+          ["Registration Closes", formatTimestamp(getRegistrationEndTime(contest)), Clock3],
           ["Duration", `${contest.durationMinutes} min`, Clock3],
           ["Participants", String(contest.registrationCount), Users],
           ["Scoring", labelize(contest.scoringMode), ShieldCheck],

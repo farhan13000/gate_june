@@ -1,4 +1,5 @@
 import Contest from "../models/Contest";
+import { getContestRegistrationEndMs, getContestRegistrationStartMs } from "./contestLifecycle";
 import { invalidateHomeCache } from "./homeCache";
 
 const TERMINAL_STATES = new Set(["draft", "finalized", "ratings_applied"]);
@@ -28,8 +29,8 @@ export function getClockLifecycle(contest: any, now = Date.now()) {
 
   const start = timeValue(contest.startTime);
   const end = timeValue(contest.endTime);
-  const regStart = timeValue(contest.registrationStartTime);
-  const regEnd = timeValue(contest.registrationEndTime);
+  const regStart = getContestRegistrationStartMs(contest);
+  const regEnd = getContestRegistrationEndMs(contest);
   const freeze = timeValue(contest.freezeTime);
   const answerKey = timeValue(contest.answerKeyReleaseTime);
   const claimsOpen = timeValue(contest.claimsOpenTime);

@@ -104,7 +104,7 @@ async function buildPublicContests(userId?: string) {
       $or: [{ endTime: { $gte: now } }, { showInPastContests: { $ne: false } }],
     })
     .select(
-      "title description meta questions contestType visibility scoringMode lifecycle registrationStartTime registrationEndTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome showInPastContests status"
+      "title description meta questions contestType visibility scoringMode lifecycle startTime endTime registrationStartTime registrationEndTime freezeTime answerKeyReleaseTime claimsOpenTime claimsCloseTime durationMinutes wrongPenaltyMinutes ratingEnabled instantFeedback maxParticipants rules showOnHome showInPastContests status"
     )
     .populate("questions", "title contentId problemId difficulty questionType topic markingScheme")
     .sort({ startTime: -1 })

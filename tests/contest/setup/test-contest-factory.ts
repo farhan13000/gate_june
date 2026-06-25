@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Contest from "../../../backend/src/models/Contest";
+import { REGISTRATION_CLOSE_BUFFER_MS } from "../../../backend/src/utils/contestLifecycle";
 import { createMCQQuestion } from "./test-question-factory";
 
 let cSeq = 0;
@@ -27,7 +28,7 @@ async function createContestWithLifecycle(lifecycle: string, overrides: Record<s
     scoringMode: overrides.scoringMode || "gate",
     lifecycle,
     registrationStartTime: overrides.registrationStartTime || new Date(start.getTime() - 7 * 24 * 60 * 60_000),
-    registrationEndTime: overrides.registrationEndTime || start,
+    registrationEndTime: overrides.registrationEndTime || new Date(end.getTime() - REGISTRATION_CLOSE_BUFFER_MS),
     startTime: overrides.startTime || start,
     endTime: overrides.endTime || end,
     freezeTime: overrides.freezeTime,

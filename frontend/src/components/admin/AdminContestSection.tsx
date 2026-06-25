@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, EyeOff, FileQuestion, Gavel, KeyRound, List, Pencil, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
+import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, EyeOff, FileQuestion, Gavel, KeyRound, List, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
 
@@ -185,6 +185,8 @@ type AdminContestView = "draft" | "new" | "upcoming" | "live" | "past" | "all";
 type EndTimeMode = "end-time" | "duration";
 
 const MINUTE_MS = 60 * 1000;
+const REGISTRATION_CLOSE_BUFFER_MINUTES = 5;
+const REGISTRATION_CLOSE_BUFFER_MS = REGISTRATION_CLOSE_BUFFER_MINUTES * MINUTE_MS;
 
 function getTimeValue(value?: string) {
   if (!value) return null;
@@ -206,12 +208,23 @@ function getDurationMinutes(startTime?: string, endTime?: string) {
   return Math.max(1, Math.ceil((end - start) / MINUTE_MS));
 }
 
+function getDefaultRegistrationEndInput(endTime?: string) {
+  const end = getTimeValue(endTime);
+  return end !== null && Number.isFinite(end) ? toLocalInput(end - REGISTRATION_CLOSE_BUFFER_MS) : "";
+}
+
 function getContestTimingErrors(form: ContestForm) {
   const errors: Partial<Record<"startTime" | "endTime" | "registrationStartTime" | "registrationEndTime", string>> = {};
   const start = getTimeValue(form.startTime);
   const end = getTimeValue(form.endTime);
   const registrationStart = getTimeValue(form.registrationStartTime);
   const registrationEnd = getTimeValue(form.registrationEndTime);
+  const effectiveRegistrationEnd =
+    registrationEnd !== null
+      ? registrationEnd
+      : end !== null && Number.isFinite(end)
+        ? end - REGISTRATION_CLOSE_BUFFER_MS
+        : null;
 
   if (Number.isNaN(start)) errors.startTime = "Enter a valid contest start time.";
   if (Number.isNaN(end)) errors.endTime = "Enter a valid contest end time.";
@@ -224,10 +237,10 @@ function getContestTimingErrors(form: ContestForm) {
 
   if (
     registrationStart !== null &&
-    registrationEnd !== null &&
+    effectiveRegistrationEnd !== null &&
     Number.isFinite(registrationStart) &&
-    Number.isFinite(registrationEnd) &&
-    registrationEnd <= registrationStart
+    Number.isFinite(effectiveRegistrationEnd) &&
+    effectiveRegistrationEnd <= registrationStart
   ) {
     errors.registrationEndTime = "Registration closing time must be after opening time.";
   }
@@ -238,29 +251,21 @@ function getContestTimingErrors(form: ContestForm) {
     start !== null &&
     Number.isFinite(registrationEnd) &&
     Number.isFinite(start) &&
-    registrationEnd <= start - 7 * 24 * 60 * 60 * 1000
+    effectiveRegistrationEnd !== null &&
+    Number.isFinite(effectiveRegistrationEnd) &&
+    effectiveRegistrationEnd <= start - 7 * 24 * 60 * 60 * 1000
   ) {
     errors.registrationEndTime = "Registration closing time must be after the auto opening time.";
   }
 
   if (
-    registrationStart !== null &&
-    start !== null &&
-    Number.isFinite(registrationStart) &&
-    Number.isFinite(start) &&
-    registrationStart >= start
+    effectiveRegistrationEnd !== null &&
+    end !== null &&
+    Number.isFinite(effectiveRegistrationEnd) &&
+    Number.isFinite(end) &&
+    effectiveRegistrationEnd > end - REGISTRATION_CLOSE_BUFFER_MS
   ) {
-    errors.registrationStartTime = "Registration must open before the contest starts.";
-  }
-
-  if (
-    registrationEnd !== null &&
-    start !== null &&
-    Number.isFinite(registrationEnd) &&
-    Number.isFinite(start) &&
-    registrationEnd > start
-  ) {
-    errors.registrationEndTime = "Registration must close before or at the contest start time.";
+    errors.registrationEndTime = `Registration must close at least ${REGISTRATION_CLOSE_BUFFER_MINUTES} minutes before the contest ends.`;
   }
 
   return errors;
@@ -305,6 +310,18 @@ function hasReachedLifecycle(current?: string, target?: string) {
   const currentIndex = getLifecycleIndex(current);
   const targetIndex = getLifecycleIndex(target);
   return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
+}
+
+function canRunLifecycleFrom(current?: string, target?: string) {
+  if (!current || !target || current === target) return true;
+  if (["finalized", "ratings_applied"].includes(current)) return false;
+  if (current === "draft") return target === "published";
+  if (target === "published") return current === "draft";
+  if (target === "registration_open") return ["published", "registration_open"].includes(current);
+  if (target === "live") return ["published", "registration_open", "live"].includes(current);
+  if (target === "frozen") return ["live", "frozen"].includes(current);
+  if (target === "ended") return ["live", "frozen", "ended"].includes(current);
+  return true;
 }
 
 function lifecycleBadgeClass(lifecycle?: string, selected = false) {
@@ -476,9 +493,17 @@ const lifecycleActions: LifecycleOperation[] = [
   {
     stage: "Registration",
     title: "Open Registration",
-    description: "Allow users to register before the contest begins.",
+    description: "Allow users to register until the configured close time.",
     lifecycle: "registration_open",
     Icon: Radio,
+  },
+  {
+    stage: "Live",
+    title: "Start Contest Now",
+    description: "Open the arena immediately. The saved end time still closes the contest.",
+    lifecycle: "live",
+    Icon: PlayCircle,
+    primary: true,
   },
   {
     stage: "Live",
@@ -802,19 +827,37 @@ export default function AdminContestSection() {
   const updateStartTime = (startTime: string) => {
     const previousDuration = endTimeMode === "duration" ? getDurationMinutes(form.startTime, form.endTime) : null;
     const nextStart = getTimeValue(startTime);
-    setForm((current) => ({
-      ...current,
-      startTime,
-      endTime:
+    setForm((current) => {
+      const nextEndTime =
         previousDuration && nextStart !== null && Number.isFinite(nextStart)
           ? toLocalInput(nextStart + previousDuration * MINUTE_MS)
-          : current.endTime,
-    }));
+          : current.endTime;
+      const currentDefaultRegistrationEnd = getDefaultRegistrationEndInput(current.endTime);
+      const shouldSyncRegistrationEnd = !current.registrationEndTime || current.registrationEndTime === currentDefaultRegistrationEnd;
+      return {
+        ...current,
+        startTime,
+        endTime: nextEndTime,
+        registrationEndTime: shouldSyncRegistrationEnd ? getDefaultRegistrationEndInput(nextEndTime) : current.registrationEndTime,
+      };
+    });
+  };
+
+  const updateEndTime = (endTime: string) => {
+    setForm((current) => {
+      const currentDefaultRegistrationEnd = getDefaultRegistrationEndInput(current.endTime);
+      const shouldSyncRegistrationEnd = !current.registrationEndTime || current.registrationEndTime === currentDefaultRegistrationEnd;
+      return {
+        ...current,
+        endTime,
+        registrationEndTime: shouldSyncRegistrationEnd ? getDefaultRegistrationEndInput(endTime) : current.registrationEndTime,
+      };
+    });
   };
 
   const setContestDuration = (value: string) => {
     if (value === "") {
-      setForm((current) => ({ ...current, endTime: "" }));
+      updateEndTime("");
       return;
     }
     const duration = Math.ceil(Number(value));
@@ -824,7 +867,7 @@ export default function AdminContestSection() {
       toast.error("Set the contest start time before choosing a duration");
       return;
     }
-    setForm((current) => ({ ...current, endTime: toLocalInput(start + duration * MINUTE_MS) }));
+    updateEndTime(toLocalInput(start + duration * MINUTE_MS));
   };
 
   const addMinutesToEndTime = (minutes: number) => {
@@ -835,7 +878,7 @@ export default function AdminContestSection() {
       toast.error("Set the contest start time before adjusting the end time");
       return;
     }
-    setForm((current) => ({ ...current, endTime: toLocalInput(base + minutes * MINUTE_MS) }));
+    updateEndTime(toLocalInput(base + minutes * MINUTE_MS));
   };
 
   const selectContest = (contestId: string) => {
@@ -1639,7 +1682,7 @@ export default function AdminContestSection() {
                 <input
                   type="datetime-local"
                   value={form.endTime}
-                  onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                  onChange={(e) => updateEndTime(e.target.value)}
                   className={timingInputClass("endTime")}
                 />
               </div>
@@ -1705,7 +1748,7 @@ export default function AdminContestSection() {
               className={timingInputClass("registrationEndTime")}
             />
             <p className={`mt-1 text-[11px] ${timingErrors.registrationEndTime ? "text-destructive" : "text-muted-foreground"}`}>
-              {timingErrors.registrationEndTime || "Usually this should match the contest start time."}
+              {timingErrors.registrationEndTime || `Defaults to ${REGISTRATION_CLOSE_BUFFER_MINUTES} minutes before the contest ends.`}
             </p>
           </div>
         </div>
@@ -2149,17 +2192,25 @@ export default function AdminContestSection() {
           <div className="border-b border-border bg-secondary/30 p-3 sm:p-4">
             <h3 className="font-serif text-base font-bold text-foreground">Stage Operations</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Publishing and post-contest controls stay here. Live start and contest closure follow the saved schedule automatically.
+              Publishing, early start, and post-contest controls stay here. The saved end time remains the contest closure time.
             </p>
           </div>
           <div className="border-b border-border bg-background p-3 sm:p-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-sm border border-sky-500/25 bg-sky-500/5 p-3">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Automatic schedule</div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Contest window</div>
                 <p className="mt-1 text-xs leading-relaxed text-foreground">
                   {selectedContest
                     ? `${formatDateTime(selectedContest.startTime)} to ${formatDateTime(selectedContest.endTime)}`
                     : "Save the contest schedule to enable automatic start and finish."}
+                </p>
+              </div>
+              <div className="rounded-sm border border-border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Registration window</div>
+                <p className="mt-1 text-xs leading-relaxed text-foreground">
+                  {selectedContest
+                    ? `${formatDateTime(selectedContest.registrationStartTime)} to ${formatDateTime(selectedContest.registrationEndTime)}`
+                    : `Registration closes ${REGISTRATION_CLOSE_BUFFER_MINUTES} minutes before the contest ends.`}
                 </p>
               </div>
               <div className="rounded-sm border border-border bg-card p-3">
@@ -2246,12 +2297,13 @@ export default function AdminContestSection() {
                       hasReachedLifecycle(currentLifecycle, targetLifecycle) &&
                       currentLifecycle !== targetLifecycle
                     );
+                    const blockedLifecycleMove = Boolean(lifecycle && !canRunLifecycleFrom(currentLifecycle, lifecycle));
                     const actionState = isCurrent ? "current" : completed ? "done" : primary ? "primary" : "idle";
                     return (
                       <button
                         key={title}
                         type="button"
-                        disabled={!selectedContestId || Boolean(isCurrent) || actionCompleted}
+                        disabled={!selectedContestId || Boolean(isCurrent) || actionCompleted || blockedLifecycleMove}
                         onClick={() => lifecycle ? setContestLifecycle(lifecycle) : runContestAction(action!)}
                         className={`rounded-sm border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-80 ${lifecycleActionClass(actionState)}`}
                       >

@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { authCookie, createAuthedAgent } from "../setup/auth-helper";
 import { resetContestCollections } from "../setup/test-db";
-import { createAnswerKeyReleasedContest, createDraftContest, createEndedContest, createFinalizedContest } from "../setup/test-contest-factory";
+import { createAnswerKeyReleasedContest, createDraftContest, createEndedContest, createFinalizedContest, createPublishedContest } from "../setup/test-contest-factory";
 import { createTestApp } from "../setup/test-server";
 
 const app = createTestApp();
@@ -27,6 +27,20 @@ describe("admin contest lifecycle actions", () => {
     const close = await request(app).post(`/api/admin/contests/${contest._id}/close-claims`).set("Cookie", authCookie(admin));
     expect(close.status).toBe(200);
     expect(close.body.lifecycle).toBe("claims_closed");
+  });
+
+  it("allows admin to start a published contest before scheduled start", async () => {
+    const { user: admin } = await createAuthedAgent(app, "admin");
+    const startTime = new Date(Date.now() + 60 * 60_000);
+    const endTime = new Date(Date.now() + 120 * 60_000);
+    const contest = await createPublishedContest({ createdBy: admin._id, startTime, endTime });
+    const response = await request(app)
+      .put(`/api/admin/contests/${contest._id}`)
+      .set("Cookie", authCookie(admin))
+      .send({ lifecycle: "live", status: "approved" });
+    expect(response.status).toBe(200);
+    expect(response.body.lifecycle).toBe("live");
+    expect(new Date(response.body.endTime).getTime()).toBe(endTime.getTime());
   });
 
   it("detects invalid draft to live transition", async () => {

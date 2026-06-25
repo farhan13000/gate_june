@@ -36,6 +36,8 @@ type Contest = {
     | "ratings_applied";
   startTime: string;
   endTime: string;
+  registrationStartTime?: string;
+  registrationEndTime?: string;
   durationMinutes: number;
   wrongPenaltyMinutes: number;
   ratingEnabled: boolean;
@@ -66,6 +68,8 @@ const viewOptions = [
   { value: "past", label: "Past Contests", description: "Completed and archived contests." },
   { value: "results", label: "Results & Keys", description: "Released keys, claims, and results." },
 ] as const;
+
+const REGISTRATION_CLOSE_BUFFER_MS = 5 * 60 * 1000;
 
 const sectionMeta: Record<string, { description: string; className: string }> = {
   "Live Now": {
@@ -169,13 +173,22 @@ function formatDate(value: string) {
   });
 }
 
-function formatCountdown(contest: Contest) {
-  if (postContestStates.includes(contest.contestState) || contest.contestState === "ended") return "Closed";
-  const now = Date.now();
-  const target = ["live", "frozen"].includes(contest.contestState)
-    ? new Date(contest.endTime).getTime()
-    : new Date(contest.startTime).getTime();
-  const diff = Math.max(0, target - now);
+function getTimeValue(value?: string) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function getRegistrationStartTime(contest: Contest) {
+  return getTimeValue(contest.registrationStartTime) ?? new Date(contest.startTime).getTime() - 7 * 24 * 60 * 60 * 1000;
+}
+
+function getRegistrationEndTime(contest: Contest) {
+  return getTimeValue(contest.registrationEndTime) ?? new Date(contest.endTime).getTime() - REGISTRATION_CLOSE_BUFFER_MS;
+}
+
+function formatDuration(value: number) {
+  const diff = Math.max(0, value);
   const hours = Math.floor(diff / 3600000);
   const minutes = Math.floor((diff % 3600000) / 60000);
   const seconds = Math.floor((diff % 60000) / 1000);
@@ -183,6 +196,36 @@ function formatCountdown(contest: Contest) {
 }
 
 const postContestStates = ["ended", "answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"];
+
+function isContestRegistrationOpen(contest: Contest) {
+  const now = Date.now();
+  const registrationStart = getRegistrationStartTime(contest);
+  const registrationEnd = getRegistrationEndTime(contest);
+  return (
+    !postContestStates.includes(contest.contestState) &&
+    contest.contestState !== "ended" &&
+    now < registrationEnd &&
+    (contest.contestState === "registration_open" || now >= registrationStart)
+  );
+}
+
+function getContestCountdown(contest: Contest) {
+  if (postContestStates.includes(contest.contestState) || contest.contestState === "ended") {
+    return { label: "Closed", value: "Closed" };
+  }
+  const now = Date.now();
+  if (["live", "frozen"].includes(contest.contestState)) {
+    return { label: "Ends In", value: formatDuration(new Date(contest.endTime).getTime() - now) };
+  }
+  if (contest.contestState === "registration_open") {
+    return { label: "Registration Closes In", value: formatDuration(getRegistrationEndTime(contest) - now) };
+  }
+  const registrationStart = getRegistrationStartTime(contest);
+  if (now < registrationStart) {
+    return { label: "Registration Opens In", value: formatDuration(registrationStart - now) };
+  }
+  return { label: "Starts In", value: formatDuration(new Date(contest.startTime).getTime() - now) };
+}
 
 function resultActionLabel(state: Contest["contestState"]) {
   if (state === "claims_open") return "Answer Key / Claim";
@@ -308,7 +351,7 @@ export default function Contests() {
     }
     if (["live", "frozen"].includes(contest.contestState)) {
       if (!registered) {
-        return contest.contestState === "live" ? (
+        return contest.contestState === "live" && isContestRegistrationOpen(contest) ? (
           <button
             type="button"
             disabled={busyId === contest._id}
@@ -324,7 +367,7 @@ export default function Contests() {
             className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60"
           >
             <Lock size={13} />
-            Registration Closed
+            {Date.now() < getRegistrationStartTime(contest) ? "Registration Not Open" : "Registration Closed"}
           </button>
         );
       }
@@ -392,7 +435,7 @@ export default function Contests() {
         </div>
       );
     }
-    if (contest.contestState === "registration_open") {
+    if (contest.contestState === "registration_open" && isContestRegistrationOpen(contest)) {
       return (
         <button
           type="button"
@@ -536,6 +579,7 @@ export default function Contests() {
                             <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{contest.description}</p>
                             <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                               <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDate(contest.startTime)}</span>
+                              <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> Reg closes {formatDate(new Date(getRegistrationEndTime(contest)).toISOString())}</span>
                               <span className="inline-flex items-center gap-1"><Clock3 size={12} /> {contest.durationMinutes} min</span>
                               <span className="inline-flex items-center gap-1"><Users size={12} /> {contest.registrationCount}</span>
                               {contest.userRegistration && contest.userRegistration.status !== "withdrawn" && (
@@ -546,8 +590,11 @@ export default function Contests() {
                             </div>
                           </div>
                           <div className="flex shrink-0 flex-col gap-2 lg:items-end">
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {getContestCountdown(contest).label}
+                            </div>
                             <div className="font-mono text-lg font-bold text-foreground" key={nowTick}>
-                              {formatCountdown(contest)}
+                              {getContestCountdown(contest).value}
                             </div>
                             <div className="flex flex-wrap justify-start gap-2 lg:justify-end" onClick={(event) => event.stopPropagation()}>
                               <button
