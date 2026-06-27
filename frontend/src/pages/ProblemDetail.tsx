@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronRight,
   Hash,
-  TrendingUp,
   Timer,
   AlertCircle,
 } from "lucide-react";
@@ -344,20 +343,6 @@ export default function ProblemDetail() {
     );
   }
 
-  const qTypeLabel: Record<string, string> = {
-    MCQ: "Multiple Choice (1 correct)",
-    MSQ: "Multiple Select (1 or more correct)",
-    NAT: "Numerical Answer Type",
-    PROOF: "Proof / Derivation",
-  };
-
-  const qTypeShort: Record<string, string> = {
-    MCQ: "MCQ",
-    MSQ: "MSQ",
-    NAT: "NAT",
-    PROOF: "PROOF",
-  };
-
   const difficultyConfig: Record<string, { bg: string; text: string; border: string; icon: React.ReactNode }> = {
     Easy: {
       bg: "bg-emerald-50 dark:bg-emerald-950/20",
@@ -495,33 +480,20 @@ export default function ProblemDetail() {
 
           {/* ── Problem Header Card ─────────────────────────────── */}
           <div className="problem-header-card">
-            <div className="flex justify-between items-start gap-4">
+            <div className="problem-header-main">
               <div className="flex-1 min-w-0">
                 {problem.topic && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] text-muted-foreground font-medium">{problem.topic}</span>
-                  </div>
+                  <span className="problem-topic-label">{problem.topic}</span>
                 )}
                 {/* Title */}
                 <h1 className="font-serif text-lg sm:text-xl font-bold text-foreground mb-2 leading-snug">
                   <LatexRenderer latex={problem.title} />
                 </h1>
-                {/* Tags row */}
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  {problem.topic ? problem.topic.split(/\s*[+,]\s*/).map((subTopic: string, idx: number) => (
-                    <span
-                      key={idx}
-                      className="problem-tag-chip"
-                    >
-                      {subTopic}
-                    </span>
-                  )) : null}
+                {/* Summary row */}
+                <div className="problem-summary-row" aria-label="Problem summary">
                   <span className={`problem-difficulty-chip ${dc.bg} ${dc.text} ${dc.border}`}>
                     {dc.icon}
                     {problem.difficulty}
-                  </span>
-                  <span className="problem-type-chip">
-                    {qTypeShort[displayQuestionType] || displayQuestionType}
                   </span>
                   <span
                     className="problem-scoring-chip"
@@ -540,36 +512,12 @@ export default function ProblemDetail() {
               <button
                 onClick={handleUpvote}
                 className={`problem-upvote-btn ${hasUpvoted ? 'problem-upvote-btn-active' : ''}`}
+                aria-label={`Upvote problem. Current upvotes: ${upvotes}`}
+                title="Upvote"
               >
                 <ThumbsUp size={18} className={hasUpvoted ? "fill-primary/30" : ""} />
                 <span className="text-xs font-bold">{upvotes}</span>
               </button>
-            </div>
-
-            {/* ── Meta info strip ── */}
-            <div className="problem-meta-strip">
-              <div className="problem-meta-item">
-                <span className="problem-meta-label">Type</span>
-                <span className="problem-meta-value">{qTypeLabel[displayQuestionType] || displayQuestionType}</span>
-              </div>
-              {totalSubmissions > 0 && (
-                <>
-                  <div className="problem-meta-divider" />
-                  <div className="problem-meta-item">
-                    <span className="problem-meta-label">Your Attempts</span>
-                    <span className="problem-meta-value">
-                      <span className="text-green-600 dark:text-green-400">{correctSubmissions}</span>
-                      <span className="mx-0.5 text-muted-foreground">/</span>
-                      <span>{totalSubmissions}</span>
-                    </span>
-                  </div>
-                </>
-              )}
-              <div className="problem-meta-divider" />
-              <div className="problem-meta-item">
-                <span className="problem-meta-label">Upvotes</span>
-                <span className="problem-meta-value">{upvotes.toLocaleString()}</span>
-              </div>
             </div>
           </div>
 
