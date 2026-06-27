@@ -62,31 +62,41 @@ const stateClass: Record<string, string> = {
   ratings_applied: "border-border bg-secondary/35 text-muted-foreground",
 };
 
+type ContestView = "active" | "registered" | "past" | "results";
+
 const viewOptions = [
-  { value: "active", label: "Active & Upcoming", description: "Register or enter live contests." },
-  { value: "registered", label: "My Contests", description: "Your registered contest list." },
-  { value: "past", label: "Past Contests", description: "Completed and archived contests." },
-  { value: "results", label: "Results & Keys", description: "Released keys, claims, and results." },
+  { value: "active", label: "Open & Upcoming", description: "Live, open, and scheduled contests.", Icon: CalendarClock },
+  { value: "registered", label: "My Contests", description: "Registered contests only.", Icon: CheckCircle2 },
+  { value: "past", label: "Past Archive", description: "Completed contest history.", Icon: Clock3 },
+  { value: "results", label: "Results & Keys", description: "Keys, claims, and rankings.", Icon: Eye },
 ] as const;
 
 const REGISTRATION_CLOSE_BUFFER_MS = 5 * 60 * 1000;
 
 const sectionMeta: Record<string, { description: string; className: string }> = {
-  "Live Now": {
-    description: "Submission windows are open. Registration is required before entering.",
+  "Live now": {
+    description: "Submission window is open.",
     className: "border-primary/30 bg-primary/5",
   },
+  "Registration open": {
+    description: "Registration is available before the contest begins.",
+    className: "border-green-500/20 bg-green-500/5",
+  },
   Upcoming: {
-    description: "Register early and check the schedule before the arena opens.",
+    description: "Scheduled contests waiting for registration or start.",
     className: "border-blue-500/20 bg-blue-500/5",
   },
-  "My Participated Contests": {
-    description: "Answer keys, claims, and results for contests you joined.",
+  "Results & review": {
+    description: "Answer keys, claims, and result review windows.",
     className: "border-amber-500/20 bg-amber-500/5",
   },
-  "Past / Finalizing": {
-    description: "Closed contests and finalization history.",
+  Completed: {
+    description: "Closed contests and finalized history.",
     className: "border-border bg-secondary/20",
+  },
+  Other: {
+    description: "Additional contest records.",
+    className: "border-border bg-card",
   },
 };
 
@@ -100,34 +110,42 @@ function contestCardClass(state: Contest["contestState"]) {
 
 const testTypes = [
   {
+    values: ["full_mock"],
     title: "Full Mock Test",
     type: "Exam Simulation",
     Icon: BookOpenCheck,
-    description: "Full-length GATE DA simulation with exam-style timing and result review.",
-    rules: ["Complete syllabus coverage", "Answer key after release", "Rank and rating can apply"],
+    description: "Full-length GATE DA simulation with exam-style timing.",
   },
   {
+    values: ["subject_wise"],
     title: "Subject Wise Test",
     type: "Focused",
     Icon: Trophy,
-    description: "Focused tests for one subject or major syllabus area.",
-    rules: ["Subject-level analysis", "Useful for weak-area repair", "Leaderboard can be enabled"],
+    description: "Focused test for one subject or major syllabus area.",
   },
   {
+    values: ["weekly"],
     title: "Weekly Test",
     type: "Regular",
     Icon: FileQuestion,
-    description: "Scheduled weekly tests for consistency and time-pressure practice.",
-    rules: ["Weekly ranking cycle", "Timed participation", "Rating can update after finalization"],
+    description: "Recurring timed practice with a weekly ranking cycle.",
   },
   {
+    values: ["challenge_yourself", "challenge"],
     title: "Challenge Yourself",
     type: "Advanced",
     Icon: ShieldCheck,
-    description: "Advanced challenge tests with harder problem mixes and claims support.",
-    rules: ["Higher difficulty mix", "Answer-key claims window", "Final results after review"],
+    description: "Harder problem mixes with post-contest review.",
   },
 ];
+
+const contestTypeLabels: Record<string, string> = {
+  full_mock: "Full Mock Test",
+  subject_wise: "Subject Wise Test",
+  weekly: "Weekly Test",
+  challenge_yourself: "Challenge Yourself",
+  challenge: "Challenge",
+};
 
 function labelize(value?: string) {
   return String(value || "")
@@ -135,32 +153,46 @@ function labelize(value?: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function TestTypeCards() {
+function getContestTypeLabel(value?: string) {
+  return contestTypeLabels[String(value || "")] || labelize(value || "contest");
+}
+
+function ContestFormatGuide({ contests }: { contests: Contest[] }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {testTypes.map(({ title, type, Icon, description, rules }) => (
-        <div key={title} className="rounded-sm border border-border bg-card p-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
-              <Icon size={18} />
-            </div>
-            <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-              {type}
-            </span>
-          </div>
-          <h3 className="font-serif text-base font-bold text-foreground">{title}</h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
-          <ul className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-muted-foreground">
-            {rules.map((rule) => (
-              <li key={rule} className="flex gap-2">
-                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.45)]" />
-                <span>{rule}</span>
-              </li>
-            ))}
-          </ul>
+    <section className="rounded-sm border border-border bg-card">
+      <div className="border-b border-border px-3 py-3 sm:px-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="font-serif text-base font-semibold text-foreground">Contest formats</h2>
+          <span className="w-fit rounded-sm border border-border bg-secondary/35 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+            Reference
+          </span>
         </div>
-      ))}
-    </div>
+      </div>
+      <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4">
+        {testTypes.map(({ values, title, type, Icon, description }) => {
+          const count = contests.filter((contest) => values.includes(contest.contestType)).length;
+          return (
+            <div key={title} className="rounded-sm border border-border bg-background/70 p-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
+                  <Icon size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+                    <span className="rounded-sm border border-border bg-background px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+                      {type}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+                  <div className="mt-2 font-mono text-[11px] text-muted-foreground">{count} published</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -240,7 +272,8 @@ export default function Contests() {
   const [loading, setLoading] = useState(true);
   const [nowTick, setNowTick] = useState(Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [contestView, setContestView] = useState<"active" | "registered" | "past" | "results">("active");
+  const [contestView, setContestView] = useState<ContestView>("active");
+  const [showFormatGuide, setShowFormatGuide] = useState(false);
 
   const fetchContests = useCallback(async () => {
     setLoading(true);
@@ -285,25 +318,39 @@ export default function Contests() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const contestCounts = useMemo<Record<ContestView, number>>(() => {
+    const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
+    const resultsStates = ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"];
+    return {
+      active: contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)).length,
+      registered: contests.filter(registered).length,
+      past: contests.filter((contest) => postContestStates.includes(contest.contestState)).length,
+      results: contests.filter((contest) => registered(contest) && resultsStates.includes(contest.contestState)).length,
+    };
+  }, [contests]);
+
   const visibleContests = useMemo(() => {
     const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
+    const resultsStates = ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"];
     const newestFirst = (items: Contest[]) =>
       [...items].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
     if (contestView === "registered") return newestFirst(contests.filter(registered));
     if (contestView === "past") return newestFirst(contests.filter((contest) => postContestStates.includes(contest.contestState)));
     if (contestView === "results") {
-      return newestFirst(contests.filter((contest) => registered(contest) && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState)));
+      return newestFirst(contests.filter((contest) => registered(contest) && resultsStates.includes(contest.contestState)));
     }
     return newestFirst(contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)));
   }, [contestView, contests]);
 
   const grouped = useMemo(() => {
-    const registered = (contest: Contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn";
     const live = visibleContests.filter((contest) => ["live", "frozen"].includes(contest.contestState));
-    const upcoming = visibleContests.filter((contest) => ["registration_open", "upcoming"].includes(contest.contestState));
-    const myPast = visibleContests.filter((contest) => registered(contest) && postContestStates.includes(contest.contestState));
-    const past = visibleContests.filter((contest) => !live.includes(contest) && !upcoming.includes(contest) && !myPast.includes(contest));
-    return { live, upcoming, myPast, past };
+    const registrationOpen = visibleContests.filter((contest) => contest.contestState === "registration_open");
+    const upcoming = visibleContests.filter((contest) => contest.contestState === "upcoming");
+    const review = visibleContests.filter((contest) => ["answer_key_released", "claims_open", "claims_closed"].includes(contest.contestState));
+    const completed = visibleContests.filter((contest) => ["ended", "finalized", "ratings_applied"].includes(contest.contestState));
+    const known = new Set([...live, ...registrationOpen, ...upcoming, ...review, ...completed].map((contest) => contest._id));
+    const other = visibleContests.filter((contest) => !known.has(contest._id));
+    return { live, registrationOpen, upcoming, review, completed, other };
   }, [visibleContests]);
 
   const updateRegistration = async (contest: Contest, action: "register" | "withdraw" | "check-in") => {
@@ -336,7 +383,7 @@ export default function Contests() {
     const registered = contest.userRegistration && contest.userRegistration.status !== "withdrawn";
     if (!isAuthenticated) {
       return (
-        <Link to="/login" className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs">
+        <Link to="/login" className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto">
           <LogIn size={13} />
           Sign in
         </Link>
@@ -349,7 +396,7 @@ export default function Contests() {
             type="button"
             disabled={busyId === contest._id}
             onClick={() => updateRegistration(contest, "register")}
-            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
+            className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50 sm:w-auto"
           >
             Register
           </button>
@@ -357,7 +404,7 @@ export default function Contests() {
           <button
             type="button"
             disabled
-            className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60"
+            className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs opacity-60 sm:w-auto"
           >
             <Lock size={13} />
             {Date.now() < getRegistrationStartTime(contest) ? "Registration Not Open" : "Registration Closed"}
@@ -369,7 +416,7 @@ export default function Contests() {
           type="button"
           disabled={busyId === contest._id}
           onClick={() => updateRegistration(contest, "check-in")}
-          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
+          className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50 sm:w-auto"
         >
           <Trophy size={13} />
           Enter
@@ -378,11 +425,11 @@ export default function Contests() {
     }
     if (registered && postContestStates.includes(contest.contestState)) {
       return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
           <button
             type="button"
             onClick={() => navigate(`/contests/${contest._id}`)}
-            className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+            className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto"
           >
             <Eye size={13} />
             {resultActionLabel(contest.contestState)}
@@ -390,7 +437,7 @@ export default function Contests() {
           <button
             type="button"
             onClick={() => navigate(`/contests/${contest._id}/practice`)}
-            className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+            className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto"
           >
             <BookOpenCheck size={13} />
             Practice
@@ -403,7 +450,7 @@ export default function Contests() {
         <button
           type="button"
           onClick={() => navigate(`/contests/${contest._id}/practice`)}
-          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+          className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto"
         >
           <BookOpenCheck size={13} />
           Practice
@@ -412,8 +459,8 @@ export default function Contests() {
     }
     if (registered) {
       return (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-sm border border-green-500/25 bg-green-500/10 px-2.5 py-1.5 text-xs font-semibold text-green-700 dark:text-green-300">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <span className="inline-flex w-full items-center justify-center gap-1 rounded-sm border border-green-500/25 bg-green-500/10 px-2.5 py-1.5 text-xs font-semibold text-green-700 sm:w-auto dark:text-green-300">
             <CheckCircle2 size={13} />
             Registered
           </span>
@@ -421,7 +468,7 @@ export default function Contests() {
             type="button"
             disabled={busyId === contest._id}
             onClick={() => updateRegistration(contest, "withdraw")}
-            className="btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs"
+            className="btn-outline inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-xs sm:w-auto"
           >
             Withdraw
           </button>
@@ -434,7 +481,7 @@ export default function Contests() {
           type="button"
           disabled={busyId === contest._id}
           onClick={() => updateRegistration(contest, "register")}
-          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+          className="btn-primary inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs disabled:opacity-50 sm:w-auto"
         >
           Register
         </button>
@@ -442,14 +489,14 @@ export default function Contests() {
     }
     if (contest.contestState === "upcoming") {
       return (
-        <button type="button" disabled className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60">
+        <button type="button" disabled className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs opacity-60 sm:w-auto">
           <Lock size={13} />
           Registration Not Open
         </button>
       );
     }
     return (
-      <button type="button" disabled className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs opacity-60">
+      <button type="button" disabled className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs opacity-60 sm:w-auto">
         <Lock size={13} />
         Closed
       </button>
@@ -458,68 +505,85 @@ export default function Contests() {
 
   return (
     <div className="w-full">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-1 text-xs font-mono text-muted-foreground">Contest Hub</div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">Live Contests</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Register for scheduled GATE DA contests, track timing, and prepare for live ranked sessions.
+          <h1 className="font-serif text-2xl font-bold text-foreground sm:text-3xl">Contests</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Scheduled GATE DA sessions with format reference, registration windows, live arenas, and released results.
           </p>
         </div>
-        <button type="button" onClick={fetchContests} className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs">
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
-      </div>
-
-      <div className="mb-6">
-        <TestTypeCards />
-      </div>
-
-      <div className="mb-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {viewOptions.map(({ value, label, description }) => {
-          const count =
-            value === "active"
-              ? contests.filter((contest) => ["live", "frozen", "registration_open", "upcoming"].includes(contest.contestState)).length
-              : value === "registered"
-                ? contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn").length
-                : value === "past"
-                  ? contests.filter((contest) => postContestStates.includes(contest.contestState)).length
-                  : contests.filter((contest) => contest.userRegistration && contest.userRegistration.status !== "withdrawn" && ["answer_key_released", "claims_open", "claims_closed", "finalized", "ratings_applied"].includes(contest.contestState)).length;
-          return (
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <button
-            key={value}
             type="button"
-            onClick={() => setContestView(value as typeof contestView)}
-            className={`rounded-sm border p-3 text-left transition-colors ${
-              contestView === value
-                ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]"
-                : "border-border bg-card hover:bg-secondary/25"
-            }`}
+            onClick={() => setShowFormatGuide((visible) => !visible)}
+            className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto"
+            aria-expanded={showFormatGuide}
           >
-            <div className="font-serif text-sm font-bold">{label}</div>
-            <p className="mt-1 min-h-8 text-xs leading-relaxed text-muted-foreground">{description}</p>
-            <div className="mt-1 font-mono text-lg font-bold">{String(count)}</div>
+            <BookOpenCheck size={13} />
+            Contest formats
           </button>
-          );
-        })}
+          <button type="button" onClick={fetchContests} className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto">
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
+      {showFormatGuide && (
+        <div className="mb-5 animate-in fade-in slide-in-from-top-1 duration-150">
+          <ContestFormatGuide contests={contests} />
+        </div>
+      )}
+
+      <section className="min-w-0 overflow-hidden rounded-sm border border-border bg-card">
+          <div className="border-b border-border p-3 sm:p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="font-serif text-xl font-semibold text-foreground">Contest schedule</h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {viewOptions.find((option) => option.value === contestView)?.description}
+                </p>
+              </div>
+              <div className="grid w-full gap-2 sm:grid-cols-2 xl:max-w-3xl xl:grid-cols-4">
+                {viewOptions.map(({ value, label, Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setContestView(value)}
+                    className={`min-w-0 rounded-sm border px-2.5 py-2 text-left transition-colors sm:px-3 ${
+                      contestView === value
+                        ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]"
+                        : "border-border bg-background hover:bg-secondary/25"
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Icon size={13} />
+                      <span className="truncate text-xs font-medium">{label}</span>
+                    </div>
+                    <div className="mt-1 font-mono text-sm font-medium">{contestCounts[value]}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 sm:p-4">
       {loading ? (
-        <div className="academic-card p-12 text-center text-sm text-muted-foreground">Loading contests...</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">Loading contests...</div>
       ) : contests.length === 0 ? (
-        <div className="academic-card p-8 text-center">
+        <div className="py-12 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-sm border border-border bg-secondary/30 text-primary">
             <CalendarClock size={22} />
           </div>
-          <h2 className="font-serif text-xl font-bold text-foreground">No contests are published yet</h2>
+          <h2 className="font-serif text-xl font-semibold text-foreground">No contests are published yet</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
             The platform supports full mock tests, subject wise tests, weekly tests, and advanced Challenge Yourself tests. When an admin publishes a contest, it will appear here with registration and result controls.
           </p>
         </div>
       ) : visibleContests.length === 0 ? (
-        <div className="academic-card p-8 text-center">
-          <h2 className="font-serif text-xl font-bold text-foreground">No contests in this view</h2>
+        <div className="py-12 text-center">
+          <h2 className="font-serif text-xl font-semibold text-foreground">No contests in this view</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Switch filters to see active contests, registered contests, past contests, or released results and answer keys.
           </p>
@@ -528,17 +592,19 @@ export default function Contests() {
         <div className="grid gap-6">
           <div className="space-y-4">
             {[
-              ["Live Now", grouped.live],
+              ["Live now", grouped.live],
+              ["Registration open", grouped.registrationOpen],
               ["Upcoming", grouped.upcoming],
-              ["My Participated Contests", grouped.myPast],
-              ["Past / Finalizing", grouped.past],
+              ["Results & review", grouped.review],
+              ["Completed", grouped.completed],
+              ["Other", grouped.other],
             ].map(([title, list]) => {
               const items = list as Contest[];
               if (items.length === 0) return null;
               return (
                 <section key={title as string} className="space-y-3">
                   <div className={`rounded-sm border p-3 ${sectionMeta[title as string]?.className || "border-border bg-card"}`}>
-                    <h2 className="font-serif text-base font-bold text-foreground">{title as string}</h2>
+                    <h2 className="font-serif text-base font-semibold text-foreground">{title as string}</h2>
                     <p className="mt-1 text-xs text-muted-foreground">{sectionMeta[title as string]?.description}</p>
                   </div>
                   <div className="grid gap-3">
@@ -551,7 +617,7 @@ export default function Contests() {
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") navigate(`/contests/${contest._id}/details`);
                         }}
-                        className={`rounded-sm border p-4 text-left transition-colors hover:bg-secondary/25 ${contestCardClass(contest.contestState)}`}
+                        className={`rounded-sm border p-3 text-left transition-colors hover:bg-secondary/25 sm:p-4 ${contestCardClass(contest.contestState)}`}
                       >
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                           <div className="min-w-0">
@@ -565,16 +631,16 @@ export default function Contests() {
                                 </span>
                               )}
                               <span className="rounded-sm border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
-                                {labelize(contest.contestType)}
+                                Format: {getContestTypeLabel(contest.contestType)}
                               </span>
                             </div>
                             <h3 className="line-clamp-2 text-sm font-semibold text-foreground">{contest.title}</h3>
                             <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{contest.description}</p>
-                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                              <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDate(contest.startTime)}</span>
+                            <div className="mt-3 grid gap-1.5 text-[11px] text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                              <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> Start {formatDate(contest.startTime)}</span>
                               <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> Reg closes {formatDate(new Date(getRegistrationEndTime(contest)).toISOString())}</span>
-                              <span className="inline-flex items-center gap-1"><Clock3 size={12} /> {contest.durationMinutes} min</span>
-                              <span className="inline-flex items-center gap-1"><Users size={12} /> {contest.registrationCount}</span>
+                              <span className="inline-flex items-center gap-1"><Clock3 size={12} /> Duration {contest.durationMinutes} min</span>
+                              <span className="inline-flex items-center gap-1"><Users size={12} /> {contest.registrationCount} registered</span>
                               {contest.userRegistration && contest.userRegistration.status !== "withdrawn" && (
                                 <span className="inline-flex items-center gap-1 text-primary">
                                   <CheckCircle2 size={12} /> {registrationLabel(contest.userRegistration.status)}
@@ -582,18 +648,20 @@ export default function Contests() {
                               )}
                             </div>
                           </div>
-                          <div className="flex shrink-0 flex-col gap-2 lg:items-end">
-                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {getContestCountdown(contest).label}
+                          <div className="flex w-full shrink-0 flex-col gap-2 lg:w-auto lg:items-end">
+                            <div className="flex items-end justify-between gap-3 lg:block lg:text-right">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {getContestCountdown(contest).label}
+                              </div>
+                              <div className="font-mono text-base font-bold text-foreground sm:text-lg" key={nowTick}>
+                                {getContestCountdown(contest).value}
+                              </div>
                             </div>
-                            <div className="font-mono text-lg font-bold text-foreground" key={nowTick}>
-                              {getContestCountdown(contest).value}
-                            </div>
-                            <div className="flex flex-wrap justify-start gap-2 lg:justify-end" onClick={(event) => event.stopPropagation()}>
+                            <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto lg:justify-end" onClick={(event) => event.stopPropagation()}>
                               <button
                                 type="button"
                                 onClick={() => navigate(`/contests/${contest._id}/details`)}
-                                className="btn-outline inline-flex items-center justify-center gap-2 px-4 py-2 text-xs"
+                                className="btn-outline inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs sm:w-auto"
                               >
                                 <Eye size={13} />
                                 View Details
@@ -611,6 +679,8 @@ export default function Contests() {
           </div>
         </div>
       )}
+          </div>
+        </section>
     </div>
   );
 }
