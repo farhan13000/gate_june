@@ -21,6 +21,7 @@ import AdminShell from "@/components/admin/AdminShell";
 import AdminPlatformLogs from "@/components/admin/AdminPlatformLogs";
 import { useTaxonomy } from "@/hooks/useTaxonomy";
 import { buildTaxonomyPromptContext } from "@/utils/taxonomyPrompt";
+import { robustJsonParseWithLatexRepair } from "@/utils/latexPipeline";
 
 const CREATION_PROTOCOLS = {
   Problem: {
@@ -280,6 +281,7 @@ RETURN ONLY VALID JSON (NO PREAMBLE)
       "JSON SAFETY: All quotes escaped, all braces matched, no trailing commas, parsable by JSON.parse().",
       "MEDIA FORMAT: Use images for statement visuals and solution.images for solution visuals. Each item is { url, alt, caption?, kind: image|diagram, placement: inline|left|right|full }. Place an asset exactly with {{media:0}} in the statement or solution.explanation; left/right become a stacked reading flow on small screens. Only use exact, verified image URLs; never invent URLs, and use [] if none are available.",
       "CONCEPT FUSION: Problems MUST combine 2+ GATE DA domains (e.g., Linear Algebra + Probability + Optimization).",
+      "RENDERING TOOLCHAIN: The platform uses React LatexRenderer, EmbeddedMediaContent, EditorialRenderer, and KaTeX. Use KaTeX-compatible LaTeX only; no MathJax-only commands, HTML, Mermaid, or markdown math.",
       "MATHEMATICAL DEPTH: Include asymptotic reasoning, hidden invariants, optimization insights, or proof intuition.",
       "QUALITY: No formula substitution shortcuts, no memory-based questions, no coaching institute templates.",
       "VALIDATION: Before output, verify JSON syntax, LaTeX escaping, and mathematical rigor."
@@ -456,24 +458,43 @@ ${coverageRules}
 OUTPUT MODE
 - Return a JSON array for bulk creation.
 - Every item must include subjectId, chapterId, topicId, and subtopicId.
-- Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
+- Return only the JSON array. Do not add markdown fences, comments, explanations, or labels outside the array.
+- Use double-escaped LaTeX in the visible JSON text: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
 - No markdown wrapper, no prose outside JSON.
 
-RENDERING AND LATEX CONTRACT
-- The frontend renders strings with KaTeX/LaTeX-aware renderers, so every mathematical expression must be valid LaTeX inside a valid JSON string.
+PLATFORM RENDERING TARGET
+- Rendering tools used by the platform: React LatexRenderer for text/math, EmbeddedMediaContent for statement/media flow, EditorialRenderer for solutions, and KaTeX for the actual math rendering.
+- Best method for reliable rendering: keep prose as plain text, wrap every mathematical expression, and use only KaTeX-compatible LaTeX commands inside valid JSON strings.
+- The bulk parser and renderer share a LaTeX recovery utility for common pasted mistakes, but generated JSON must still follow this contract. Do not rely on recovery for new content.
+
+LATEX INSIDE JSON CONTRACT
 - Inline math must be wrapped as "\\\\( ... \\\\)".
 - Display math must be wrapped as "\\\\[ ... \\\\]".
+- The pasted JSON text must literally contain double backslashes for math delimiters and commands: write "\\\\(", "\\\\)", "\\\\[", "\\\\]", "\\\\left", "\\\\right", "\\\\rfloor".
+- Wrong visible JSON: "If \\(10!\\) has \\left\\lfloor x \\right\\rfloor".
+- Correct visible JSON: "If \\\\(10!\\\\) has \\\\left\\\\lfloor x \\\\right\\\\rfloor".
 - Because this is JSON, every LaTeX backslash must be double escaped. Write "\\\\frac", "\\\\sum", "\\\\lambda", "\\\\mathbb{R}", not "\\frac", "\\sum", "\\lambda".
 - Never use dollar math delimiters like "$x$", "$$x$$", or markdown code fences for equations.
 - Escape quotes inside strings as "\\\"" and newlines as "\\n". Do not insert raw line breaks inside JSON string values.
 - Use plain UTF-8 text only for prose. Use LaTeX commands for math symbols, matrices, vectors, probability notation, expectations, gradients, integrals, limits, and complexity notation.
+- For floor/ceiling, always write commands fully escaped: "\\\\( \\\\left\\\\lfloor x \\\\right\\\\rfloor \\\\)" and "\\\\( \\\\left\\\\lceil x \\\\right\\\\rceil \\\\)". Never write a single-backslash "\\rfloor", because "\\r" can become a carriage return when JSON escaping is wrong.
+- For factorials, fractions, powers, summations, and matrices, wrap the whole expression: "\\\\( n! \\\\)", "\\\\( \\\\frac{a}{b} \\\\)", "\\\\( x^{k+1} \\\\)", "\\\\[ \\\\sum_{i=1}^{n} i = \\\\frac{n(n+1)}{2} \\\\]", "\\\\[ \\\\begin{bmatrix} 1 & 2 \\\\\\\\ 3 & 4 \\\\end{bmatrix} \\\\]".
+- Split long derivations into multiple display equations. KaTeX display blocks are horizontally scrollable on the platform, but shorter equations render better on mobile.
 - Good inline example: "For \\\\( X \\\\sim \\\\mathcal{N}(\\\\mu, \\\\sigma^2) \\\\), compute \\\\( \\\\mathbb{E}[X] \\\\)."
 - Good display example: "\\\\[ \\\\nabla f(x) = A^T(Ax-b) \\\\]"
-- Bad examples: "$E[X]$", "\\frac{a}{b}", "lambda_1", "x^T A x" without LaTeX delimiters.
+- Bad examples: "$E[X]$", "\\frac{a}{b}", "\\rfloor", "lambda_1", "x^T A x" without LaTeX delimiters.
+
+CONTENT STRUCTURE CONTRACT
+- Titles, statements, options, explanations, formulas, examples, highlights, and final answers may contain math, so apply the same wrapping and escaping rules everywhere.
+- Titles are rendered with LatexRenderer too. If a title contains a mathematical object, wrap it: write "Prime Exponents of \\\\(10!\\\\)", not "Prime Exponents of 10 Factorial" and not "Prime Exponents of 10!".
+- Keep titles short and readable; put the full mathematical setup in the statement, not the title.
 - For MCQ/MSQ options, each option text can contain inline LaTeX and must be a JSON string.
 - For NAT final answers, put the exact answer in solution.finalAnswer and keep options as [] or omit options.
 - For PROOF questions, write a proof-style statement and solution; keep options as [] or omit options.
-- Keep each problem solution simple: use solution.explanation, solution.finalAnswer, and optional solution.images.
+- For problems, prefer a structured mathematical-book solution: solution.type = "editorial", solution.finalAnswer = "...", and solution.blocks = intro, numbered step, equation, insight/warning when useful, and finalAnswer blocks.
+- Keep each solution step compact, conceptually named, and visually scannable. Do not write one heavy paragraph. Use display equations inside step.equation or equation blocks.
+- The platform renders these solution blocks with EditorialRenderer, so they appear as academic solution sections/cards under the existing UI theme.
+- For theory articles, use content for the main body, formulas for important display equations, examples for worked examples, and highlights for short key ideas. All math inside these fields must use the same JSON-safe LaTeX.
 - MEDIA CONTRACT: use a top-level images array for statement visuals and solution.images for solution visuals. Every asset is { "url": "https://...", "alt": "accessible description", "caption": "optional caption", "kind": "image" | "diagram", "placement": "inline" | "left" | "right" | "full" }. Put {{media:0}} directly inside statement or solution.explanation to embed an image at that point; side placements stack on small screens.
 - Use media only when a real, verified URL is already supplied by the request or source material. Never invent a URL. Use [] when no visual is available.
 - If a diagram would help, include it inline as readable text: "Diagram: <title>\\\\nStep 1 -> Step 2 -> Step 3".
@@ -481,7 +502,14 @@ RENDERING AND LATEX CONTRACT
 - For process/modeling explanations, use compact text flows such as "Inputs in \\\\(A\\\\) -> choices in \\\\(B\\\\) -> product rule".
 - For images and diagrams, use only the supported images arrays. Do not include HTML, SVG markup, Mermaid syntax, base64 blobs, or image-generation prompts in JSON.
 - A URL is allowed only in a media asset with a verified source. Do not invent a source or an image URL.
-- Before returning, mentally run JSON.parse on the response and verify every math string renders with KaTeX.
+
+FINAL SELF-CHECK BEFORE RETURNING
+- The first character of your response must be "[" and the last character must be "]".
+- JSON.parse must succeed.
+- Search your output mentally: there must be no visible "\\(", "\\)", "\\[", "\\]", "\\frac", "\\left", "\\right", "\\rfloor", "\\sum", or "\\begin". Each must appear with double backslashes like "\\\\(", "\\\\frac", "\\\\right", "\\\\begin".
+- Every display equation starts with "\\\\[" and ends with "\\\\]".
+- Every inline equation starts with "\\\\(" and ends with "\\\\)".
+- Every problem/theory item uses IDs from the taxonomy section above.
 
 ${isProblem ? `PROBLEM ITEM SHAPE
 {
@@ -489,17 +517,40 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "chapterId": "CHAPTER_ID",
   "topicId": "TOPIC_ID",
   "subtopicId": "SUBTOPIC_ID",
-  "title": "Problem title",
+  "title": "Short problem title with title math wrapped, e.g. Prime Exponents of \\\\(10!\\\\)",
   "topic": "Exact topic name",
   "subtopic": "Exact subtopic name",
   "difficulty": "Easy|Medium|Hard",
   "questionType": "MCQ|MSQ|NAT|PROOF",
-  "statement": "Problem statement with inline math like \\\\( x^T A x \\\\) and display math like \\\\[ A = U\\\\Sigma V^T \\\\].",
+  "statement": "Problem statement with inline math like \\\\( x^T A x \\\\), factorials like \\\\(10!\\\\), and display math like \\\\[ A = U\\\\Sigma V^T \\\\].",
   "images": [],
   "solution": {
-    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\].",
+    "type": "editorial",
+    "finalAnswer": "Final answer with valid LaTeX if mathematical, e.g. \\\\( \\\\frac{3}{2} \\\\).",
     "images": [],
-    "finalAnswer": "Final answer with valid LaTeX if mathematical, e.g. \\\\( \\\\frac{3}{2} \\\\)."
+    "blocks": [
+      {
+        "type": "intro",
+        "content": "State the core idea or theorem in one or two textbook-style sentences."
+      },
+      {
+        "type": "step",
+        "number": "1",
+        "title": "Set up the calculation",
+        "content": "Explain the first move clearly. Use inline math like \\\\( n! \\\\) when needed.",
+        "equation": "\\\\[ E_a(n!) = \\\\sum_{k \\\\ge 1} \\\\left\\\\lfloor \\\\frac{n}{a^k} \\\\right\\\\rfloor \\\\]"
+      },
+      {
+        "type": "step",
+        "number": "2",
+        "title": "Evaluate and conclude",
+        "content": "Carry out the computation and connect it back to the answer choices."
+      },
+      {
+        "type": "finalAnswer",
+        "content": "Repeat the final answer exactly as it should appear."
+      }
+    ]
   },
   "options": [
     { "text": "\\\\( \\\\lambda = 1 \\\\)", "isCorrect": true },
@@ -512,12 +563,12 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   "chapterId": "CHAPTER_ID",
   "topicId": "TOPIC_ID",
   "subtopicId": "SUBTOPIC_ID",
-  "title": "Theory title",
+  "title": "Short theory title with title math wrapped if needed",
   "topic": "Exact topic name",
   "chapterTitle": "Exact chapter name",
   "sectionId": "SUBTOPIC_ID",
   "images": [],
-  "content": "Well-structured article. Use headings as plain text, inline math as \\\\( ... \\\\), display equations as \\\\[ ... \\\\], and escaped newlines as \\\\n. Put any visual explanation inline as a readable block such as Diagram: Title\\\\nStep 1 -> Step 2 -> Step 3.",
+  "content": "Well-structured article. Use headings as plain text, inline math as \\\\( ... \\\\), display equations as \\\\[ ... \\\\], and escaped newlines as \\\\n. Put any visual explanation inline as a readable block such as Diagram: Title\\\\nStep 1 -> Step 2 -> Step 3. For floors use \\\\left\\\\lfloor x \\\\right\\\\rfloor.",
   "formulas": ["\\\\[ \\\\mathbb{E}[X] = \\\\int_{-\\\\infty}^{\\\\infty} x f_X(x)\\\\,dx \\\\]"],
   "examples": ["Worked example paragraph with valid inline LaTeX like \\\\( \\\\nabla f(x) = 0 \\\\)."],
   "highlights": ["Key point with math wrapped as \\\\( ... \\\\) when needed."]
@@ -671,43 +722,10 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     } catch (error) { toast.error(error instanceof Error ? error.message : "Network error"); }
   };
 
-  const robustJsonParse = (str: string) => {
-    try {
-      return JSON.parse(str);
-    } catch (e) {
-      let result = "";
-      let i = 0;
-      while (i < str.length) {
-        if (str[i] === '\\') {
-          const next = str[i + 1];
-          if (next && '"\\/ntru'.includes(next)) {
-            if (next === 'u') {
-              const hex = str.substring(i + 2, i + 6);
-              if (/^[0-9a-fA-F]{4}$/.test(hex)) {
-                result += '\\u' + hex;
-                i += 6;
-                continue;
-              }
-            }
-            result += '\\' + next;
-            i += 2;
-          } else {
-            result += '\\\\';
-            i += 1;
-          }
-        } else {
-          result += str[i];
-          i += 1;
-        }
-      }
-      return JSON.parse(result);
-    }
-  };
-
   const formatBulkJson = () => {
     try {
       if (!bulkJson.trim()) return;
-      const parsed = robustJsonParse(bulkJson);
+      const parsed = robustJsonParseWithLatexRepair(bulkJson);
       const formatted = JSON.stringify(parsed, null, 2);
       setBulkJson(formatted);
       setBulkParseError("");
@@ -720,7 +738,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
   const parseBulkJson = () => {
     try {
-      const data = robustJsonParse(bulkJson);
+      const data = robustJsonParseWithLatexRepair(bulkJson);
       const normalizedData = Array.isArray(data) ? data : [data];
       
       if (normalizedData.length === 0) { 
@@ -1217,7 +1235,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                    {problemsStats.slice(0, 5).map((p, i) => (
                      <div key={p._id} className="p-3 flex justify-between items-center bg-background">
                        <div className="flex-1 min-w-0 pr-4">
-                         <div className="text-xs font-medium text-foreground truncate">{p.title || `Problem ${i+1}`}</div>
+                         <div className="text-xs font-medium text-foreground">
+                           <LatexRenderer latex={p.title || `Problem ${i+1}`} className="block truncate" />
+                         </div>
                          <div className="text-[10px] text-muted-foreground">{p.topic}</div>
                        </div>
                        <div className="flex items-center gap-2 shrink-0">
@@ -1386,10 +1406,15 @@ ${isProblem ? `PROBLEM ITEM SHAPE
     "topicId": "TOPIC_ID_FROM_TAXONOMY",
     "subtopicId": "SUBTOPIC_ID_FROM_TAXONOMY",
     "title": "Problem Title", "topic": "Exact topic name", "subtopic": "Exact subtopic name",
-    "statement": "LaTeX...",
+    "statement": "Rendered by React LatexRenderer + KaTeX. Use inline math like \\\\( x^2 \\\\), display math like \\\\[ \\\\sum_{i=1}^{n} i \\\\], and escaped floor commands like \\\\( \\\\left\\\\lfloor x \\\\right\\\\rfloor \\\\).",
     "solution": {
-      "explanation": "Detailed solution with equations like \\\\[ equation \\\\]. If useful, add Diagram: or Graph: text inline.",
-      "finalAnswer": "Answer"
+      "type": "editorial",
+      "finalAnswer": "Answer wrapped in LaTeX if mathematical, e.g. \\\\( \\\\frac{3}{2} \\\\).",
+      "blocks": [
+        { "type": "intro", "content": "Book-style strategy or theorem used." },
+        { "type": "step", "number": "1", "title": "Compute", "content": "Short explanation.", "equation": "\\\\[ \\\\frac{a}{b} \\\\]" },
+        { "type": "finalAnswer", "content": "Final answer." }
+      ]
     },
     "difficulty": "Medium", "questionType": "MCQ", "positiveMarks": 2, "negativeMarks": 0.5,
     "options": [ { "text": "Option A", "isCorrect": true }, { "text": "Option B", "isCorrect": false } ]
@@ -1459,7 +1484,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded">#{i + 1}</span>
-                                    <h4 className="font-bold text-sm text-foreground">{item.title || "Untitled"}</h4>
+                                    <h4 className="font-bold text-sm text-foreground">
+                                      <LatexRenderer latex={item.title || "Untitled"} />
+                                    </h4>
                                   </div>
                                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                                     <span>📍 {item.topic || "—"}</span>
@@ -1762,7 +1789,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                         <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span>
                       </td>
                       <td className="py-3.5 px-4 max-w-[220px]">
-                        <div className="font-semibold text-foreground truncate">{q.title}</div>
+                        <div className="font-semibold text-foreground">
+                          <LatexRenderer latex={q.title || ""} className="block truncate" />
+                        </div>
                         <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                           {q.topic}{q.sectionId ? ` · §${q.sectionId}` : ""}{q.questionType ? ` · ${q.questionType}` : ""}
                         </div>
@@ -1890,7 +1919,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
                         <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
                         <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
-                        <td className="py-3 px-4 font-medium text-foreground max-w-[180px] truncate">{q.title}</td>
+                        <td className="py-3 px-4 font-medium text-foreground max-w-[180px]">
+                          <LatexRenderer latex={q.title || ""} className="block truncate" />
+                        </td>
                         <td className="py-3 px-4 text-muted-foreground">{q.topic}</td>
                         <td className="py-3 px-4"><span className="px-1.5 py-0.5 bg-secondary border border-border rounded-sm">{q.questionType}</span></td>
                         <td className="py-3 px-4 text-muted-foreground">{q.difficulty}</td>
@@ -1932,7 +1963,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                       <tr key={t._id} className="hover:bg-secondary/20 transition-colors">
                         <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(t._id)} onChange={() => toggleSelection(t._id)} className="cursor-pointer" /></td>
                         <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{t.contentId || t._id.substring(0,8).toUpperCase()}</span></td>
-                        <td className="py-3 px-4 font-medium text-foreground max-w-[180px] truncate">{t.title}</td>
+                        <td className="py-3 px-4 font-medium text-foreground max-w-[180px]">
+                          <LatexRenderer latex={t.title || ""} className="block truncate" />
+                        </td>
                         <td className="py-3 px-4 text-muted-foreground">{t.topic}</td>
                         <td className="py-3 px-4 font-mono text-muted-foreground">{t.sectionId}</td>
                         <td className="py-3 px-4"><span className={`px-1.5 py-0.5 rounded-sm border text-[10px] font-bold uppercase ${statusColor(t.status)}`}>{t.status}</span></td>
@@ -2028,7 +2061,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                     <tr key={q._id} className="hover:bg-secondary/20 transition-colors">
                       <td className="py-3 px-4 text-center"><input type="checkbox" checked={selectedIds.has(q._id)} onChange={() => toggleSelection(q._id)} className="cursor-pointer" /></td>
                       <td className="py-3 px-2"><span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm border border-primary/20">{q.contentId || q._id.substring(0,8).toUpperCase()}</span></td>
-                      <td className="py-3 px-4 font-medium text-foreground max-w-[200px] truncate">{q.title}</td>
+                      <td className="py-3 px-4 font-medium text-foreground max-w-[200px]">
+                        <LatexRenderer latex={q.title || ""} className="block truncate" />
+                      </td>
                       <td className="py-3 px-4 text-muted-foreground">{q.topic}</td>
                       <td className="py-3 px-4"><span className="px-1.5 py-0.5 bg-secondary border border-border rounded-sm">{q.questionType}</span></td>
                       <td className="py-3 px-4">
@@ -2276,7 +2311,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
               <button onClick={() => setHistoryItem(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
             </div>
             <div className="p-5">
-              <div className="text-xs text-muted-foreground mb-4 font-bold">{historyItem.title}</div>
+              <div className="text-xs text-muted-foreground mb-4 font-bold">
+                <LatexRenderer latex={historyItem.title || ""} />
+              </div>
               {historyItem.auditLog?.length > 0 ? (
                 <div className="border-l-2 border-border ml-2 pl-4 space-y-4">
                   {[...historyItem.auditLog].reverse().map((entry: any, i: number) => (
@@ -2410,7 +2447,9 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
               {/* Title */}
               <div>
-                <h3 className="text-base font-serif font-bold text-foreground mb-1">{previewItem.title}</h3>
+                <h3 className="text-base font-serif font-bold text-foreground mb-1">
+                  <LatexRenderer latex={previewItem.title || ""} />
+                </h3>
                 <span className="text-[10px] text-muted-foreground block">Created by {previewItem.createdBy?.fullName || "Admin"} · {new Date(previewItem.createdAt).toLocaleDateString()}</span>
               </div>
 

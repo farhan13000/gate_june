@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Award, BarChart3, Check, ChevronDown, ChevronUp, Clock3, Eye, EyeOff, FileQuestion, Gavel, KeyRound, List, Pencil, PlayCircle, Plus, Radio, Search, Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import HierarchyPicker, { type HierarchyPickerValue } from "./HierarchyPicker";
+import LatexRenderer from "@/components/LatexRenderer";
 
 type Contest = {
   _id: string;
@@ -1944,7 +1945,9 @@ export default function AdminContestSection() {
                     <span className="font-mono text-xs text-primary">{index + 1}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <div className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</div>
+                        <div className="line-clamp-2 text-xs font-semibold text-foreground">
+                          <LatexRenderer latex={problem.title || ""} />
+                        </div>
                         {isContestOnlyProblem(problem) && (
                           <span className="shrink-0 rounded-sm border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:text-violet-300">
                             Contest-only
@@ -2137,7 +2140,9 @@ export default function AdminContestSection() {
                       {selected && <Check size={11} />}
                     </span>
                     <span className="min-w-0">
-                      <span className="line-clamp-2 text-xs font-semibold text-foreground">{problem.title}</span>
+                      <span className="line-clamp-2 text-xs font-semibold text-foreground">
+                        <LatexRenderer latex={problem.title || ""} />
+                      </span>
                       {isContestOnlyProblem(problem) && (
                         <span className="mt-1 inline-block rounded-sm border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-violet-700">
                           Contest-only

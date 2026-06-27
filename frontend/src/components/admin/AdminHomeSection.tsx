@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Trash2, Plus, Star, StarOff } from "lucide-react";
 import { toast } from "sonner";
+import LatexRenderer from "@/components/LatexRenderer";
 
 type Announcement = {
   _id: string;
@@ -172,7 +173,9 @@ export default function AdminHomeSection() {
         {potdPreview && (
           <div className="mb-4 p-3 border border-border rounded-sm bg-secondary/20 text-xs">
             <span className="text-muted-foreground">Current: </span>
-            <span className="font-medium text-foreground">{potdPreview.title}</span>
+            <span className="font-medium text-foreground">
+              <LatexRenderer latex={potdPreview.title || ""} />
+            </span>
             <span className="ml-2 px-1.5 py-0.5 border border-border rounded-sm text-[10px]">
               {potdPreview.difficulty}
             </span>

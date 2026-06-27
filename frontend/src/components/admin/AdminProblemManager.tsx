@@ -65,9 +65,20 @@ style: analytical, original, syllabus-aligned, non-template
 RULES
 - Use the exact taxonomy IDs above. Do not invent taxonomy.
 - Return only parsable JSON, no markdown wrapper.
-- Use double-escaped LaTeX: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
-- Keep the solution simple: one detailed explanation string plus finalAnswer.
-- In solution.explanation, write clear paragraphs like a textbook solution. Include equations exactly where they are needed using display LaTeX.
+- Use double-escaped LaTeX in the visible JSON text: "\\\\frac{a}{b}", "\\\\sigma", "\\\\lambda".
+- Rendering tools used by the platform: React LatexRenderer for text/math, EmbeddedMediaContent for statement/media flow, EditorialRenderer for solutions, and KaTeX for math rendering.
+- Best rendering method: keep prose as normal text, wrap inline math as "\\\\( ... \\\\)", wrap display math as "\\\\[ ... \\\\]", and use only KaTeX-compatible LaTeX commands.
+- The pasted JSON text must literally contain double backslashes for math delimiters and commands: write "\\\\(", "\\\\)", "\\\\[", "\\\\]", "\\\\left", "\\\\right", "\\\\rfloor".
+- Wrong visible JSON: "If \\(10!\\) has \\left\\lfloor x \\right\\rfloor".
+- Correct visible JSON: "If \\\\(10!\\\\) has \\\\left\\\\lfloor x \\\\right\\\\rfloor".
+- For floor/ceiling, use fully escaped paired commands like "\\\\( \\\\left\\\\lfloor x \\\\right\\\\rfloor \\\\)"; never use a single-backslash "\\rfloor" because "\\r" can break JSON escaping.
+- For factorials, fractions, powers, summations, and matrices, wrap the entire expression: "\\\\( n! \\\\)", "\\\\( \\\\frac{a}{b} \\\\)", "\\\\( x^{k+1} \\\\)", "\\\\[ \\\\sum_{i=1}^{n} i \\\\]", "\\\\[ \\\\begin{bmatrix} 1 & 2 \\\\\\\\ 3 & 4 \\\\end{bmatrix} \\\\]".
+- Titles are rendered with LatexRenderer too. If a title contains math, write "Prime Exponents of \\\\(10!\\\\)", not "Prime Exponents of 10 Factorial" or raw "Prime Exponents of 10!".
+- Keep titles short and put the full mathematical setup in the statement.
+- Split long derivations into multiple display equations so KaTeX renders cleanly on mobile.
+- Before returning, check that JSON.parse succeeds and that every math delimiter/command visible in the JSON has double backslashes.
+- Prefer a mathematical-book solution structure: solution.type = "editorial", solution.finalAnswer = "...", and solution.blocks = intro, numbered step, equation, insight/warning when useful, and finalAnswer blocks.
+- Keep each solution step compact, conceptually named, and visually scannable. The platform renders these blocks through EditorialRenderer in the existing academic UI theme.
 - MEDIA / DIAGRAM CONTRACT: Use "images" for statement visuals and "solution.images" for solution visuals. Each item is { "url": "https://...", "alt": "accessible description", "caption": "optional caption", "kind": "image" | "diagram", "placement": "inline" | "left" | "right" | "full" }.
 - Embed an asset at an exact point by adding {{media:0}} to the statement or solution.explanation. The number is its zero-based index in that section's images array. "left" and "right" place it beside the following text on desktop and stack safely on phones; "inline" and "full" show it between paragraphs.
 - Add media only when an exact, verified image URL has been supplied in the request or source material. Never invent or guess an image URL. Use [] when no visual is available.
@@ -75,7 +86,7 @@ RULES
 
 OUTPUT SHAPE
 {
-  "title": "Problem Title",
+  "title": "Short problem title with title math wrapped, e.g. Prime Exponents of \\\\(10!\\\\)",
   "subjectId": "${hierarchy.subjectId}",
   "chapterId": "${hierarchy.chapterId}",
   "topicId": "${hierarchy.topicId}",
@@ -87,9 +98,20 @@ OUTPUT SHAPE
   "statement": "Clear statement with double-escaped LaTeX. {{media:0}} Continue the question after the figure.",
   "images": [],
   "solution": {
-    "explanation": "Detailed solution in simple paragraphs. Put equations inline as \\\\( ... \\\\) or display as \\\\[ ... \\\\].",
+    "type": "editorial",
+    "finalAnswer": "Final answer with units/precision if needed.",
     "images": [],
-    "finalAnswer": "Final answer with units/precision if needed."
+    "blocks": [
+      { "type": "intro", "content": "State the core idea or theorem." },
+      {
+        "type": "step",
+        "number": "1",
+        "title": "Set up the calculation",
+        "content": "Explain the first move.",
+        "equation": "\\\\[ E_a(n!) = \\\\sum_{k \\\\ge 1} \\\\left\\\\lfloor \\\\frac{n}{a^k} \\\\right\\\\rfloor \\\\]"
+      },
+      { "type": "finalAnswer", "content": "Repeat the final answer exactly." }
+    ]
   },
   "options": [
     { "text": "Option A", "isCorrect": true },

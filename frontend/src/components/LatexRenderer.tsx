@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { normalizeLatexTextForRendering, normalizeMathContent } from "@/utils/latexPipeline";
 
 interface LatexRendererProps {
   latex: string;
@@ -147,7 +148,7 @@ function renderSegment(seg: { type: "text" | "inline" | "display"; content: stri
   }
 
   try {
-    const html = katex.renderToString(seg.content, {
+    const html = katex.renderToString(normalizeMathContent(seg.content), {
       displayMode: seg.type === "display",
       throwOnError: false,
       trust: false,
@@ -171,42 +172,7 @@ function renderSegment(seg: { type: "text" | "inline" | "display"; content: stri
  */
 function preprocessLatex(str: string): string {
   if (!str) return str;
-  let res = str;
-
-  // 1. Recover control characters that got converted by JS interpreter (\f, \b, \t, etc.)
-  res = res
-    .replace(/\x0c/g, "\\f")        // Form Feed -> \f (restores \frac, \phi)
-    .replace(/\x08/g, "\\b")        // Backspace -> \b (restores \bar, \beta)
-    .replace(/\v/g, "\\v")          // Vertical tab -> \v (restores \varepsilon)
-    .replace(/\t([a-zA-Z])/g, "\\t$1"); // Tab followed by letter -> \t (restores \tau, \theta)
-
-  // Generic control character recovery for standard LaTeX keywords (browser render recovery)
-  res = res
-    .replace(/[\x00-\x1f]rac\b/g, "\\frac")
-    .replace(/[\x00-\x1f]egin\b/g, "\\begin")
-    .replace(/[\x00-\x1f]ar\b/g, "\\bar")
-    .replace(/[\x00-\x1f]eta\b/g, "\\beta")
-    .replace(/[\x00-\x1f]au\b/g, "\\tau")
-    .replace(/[\x00-\x1f]heta\b/g, "\\theta")
-    .replace(/[\x00-\x1f]imes\b/g, "\\times")
-    .replace(/[\x00-\x1f]ilde\b/g, "\\tilde");
-
-  // 2. Fix asterisk subscripts from markdown bold parsing issues: }*{ -> }_{
-  res = res.replace(/}\*{/g, "}_{");
-  res = res.replace(/}\*\\mathrm{/g, "}_\\mathrm{");
-  res = res.replace(/\^\{\\mathrm\{MAP\}\}/g, "_{\\mathrm{MAP}}");
-  res = res.replace(/\*\{\\mathrm\{MAP\}\}/g, "_{\\mathrm{MAP}}");
-
-  // 3. Normalize single bracket display equations: [ ... \] or [\n ... \n\]
-  res = res.replace(/(?:^|\n)\s*\\*\[\s*([\s\S]*?)\s*\\+\]/g, "\n\n$$\n$1\n$$\n");
-
-  // 4. Normalize standard block math: \\[ ... \\] or \[ ... \] to $$ ... $$
-  res = res.replace(/\\+\[([\s\S]*?)\\+\]/g, "$$\n$1\n$$");
-
-  // 5. Normalize standard inline math: \\( ... \\) or \( ... \) to $ ... $
-  res = res.replace(/\\+\(([\s\S]*?)\\+\)/g, "$ $1 $");
-
-  return res;
+  return normalizeLatexTextForRendering(str);
 }
 
 export default function LatexRenderer({ latex, className }: LatexRendererProps) {
