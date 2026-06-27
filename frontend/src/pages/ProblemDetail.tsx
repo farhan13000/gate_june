@@ -27,6 +27,7 @@ import EditorialRenderer from "@/components/EditorialRenderer";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import EmbeddedMediaContent from "@/components/EmbeddedMediaContent";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 
 type Tab = "statement" | "editorial" | "submissions";
 
@@ -477,8 +478,19 @@ export default function ProblemDetail() {
       </div>
 
       {/* ── Two-column layout ─────────────────────────────────────── */}
-      <div className="problem-detail-layout">
+      <ResizablePanelGroup
+        direction="horizontal"
+        autoSaveId="problem-detail-split"
+        className="problem-detail-layout"
+      >
         {/* ═══ LEFT PANEL ═══ */}
+        <ResizablePanel
+          defaultSize={68}
+          minSize={52}
+          maxSize={78}
+          order={1}
+          className="problem-detail-panel"
+        >
         <div ref={detailScrollerRef} className="problem-detail-left">
 
           {/* ── Problem Header Card ─────────────────────────────── */}
@@ -583,7 +595,7 @@ export default function ProblemDetail() {
             {tab === "statement" && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 {/* Problem Statement */}
-                <section aria-label="Problem statement">
+                <section className="problem-statement-section" aria-label="Problem statement">
                   <div className="problem-statement-reading">
                     <div className="problem-statement-body">
                       <EmbeddedMediaContent
@@ -599,7 +611,7 @@ export default function ProblemDetail() {
 
                 {/* Tags section */}
                 {problem.tags && problem.tags.length > 0 && (
-                  <section className="border-t border-border/60 pt-4">
+                  <section className="problem-related-concepts border-t border-border/60 pt-4">
                     <button
                       type="button"
                       onClick={() => setShowRelatedTags((visible) => !visible)}
@@ -748,8 +760,18 @@ export default function ProblemDetail() {
             )}
           </div>
         </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle className="problem-detail-resize-handle" />
 
         {/* ═══ RIGHT PANEL — Answer Box ═══ */}
+        <ResizablePanel
+          defaultSize={32}
+          minSize={22}
+          maxSize={48}
+          order={2}
+          className="problem-answer-panel-shell"
+        >
         <div className="problem-detail-right">
           <div className="problem-answer-panel">
             {/* Panel Header */}
@@ -1032,7 +1054,8 @@ export default function ProblemDetail() {
             </div>
           </div>
         </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
