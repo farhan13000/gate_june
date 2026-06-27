@@ -24,6 +24,22 @@ const addApprovalTag = (tags: string[] | undefined, tag: ApprovalTag): string[] 
   return currentTags.includes(tag) ? currentTags : [...currentTags, tag];
 };
 
+const setAdminNoStore = (res: Response): void => {
+  res.setHeader("Cache-Control", "no-store");
+};
+
+const findAdminQuestionById = (id: string) =>
+  Question.findById(id)
+    .populate("createdBy", "fullName email")
+    .populate("approvedBy", "fullName")
+    .populate("auditLog.performedBy", "fullName");
+
+const findAdminTheoryById = (id: string) =>
+  Theory.findById(id)
+    .populate("createdBy", "fullName email")
+    .populate("approvedBy", "fullName")
+    .populate("auditLog.performedBy", "fullName");
+
 type ContentMedia = {
   url: string;
   publicId?: string;
@@ -181,6 +197,7 @@ export const createQuestion = async (req: Request, res: Response): Promise<void>
 
 export const getQuestions = async (req: Request, res: Response): Promise<void> => {
   try {
+    setAdminNoStore(res);
     const questions = await Question.find()
       .populate("createdBy", "fullName email")
       .populate("approvedBy", "fullName")
@@ -213,7 +230,9 @@ export const updateQuestion = async (req: Request, res: Response): Promise<void>
 
     await question.save();
     invalidateHomeCache();
-    res.json(question);
+    setAdminNoStore(res);
+    const updatedQuestion = await findAdminQuestionById(question.id);
+    res.json(updatedQuestion || question);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to update question" });
   }
@@ -263,7 +282,9 @@ export const approveQuestion = async (req: Request, res: Response): Promise<void
 
     await question.save();
     invalidateHomeCache();
-    res.json(question);
+    setAdminNoStore(res);
+    const updatedQuestion = await findAdminQuestionById(question.id);
+    res.json(updatedQuestion || question);
   } catch (error) {
     res.status(500).json({ message: "Failed to approve question" });
   }
@@ -288,6 +309,7 @@ export const createTheory = async (req: Request, res: Response): Promise<void> =
 
 export const getTheories = async (req: Request, res: Response): Promise<void> => {
   try {
+    setAdminNoStore(res);
     const theories = await Theory.find()
       .populate("createdBy", "fullName email")
       .populate("approvedBy", "fullName")
@@ -320,7 +342,9 @@ export const updateTheory = async (req: Request, res: Response): Promise<void> =
 
     await theory.save();
     invalidateHomeCache();
-    res.json(theory);
+    setAdminNoStore(res);
+    const updatedTheory = await findAdminTheoryById(theory.id);
+    res.json(updatedTheory || theory);
   } catch (error: any) {
     res.status(400).json({ message: error.message || "Failed to update theory" });
   }
@@ -370,7 +394,9 @@ export const approveTheory = async (req: Request, res: Response): Promise<void> 
 
     await theory.save();
     invalidateHomeCache();
-    res.json(theory);
+    setAdminNoStore(res);
+    const updatedTheory = await findAdminTheoryById(theory.id);
+    res.json(updatedTheory || theory);
   } catch (error: any) {
     console.error("[approveTheory] Error saving theory:", error);
     res.status(500).json({ message: error.message || "Failed to approve theory" });

@@ -352,6 +352,28 @@ JSON SCHEME REFERENCE:
 const APPROVAL_TAGS = ["GATE", "GATE DA", "Olympiad", "Advanced"] as const;
 type ApprovalTag = (typeof APPROVAL_TAGS)[number];
 const REVIEWABLE_STATUSES = ["pending_review", "draft", "rejected"];
+type AdminContentType = "question" | "theory";
+
+const withContentType = (item: any, contentType: AdminContentType) => (
+  item ? { ...item, _contentType: contentType } : item
+);
+
+const replaceAdminItem = (items: any[], updated: any) =>
+  items.map((item) =>
+    String(item._id) === String(updated._id)
+      ? { ...item, ...updated, _contentType: item._contentType || updated._contentType }
+      : item
+  );
+
+const upsertAdminItem = (items: any[], updated: any) =>
+  items.some((item) => String(item._id) === String(updated._id))
+    ? replaceAdminItem(items, updated)
+    : [updated, ...items];
+
+const syncModalItem = (current: any | null, updated: any) =>
+  current && String(current._id) === String(updated._id)
+    ? { ...current, ...updated, _contentType: current._contentType || updated._contentType }
+    : current;
 
 const parseMediaForPreview = (raw: string): unknown[] => {
   try {
@@ -625,7 +647,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { credentials: "include", cache: "no-store" });
       if (res.ok) setUsers(await res.json());
     } catch (error) {}
   };
@@ -633,8 +655,8 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const fetchPendingQuestions = async () => {
     try {
       const [qRes, tRes] = await Promise.all([
-        fetch("/api/admin/questions"),
-        fetch("/api/admin/theories"),
+        fetch("/api/admin/questions", { credentials: "include", cache: "no-store" }),
+        fetch("/api/admin/theories", { credentials: "include", cache: "no-store" }),
       ]);
       let pending: any[] = [];
       if (qRes.ok) {
@@ -657,7 +679,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
 
   const fetchProblems = async () => {
     try {
-      const res = await fetch("/api/admin/questions", { credentials: "include" });
+      const res = await fetch("/api/admin/questions", { credentials: "include", cache: "no-store" });
       if (res.ok) setProblemsStats(await res.json());
     } catch (error) {}
   };
@@ -999,6 +1021,7 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const [editMode, setEditMode] = useState<"fields" | "json">("fields");
   const [editJson, setEditJson] = useState<string>("");
   const [editJsonError, setEditJsonError] = useState<string>("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [historyItem, setHistoryItem] = useState<any | null>(null);
   const [previewItem, setPreviewItem] = useState<any | null>(null);
   const [editNote, setEditNote] = useState("");
@@ -1027,8 +1050,8 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   const fetchAllContent = async () => {
     try {
       const [qRes, tRes] = await Promise.all([
-        fetch("/api/admin/questions"),
-        fetch("/api/admin/theories"),
+        fetch("/api/admin/questions", { credentials: "include", cache: "no-store" }),
+        fetch("/api/admin/theories", { credentials: "include", cache: "no-store" }),
       ]);
       if (qRes.ok) setAllQuestions(await qRes.json());
       if (tRes.ok) setAllTheories(await tRes.json());
@@ -1076,9 +1099,16 @@ ${isProblem ? `PROBLEM ITEM SHAPE
   };
 
   const handleSaveEdit = async () => {
-    if (!editItem) return;
+    if (!editItem || savingEdit) return;
+    if (editJsonError) {
+      toast.error("Fix the JSON editor error before saving");
+      return;
+    }
+
+    setSavingEdit(true);
     try {
       const isTheory = editItem._contentType === "theory" || (editItem.questionType === undefined && editItem.content !== undefined);
+      const contentType: AdminContentType = isTheory ? "theory" : "question";
       const endpoint = isTheory ? `/api/admin/theories/${editItem._id}` : `/api/admin/questions/${editItem._id}`;
       const editablePayload = { ...editItem };
       delete editablePayload._contentType;
@@ -1093,15 +1123,40 @@ ${isProblem ? `PROBLEM ITEM SHAPE
       }
       const res = await fetch(endpoint, {
         method: "PUT",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...editablePayload, note: editNote }),
       });
       if (res.ok) {
+        const savedItem = withContentType(await res.json().catch(() => editItem), contentType);
+        if (contentType === "question") {
+          setAllQuestions((current) => upsertAdminItem(current, savedItem));
+          setProblemsStats((current) => upsertAdminItem(current, savedItem));
+        } else {
+          setAllTheories((current) => upsertAdminItem(current, savedItem));
+        }
+        setPendingQuestions((current) => {
+          const withoutEdited = current.filter((item) => String(item._id) !== String(savedItem._id));
+          return REVIEWABLE_STATUSES.includes(savedItem.status)
+            ? upsertAdminItem(withoutEdited, savedItem)
+            : withoutEdited;
+        });
+        setPreviewItem((current) => syncModalItem(current, savedItem));
+        setHistoryItem((current) => syncModalItem(current, savedItem));
         toast.success("Saved successfully!");
-        setEditItem(null); setEditNote("");
-        fetchAllContent(); fetchPendingQuestions();
-      } else toast.error("Save failed");
-    } catch { toast.error("Network error"); }
+        setEditItem(null);
+        setEditNote("");
+        await Promise.all([fetchAllContent(), fetchPendingQuestions(), fetchProblems()]);
+      } else {
+        const errorData = await res.json().catch(() => ({ message: "Save failed" }));
+        toast.error(errorData.message || "Save failed");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const statusColor = (s: string) => {
@@ -2292,7 +2347,13 @@ ${isProblem ? `PROBLEM ITEM SHAPE
                 <input value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="e.g. Fixed LaTeX typo in statement" className="w-full px-3 py-2 text-xs bg-background border border-border rounded-sm outline-none focus:border-primary" /></div>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-border">
                 <button onClick={() => setEditItem(null)} className="px-5 py-2 text-xs border border-border rounded-sm hover:bg-secondary">Cancel</button>
-                <button onClick={handleSaveEdit} className="btn-primary px-6 py-2 text-xs">Save Changes</button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit || Boolean(editJsonError)}
+                  className="btn-primary px-6 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
               </div>
             </div>
           </div>
